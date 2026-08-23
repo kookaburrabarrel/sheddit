@@ -2060,6 +2060,12 @@ async function boot(html, url, setup) {
 
     const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/', silentAfterFirst);
     const loads = () => window.__shdPager.loads;
+    /* The reader engages, and this section is about what happens AFTERWARDS: whether the
+       chain can continue once running, with no observer to wake it. Filling a page nobody
+       has touched is a separate, deliberately bounded thing — see the unprompted-fill
+       section below — and without this line that bound would stop the chain here, for a
+       reason that has nothing to do with the observer going quiet. */
+    window.dispatchEvent(new window.Event('scroll'));
 
     // Control: without this the whole section is vacuous — a stub that never delivered at
     // all would leave loads at 0 and "the chain stalled" would be true for the wrong reason.
@@ -2353,6 +2359,103 @@ async function boot(html, url, setup) {
       window.SHD.paginator.pages === 0, `pages=${window.SHD.paginator.pages}`);
     check('control: the partial really was driven, and really added nothing',
       window.__barren === 2 && rows() === before, `${window.__barren} loads, rows ${before}->${rows()}`);
+    window.SHD.paginator.reset();
+  }
+
+  /* Two independent reports of one thing: opening a comments page locked the tab for 30+
+     seconds before recovering, and a [-] collapse on a thread did the same. Neither is a
+     render bug — the collapse handler is three operations and cannot reach the render
+     queue — and both are this chain running flat out at rest. attach() re-arms after every
+     flush, so each intermediate render re-pumps; TRIGGER_PX is 1200, so "in range" holds
+     until two viewports of content sit below the fold; and a load whose content lands after
+     settle() closes is never credited, so MAX_PAGES cannot bound the churn. A collapse
+     restarts it by shrinking the page; a history traversal does the same, because onRoute()
+     rebuilds into a briefly-empty one.
+
+     The fill is bounded twice now, and the two halves are tested in different places. This
+     section pins the ATTEMPT bound (UNPROMPTED_MAX): jsdom does no layout and reports
+     scrollHeight 0, so the height bound can never be satisfied here and would silently do
+     nothing — FILL_VIEWPORTS is asserted in test/geometry.js, which has real layout.
+     Reader intent releases both, and that release is what keeps this from being a fix that
+     breaks infinite scroll. */
+  console.log('\n\x1b[1mAN UNTOUCHED PAGE FILLS, THEN WAITS\x1b[0m');
+  {
+    const endlessFast = (win) => {
+      win.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
+      // settle()'s delays only; the 800ms cooldown is left alone, because the point of this
+      // section is how many loads happen before interaction, not how fast they happen.
+      const origSet = win.setTimeout;
+      win.setTimeout = function (fn, delay, ...rest) {
+        const d = (delay === 400 || delay === 6000) ? 5 : delay;
+        return origSet.call(win, fn, d, ...rest);
+      };
+      win.eval(`
+        window.__fill = 0;
+        class ShdFill extends HTMLElement {
+          loadContent() {
+            const feed = document.querySelector('shreddit-feed');
+            const n = ++window.__fill;
+            const art = document.createElement('article');
+            const p = document.createElement('shreddit-post');
+            p.setAttribute('id', 't3_fill' + n);
+            p.setAttribute('post-title', 'fill ' + n);
+            p.setAttribute('permalink', '/r/x/comments/fill' + n + '/x/');
+            p.setAttribute('content-href', 'https://e.com/' + n);
+            p.setAttribute('post-type', 'link');
+            p.setAttribute('score', '1');
+            p.setAttribute('comment-count', '0');
+            p.setAttribute('created-timestamp', '2026-08-12T00:00:00+0000');
+            p.setAttribute('domain', 'e.com');
+            p.setAttribute('author', 'a');
+            p.setAttribute('subreddit-name', 'x');
+            p.setAttribute('subreddit-prefixed-name', 'r/x');
+            art.appendChild(p);
+            feed.appendChild(art);
+            this.remove();
+            const next = document.createElement('faceplate-partial');
+            next.setAttribute('loading', 'programmatic');
+            next.setAttribute('src', '/next');
+            feed.appendChild(next);
+          }
+        }
+        if (!customElements.get('faceplate-partial')) customElements.define('faceplate-partial', ShdFill);
+      `);
+    };
+    const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/', endlessFast);
+    const loads = () => window.__fill;
+    const sentinel = () => doc.querySelector('.shd-sentinel');
+    const label = () => sentinel()?.querySelector('.shd-loadmore')?.textContent || '';
+
+    // It must still fill SOMETHING. A gate that stopped at zero would leave a listing on
+    // the three posts Reddit ships, which is the dead end the paginator exists to fix, and
+    // it cannot be gated on scrolling because three rows do not make a scrollable page.
+    const began = await waitFor(() => loads() >= 1, { timeout: 4000 });
+    check('an untouched page still fills itself', began, `${loads()} load(s)`);
+
+    /* Sampled until two readings a cooldown apart agree, rather than after a fixed wait:
+       "it stopped" must not be true only because we looked between two pages. */
+    let parked = -1;
+    for (let i = 0; i < 12 && parked !== loads(); i++) { parked = loads(); await hold(900); }
+    check('...and then stops, instead of running to the 40-page cap',
+      parked > 0 && parked <= 4, `${parked} loads before any interaction`);
+    check('...naming why, so an idle chain is not mistaken for a stall',
+      sentinel()?.dataset.shdRefusal === 'unprompted-limit', sentinel()?.dataset.shdRefusal);
+    /* The limit is a pause, not an ending, so it must not borrow `exhausted`'s label — the
+       string that flashed between real pages and had to be made sticky. */
+    check('...and the label stays the honest clickable one',
+      /load more/.test(label()) && !/no more pages/.test(label()), label());
+    // Control: it parked with work still in front of it. Without this the section passes
+    // just as well on a feed that had simply run out, and proves nothing about the limit.
+    check('control: an undriven partial was available the whole time',
+      !!doc.querySelector(
+        'shreddit-feed faceplate-partial[loading="programmatic"]:not([data-shd="done"])'));
+
+    // The release. Everything above is only acceptable because this works.
+    window.dispatchEvent(new window.Event('scroll'));
+    const resumed = await waitFor(() => loads() > parked, { timeout: 5000 });
+    check('a scroll releases the limit and the chain resumes', resumed, `${parked} -> ${loads()}`);
+    check('...and the interaction is published, so the pause is explicable after the fact',
+      sentinel()?.dataset.shdInteracted === 'true', sentinel()?.dataset.shdInteracted);
     window.SHD.paginator.reset();
   }
 

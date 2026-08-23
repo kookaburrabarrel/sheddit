@@ -12,6 +12,42 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased — 0.18.0
+
+### Fixed — opening a comments page no longer locks the tab
+
+**A page you have not touched now fills itself and then waits, instead of loading until it
+runs out.** Reported twice, independently: opening a comments page froze the tab for 30+
+seconds before recovering, and clicking a `[-]` collapse on a thread did the same. A
+history traversal did it once.
+
+Both reports read it as an expensive re-render on every state change, and it is worth
+saying why that turned out to be wrong, because the evidence against it is what found the
+real cause. The collapse handler is three operations, the render queue only ever sees
+element insertions so a text change cannot reach it, and the collapsed rule is three
+`display:none` declarations. Nothing re-renders. What a collapse changes is the **height
+of the page** — and page height is what pagination triggers on. That the second report saw
+the freeze *with no click at all* is what settled it.
+
+Three things combined into a burst: the sentinel is re-armed after every render, "near the
+bottom" is generous enough to stay true until two screens of content sit below the fold,
+and a page whose content arrives late is credited afterwards rather than counted, so the
+40-page ceiling never bounds it. On a freshly opened thread that starts at first paint,
+before the reader has done anything. Collapsing restarts it by shrinking the page; a
+traversal does the same, because the layout is rebuilt into a briefly empty one.
+
+The freeze itself was the measuring, not the loading: two separate geometry reads ran on
+every attempt and every two-second tick, interleaved with renders that invalidate layout
+again. That is what made it present as a frozen tab with torn, tiled repaints rather than
+as something merely slow. Geometry is now read once per frame and shared.
+
+The fill is not the mistake, and it could not simply wait for a scroll: a listing arrives
+with three posts, which is the dead end pagination exists to fix, and three rows do not
+make a scrollable page — there would be no gesture to wait for. What was missing was a
+stopping point. It now fills until the page is worth scrolling and then stops, bounded by
+attempts as well as height so that loads which deliver nothing cannot spin. The sentinel
+reads `load more` and waits, and scrolling or clicking it resumes normal infinite scroll.
+
 ## Unreleased — 0.17.0
 
 ### Fixed — the inline player has sound

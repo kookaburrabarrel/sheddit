@@ -931,6 +931,48 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     ignoring the stated height, and dropping the codec tie-break — because either alone
     hides the other, and two older rows needed their anchors repaired for the rewrite.
 
+78. **The chain filled pages nobody had asked for, and the tab froze while it did.**
+    Reported twice, independently, on the same build: opening a comments page locked the
+    tab for 30+ seconds before recovering, and clicking a `[-]` collapse on a thread did
+    the same, two times out of two. A history traversal did it once. Both reports reached
+    for the same explanation — an expensive re-render on every state change — and it is
+    worth recording that the explanation is wrong, because the evidence against it is what
+    located the real cause. The collapse handler is three operations
+    (`preventDefault`, a class toggle, a `textContent` write); the pipeline's
+    MutationObserver watches `childList` and acts only on ELEMENT nodes, so the text write
+    cannot reach the render queue at all; and the `.collapsed` rule is three scoped
+    `display:none` declarations. Nothing re-renders. What the collapse changes is the
+    **height of the page**, and height is what the paginator triggers on.
+    Three facts combined into a burst. `attach()` re-arms after every flush, so each
+    intermediate render re-pumps; `TRIGGER_PX` is 1200, so "in range" stays true until
+    roughly two viewports of content sit below the fold; and a load whose content arrives
+    after `settle()` closes is credited in arrears rather than counted, so `MAX_PAGES`
+    never bounds the churn. On a freshly opened thread the sentinel is in range at first
+    paint — before the reader has done anything — and the chain runs until it exhausts or
+    caps. A collapse restarts it by shrinking the document; a traversal does the same,
+    because `onRoute()` rebuilds into a briefly-empty page. That the second report saw the
+    freeze **with no click at all** is what ruled the collapse out as the cause rather than
+    a trigger.
+    The freeze itself is a second-order cost, and it is why this presented as a frozen tab
+    with torn, tiled repaints rather than as something merely slow: `inRange()` forced a
+    synchronous layout, `diag()` forced two more, both ran on every pump and every 2s tick,
+    and all of it interleaved with renders that invalidate layout again. The work was not
+    the loading, it was measuring between every step of it. `measure()` now does one read
+    per frame, shared.
+    The fill is not the mistake and could not simply be gated on scrolling: a listing ships
+    THREE posts, which is the dead end the paginator exists to fix, and three rows do not
+    make a scrollable page — there is no gesture to wait for. What was missing was a
+    stopping point. `FILL_VIEWPORTS` is that point, with `UNPROMPTED_MAX` bounding it by
+    attempts as well as height, because loads that deliver nothing never grow the page and
+    would otherwise spin against the height test for ever. Past either limit the sentinel
+    reads `load more` and waits — clickable, honest, and not `exhausted`'s label, which
+    belongs to a feed with nothing left. Scrolling or clicking releases both, per page.
+    **The two halves need separate mutation rows and separate suites**: jsdom does no
+    layout and reports `scrollHeight` 0, so the height bound is invisible there and only
+    `geometry` can see it, while the attempt bound is the only half `run` can exercise. The
+    measurement cache gets no row at all, deliberately — it is a cost change with no
+    behavioural consequence, so a row for it would survive and read as a hole.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
