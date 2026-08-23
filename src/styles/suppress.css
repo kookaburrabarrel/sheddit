@@ -1,0 +1,197 @@
+/*
+ * suppress.css — injected at document_start.
+ *
+ * Two jobs:
+ *  1. Hide native Reddit before first paint (no flash of new reddit).
+ *  2. Once .shd-active is set, keep the native tree in the DOM but visually gone —
+ *     we still need it alive for delegated vote clicks and for cloning comment bodies.
+ *
+ * If gate.js bails, both classes are removed and native Reddit returns untouched.
+ */
+
+/* --- phase 1: pre-render blackout ---
+ *
+ * The backdrop is themed. `visibility: hidden` on <body> stops the body painting, but the
+ * canvas still gets a colour, and with nothing declared on <html> that colour was white —
+ * so every dark-theme page began with a white flash before our first render. Declaring a
+ * background on <html> also stops Reddit's own body background propagating to the canvas,
+ * which is the other half of the same flash. themes.css sets --shd-blank per theme and is
+ * delivered at document_start for exactly this rule; the fallback is classic's white. */
+html.shd-gate { background: var(--shd-blank, #ffffff); }
+html.shd-gate body { visibility: hidden !important; }
+
+/* --- phase 2: our layout is live ---
+ *
+ * ONE rule, at body level. We mount #shd-root and #shd-header as direct children of
+ * <body> and hide every sibling. This is deliberately structure-agnostic.
+ *
+ * The earlier version targeted `shreddit-app > *:not(#shd-root)`, which was a bug:
+ * #main-content is FOUR levels below shreddit-app (app > div > #subgrid-container >
+ * div > main#main-content), so the rule matched an anonymous wrapper div and hid our
+ * own root along with it. Anchoring at <body> cannot have that failure mode, and it
+ * survives Reddit reshuffling anything inside shreddit-app.
+ *
+ * The native tree stays in the DOM (not display:none) because we still need it for
+ * delegated vote clicks and for cloning comment bodies.
+ *
+ * `visibility: hidden` is doing a job the rest of this rule cannot, and it is not
+ * redundant with `opacity: 0`. Everything else here is the standard "visually hidden"
+ * recipe — absolute + 1px + clip + opacity — which is the recipe deliberately used to keep
+ * content available to SCREEN READERS while hiding it from sighted users. That is the exact
+ * opposite of what we want: it left the whole native page in the accessibility tree and in
+ * find-in-page, so a screen reader read every post twice, once from our layout and once
+ * from Reddit's. Reported from a real session: a page-text extraction returned a native
+ * <article> with `u/username • 2 days ago` metadata that is nowhere in our rendered list.
+ *
+ * `visibility: hidden` removes a subtree from the accessibility tree and from find-in-page
+ * per spec, while keeping it in the DOM, keeping its attributes readable, and still
+ * dispatching a programmatic .click() — so delegation and comment-body cloning are
+ * unaffected. `display: none` would also work for a11y but drops the layout box entirely,
+ * which is why it is not used here.
+ */
+html.shd-active body > *:not(#shd-root):not(#shd-header):not(#shd-passthrough-exit):not(.shd-native-passthrough),
+html.shd-failed body > *:not(#shd-error) {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+/* Escape hatch: an element we deliberately hand back to native Reddit (e.g. reply box).
+ *
+ * This class goes on the DIRECT CHILD OF <body>, never on the target itself. clip-path
+ * and opacity apply to the entire subtree, so un-clipping a deep descendant while its
+ * ancestor is still clipped does nothing — which is exactly what the first cut did.
+ * SHD.dom.passthrough() tags this body child, marks the path down to the target
+ * .shd-passthrough, and display:none's every sibling of that path.
+ *
+ * The class is EXCLUDED from the suppression selector above rather than overriding it.
+ * Overriding is not possible: those :not(#id) clauses give the suppression rule three
+ * ids' worth of specificity, so it beats a class-only rule even with both marked
+ * !important. The original hatch lost that cascade silently. */
+html.shd-active .shd-native-passthrough {
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  clip: auto !important;
+  clip-path: none !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+html.shd-active .shd-passthrough-hide { display: none !important; }
+
+/* Our own layout steps aside while a native handoff is on screen. */
+html.shd-passthrough-active #shd-root,
+html.shd-passthrough-active #shd-header { display: none !important; }
+
+/* Themed, unlike the failure screen below: a handoff keeps .shd-active on (it only hides
+   #shd-root), so the tokens resolve and this bar can match the layout the user came from.
+   The literals are the classic values, for the case where themes.css never arrived. */
+#shd-passthrough-exit {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483647;
+  background: var(--shd-header-bg, #cee3f8);
+  border: 1px solid var(--shd-header-border, #5f99cf);
+  border-left: 0;
+  border-top: 0;
+  padding: 4px 10px;
+  font: bold 11px var(--shd-font, Verdana, Arial, sans-serif);
+}
+#shd-passthrough-exit a { color: var(--shd-accent, #369); text-decoration: none; }
+
+/* ---------------------------------------------------------------------------
+ * The failure screen.
+ *
+ * Shown INSTEAD of silently handing the page back. A silent hand-back made a broken
+ * extension indistinguishable from an uninstalled one, which reads as an unrelated bug.
+ * Native Reddit stays suppressed behind this; the "Show Reddit's own layout" button is
+ * the way out, and the user presses it.
+ *
+ * Styled here rather than in old-reddit.css because that file is scoped under
+ * .shd-active, which is exactly the class a failure removes.
+ *
+ * Deliberately NOT themed. `fail()` drops .shd-active, so the palette tokens would not
+ * resolve here anyway — but the reason to leave it that way is that this screen should look
+ * the same on every theme and like nothing else in the extension. It is the one surface
+ * where being visually jarring is the correct behaviour.
+ * ------------------------------------------------------------------------- */
+html.shd-failed body {
+  visibility: visible !important;
+  background: #dae0e6 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+#shd-error {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 16px 16px;
+  box-sizing: border-box;
+  font: 13px/1.5 Verdana, Arial, Helvetica, sans-serif;
+  color: #1a1a1b;
+  background: #dae0e6;
+}
+#shd-error .shd-error-box {
+  width: 100%;
+  max-width: 540px;
+  background: #fff;
+  border: 1px solid #c8cbcd;
+  border-top: 3px solid #ff4500;
+  padding: 20px 22px 18px;
+  box-sizing: border-box;
+}
+#shd-error h1 { font-size: 17px; margin: 0 0 12px; line-height: 1.3; }
+#shd-error p { margin: 0 0 10px; }
+#shd-error .shd-error-why { color: #576f76; }
+#shd-error .shd-error-foot { color: #878a8c; font-size: 11px; margin: 12px 0 0; }
+
+#shd-error .shd-error-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 6px; }
+#shd-error button {
+  font: bold 12px Verdana, Arial, sans-serif;
+  padding: 7px 14px;
+  border: 1px solid #5f99cf;
+  background: #cee3f8;
+  color: #1a4d80;
+  cursor: pointer;
+  border-radius: 2px;
+}
+#shd-error button:hover { background: #dbeaf9; }
+#shd-error button.shd-error-primary { background: #ff4500; border-color: #d63a00; color: #fff; }
+#shd-error button.shd-error-primary:hover { background: #e63e00; }
+
+#shd-error details { margin-top: 12px; font-size: 11px; }
+#shd-error summary { cursor: pointer; color: #576f76; }
+#shd-error pre {
+  margin: 8px 0 0;
+  padding: 10px;
+  background: #f6f7f8;
+  border: 1px solid #edeff1;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 11px/1.5 Menlo, Consolas, monospace;
+  color: #1a1a1b;
+}
+
+/* Undo Reddit's page padding/grid so our root can own the viewport. */
+html.shd-active body { padding: 0 !important; margin: 0 !important; }
+html.shd-active #subgrid-container,
+html.shd-active #main-content {
+  width: auto !important;
+  max-width: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}

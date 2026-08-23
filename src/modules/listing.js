@@ -1,0 +1,255 @@
+/**
+ * listing.js — renders a post model as an old-reddit `div.thing` row.
+ *
+ *   [rank] [▲ score ▼] [thumb] Title (domain)
+ *                              submitted <ago> by <author> to <r/sub>
+ *                              <n> comments  share  save  hide  report
+ */
+globalThis.SHD = globalThis.SHD || {};
+
+SHD.listing = (() => {
+  const { h, score, ago, domain, plural } = SHD.dom;
+  const C = SHD.C;
+
+  let container = null;
+  let rank = 0;
+
+  /**
+   * Creates (once) the <div id="siteTable"> that all rows go into.
+   * Mounted as a DIRECT CHILD OF <body> — see the comment in suppress.css. Anchoring
+   * anywhere inside shreddit-app means an ancestor can be caught by the hide rule.
+   */
+  function ensureContainer() {
+    if (container && container.isConnected) return container;
+    container = h('div#siteTable.shd-sitetable');
+    const root = h('div#shd-root.shd-listing-root', null, [
+      SHD.chrome ? SHD.chrome.tabMenu() : null,
+      container
+    ]);
+    document.body.appendChild(root);
+    return container;
+  }
+
+  function reset() { container = null; rank = 0; }
+
+  /* A miss is either "not hydrated yet" (retry works) or "contracts.js is stale"
+     (retry never works). The first cut logged console.debug for both, which made a
+     permanent break indistinguishable from a timing miss. Warn once, with the evidence
+     needed to tell them apart. */
+  let missWarned = false;
+  function reportMiss(kind, source) {
+    if (missWarned) return;
+    missWarned = true;
+    const loader = source.querySelector('shreddit-async-loader');
+    console.warn(
+      `[sheddit] no ${kind} control found on ${source.getAttribute(C.POST_ATTR.id)}. ` +
+      `async-loader present: ${!!loader}; open shadow roots searched: ${SHD.dom.shadowRoots(source)}. ` +
+      `If the action bar is visibly hydrated on the page, C.NATIVE.${kind} in contracts.js ` +
+      `is stale, or the control sits in a CLOSED shadow root and cannot be delegated to.`);
+  }
+
+  /**
+   * Vote arrows. We own no auth state, so a click resolves the NATIVE control inside the
+   * hidden source element at click time and forwards to it. Reddit then handles auth,
+   * optimistic UI and the request. If the action bar hasn't hydrated yet, this no-ops.
+   *
+   * The lookup pierces open shadow roots: the action bar hydrates inside a
+   * shreddit-async-loader, which ARCHITECTURE §1.2 records as having a shadow root, so a
+   * light-DOM-only querySelector can miss the button permanently rather than transiently.
+   */
+  function midcol(m) {
+    const delegate = (sel, kind) => (ev) => {
+      ev.preventDefault();
+      const native = SHD.dom.deepQuery(m.source, sel);
+      if (native) native.click();
+      else reportMiss(kind, m.source);
+    };
+    return h('div.midcol.unvoted', null, [
+      h('div.arrow.up', { role: 'button', 'aria-label': 'upvote', onclick: delegate(C.NATIVE.upvote, 'upvote') }),
+      h('div.score.unvoted', { text: score(m.score), title: m.upvoteRatio != null ? `${Math.round(m.upvoteRatio * 100)}% upvoted` : null }),
+      h('div.arrow.down', { role: 'button', 'aria-label': 'downvote', onclick: delegate(C.NATIVE.downvote, 'downvote') })
+    ]);
+  }
+
+  function thumb(m) {
+    if (!SHD.settings.showThumbnails) return null;
+    /* Adult content gets old reddit's placeholder tile instead of the picture. This is not
+       decoration: we read the image URL off the post and render our own <img>, which walks
+       straight past the blur Reddit puts on NSFW thumbnails for logged-out readers — so
+       without this, a feed that Reddit itself would have obscured comes out fully explicit
+       in our layout. Found on a graphic war-footage subreddit, logged out, where the
+       difference is not theoretical. The image is one setting away, exactly as old reddit's
+       "show thumbnails for adult content" opt-in worked. */
+    if (m.nsfw && !SHD.settings.showNsfwThumbnails) {
+      return h('a.thumbnail.nsfw', { href: m.href, rel: 'noopener', 'aria-label': 'adult content' });
+    }
+    if (m.thumbnail) {
+      return h('a.thumbnail', { href: m.href, rel: 'noopener' },
+        h('img', { src: m.thumbnail, alt: '', loading: 'lazy' }));
+    }
+    // Placeholder classes mirror old reddit: self / default / nsfw
+    const cls = m.isSelf ? 'self' : 'default';
+    return h('a.thumbnail.' + cls, { href: m.href, rel: 'noopener' });
+  }
+
+  function tagline(m) {
+    return h('p.tagline', null, [
+      'submitted ',
+      h('time', { title: m.created, text: ago(m.created) }),
+      ' by ',
+      h('a.author', { href: `/user/${m.author}`, text: m.author }),
+      ' to ',
+      h('a.subreddit', { href: `/r/${m.subreddit}/`, text: m.subredditPrefixed || `r/${m.subreddit}` })
+    ]);
+  }
+
+  function buttons(m) {
+    return h('ul.flat-list.buttons', null, [
+      h('li.first', null, h('a.comments', {
+        href: m.permalink,
+        text: m.comments ? plural(m.comments, 'comment') : 'comment'
+      })),
+      /* The video affordance, and the one link on the row that re-resolves at CLICK
+         time. The mp4 set lives on a nested <shreddit-player> that hydrates late — 3 of 4
+         live posts had no player attribute at first paint — so a render-time
+         href is usually stale. Mutating href inside the handler and NOT preventing
+         default lets the browser navigate to the updated URL, so this stays a real link
+         (middle-click, copy-link, open-in-tab all keep working) and simply gets better
+         the moment Reddit hydrates.
+
+         When nothing resolves — an asset Reddit serves as CMAF/HLS only, which is the
+         direction of travel — it degrades to the comments page rather than to the
+         v.redd.it bounce: still the place the video is watchable, just Reddit's player
+         rather than a file. NOT rendered on the comments page itself, where that would be
+         a link to the page you are on; giving that page a real player is open question
+         9(c). */
+      m.type === 'video' && SHD.route.current !== SHD.route.COMMENTS
+        ? h('li', null, h('a.watch', {
+            href: m.mp4 || m.permalink, rel: 'noopener', text: 'watch',
+            onclick: function () {
+              const late = SHD.model.mp4Of(m.source);
+              if (late) this.href = late;
+            }
+          }))
+        : null,
+      h('li', null, h('a.share', { href: m.permalink, text: 'share' })),
+      /* No save/report. Both need a session, and both shipped as `href: permalink`, so
+         they looked like actions and silently navigated to the comments page instead.
+         This extension targets logged-out reading (README "Scope"), and old reddit did
+         not offer them to logged-out users either — so the faithful thing and the honest
+         thing agree. Restore them behind a session check if login support ever lands. */
+      h('li', null, h('a.hide', {
+        href: '#', text: 'hide',
+        onclick: (e) => { e.preventDefault(); row(m.id)?.classList.add('shd-hidden'); }
+      }))
+    ]);
+  }
+
+  const row = (id) => document.querySelector(`#shd-root .thing[data-fullname="${id}"]`);
+
+  /** model -> DOM node. Pure; no side effects on the page. */
+  function render(m) {
+    rank += 1;
+    /* Old reddit numbers listings but not profiles, and on a profile the counter would be
+       wrong anyway: comment rows sit between the posts, so the visible sequence would
+       skip. */
+    const onProfile = SHD.route.current === SHD.route.PROFILE;
+    return h('div.thing.link', {
+      dataset: { fullname: m.id, type: m.type, subreddit: m.subreddit },
+      class: (m.isSelf ? 'self' : 'linkpost') + (SHD.settings.compactRows ? ' compact' : '')
+    }, [
+      onProfile ? null : h('span.rank', { text: String(rank) }),
+      midcol(m),
+      thumb(m),
+      h('div.entry', null, [
+        h('p.title', null, [
+          /* A video post's title is its comments page (model.js says why); the mp4 is a
+             link of its own, built in buttons() below. */
+          h('a.title', {
+            href: m.href, rel: m.isSelf ? null : 'noopener nofollow', text: m.title
+          }),
+          /* Old reddit's stamp, and the only warning left once the thumbnail is a
+             placeholder — the tile alone cannot say whether a post is adult or merely
+             has no image. Shown regardless of the thumbnail setting, because it labels
+             the post rather than standing in for the picture. */
+          m.nsfw ? h('span.nsfw-stamp', { text: 'nsfw' }) : null,
+          m.domain ? h('span.domain', null, ['(', h('a', { href: m.isSelf ? `/r/${m.subreddit}/` : `//${domain(m.domain)}`, text: domain(m.domain) }), ')']) : null
+        ]),
+        tagline(m),
+        buttons(m)
+      ])
+    ]);
+  }
+
+  /** Called by the pipeline for each newly-seen <shreddit-post>. */
+  function consume(el) {
+    if (el.closest(C.AD_POST)) return false;         // never render ads
+    const m = SHD.model.post(el);
+    if (!m) return false;
+    ensureContainer().appendChild(render(m));
+    return true;
+  }
+
+  /**
+   * A profile page's comment row — old reddit's shape: a parent line naming where the
+   * comment lives, then the tagline, the cloned body, and permalink/context/full-comments
+   * buttons. FLAT, in #siteTable, interleaved with the post rows in document order; no
+   * depth-stack, no midcol (voting is unsupported logged out, and old reddit's profile
+   * arrows are the one fidelity dropped rather than shipping decorative floats).
+   */
+  function renderProfileComment(m) {
+    const body = h('div.usertext-body');
+    body.appendChild(m.bodyNode.cloneNode(true));   // required by the model; never null here
+    return h('div.thing.comment.shd-profile-comment', {
+      dataset: { fullname: m.id }
+    }, [
+      h('div.entry', null, [
+        /* Old reddit's parent line: `comment in <sub> on "<post title>"`. Each half is
+           omitted independently when we cannot establish it — a line reading "comment in"
+           with nothing after it is worse than no line, and naming the WRONG community is
+           worse than both (live testing printed the profile owner's name thirty times; see
+           model.profileComment). A row with neither half prints no line at all. */
+        m.contextLabel || m.postTitle
+          ? h('p.parent', null, [
+            m.contextLabel ? 'comment in ' : 'comment on ',
+            m.contextLabel
+              ? h('a.subreddit', { href: m.contextHome, text: m.contextLabel })
+              : null,
+            m.contextLabel && m.postTitle ? ' on ' : null,
+            m.postTitle
+              ? h('a.shd-parent-title', { href: m.threadHref || m.permalink, text: m.postTitle })
+              : null
+          ])
+          : null,
+        h('p.tagline', null, [
+          h('a.author', { href: `/user/${m.author}`, text: m.author }),
+          /* No score: this element does not carry one (contracts.js). Old reddit always
+             showed points, but inventing a number or printing "score hidden" would both
+             claim knowledge we do not have. Same reasoning that removed save/report. */
+          m.created ? ' ' : null,
+          m.created ? h('time', { title: m.created, text: ago(m.created) }) : null
+        ]),
+        h('form.usertext', null, body),
+        h('ul.flat-list.buttons', null, [
+          h('li.first', null, h('a.permalink', { href: m.permalink, text: 'permalink' })),
+          // Reddit's own href already carries ?context=3 — used as-is rather than rebuilt,
+          // so this cannot drift from whatever context depth Reddit decides to link at.
+          h('li', null, h('a.context', { href: m.contextHref, text: 'context' })),
+          m.threadHref
+            ? h('li', null, h('a.comments', { href: m.threadHref, text: 'full comments' }))
+            : null
+        ])
+      ])
+    ]);
+  }
+
+  /** Called by the pipeline for each newly-seen profile comment (either candidate tag). */
+  function consumeProfileComment(el) {
+    const m = SHD.model.profileComment(el);
+    if (!m) return false;
+    ensureContainer().appendChild(renderProfileComment(m));
+    return true;
+  }
+
+  return { consume, consumeProfileComment, render, reset };
+})();

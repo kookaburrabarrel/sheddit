@@ -1,0 +1,53 @@
+name: "Feature request"
+description: "Suggest something Sheddit should do."
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before writing, two scope facts that decide most requests:
+
+        - **Sheddit is built for logged-out reading.** Anything needing a session is out —
+          `save` and `report` were *removed* because they could never work and shipping them
+          as links made them look like actions. Voting is deliberately unsupported.
+        - **Sheddit makes no network requests of its own.** No API, no OAuth, no endpoints.
+          Anything requiring one is out by design, not by omission.
+
+        In scope today: the home feed, `/r/*` listings, comment pages, user profiles, and
+        the chrome around them. Out for now: search, modmail, chat, the composer.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: "What are you trying to do that Sheddit makes hard or impossible today?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should it do instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: oldreddit
+    attributes:
+      label: Did old.reddit.com do this?
+      description: >
+        Sheddit's north star is fidelity to old Reddit, and `docs/old-reddit.md` is a measured
+        spec of it recorded while the site was briefly back. "Old reddit did this, here's
+        roughly how" is the strongest possible case for a feature.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Does it fit the constraints?
+      options:
+        - label: "It works logged out"
+        - label: "It needs no network request of its own"
+        - label: "It's on a route Sheddit already handles"

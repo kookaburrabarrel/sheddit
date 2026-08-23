@@ -1,0 +1,622 @@
+/*
+ * old-reddit.css — the skin. Scoped entirely under html.shd-active #shd-root
+ * so it can never leak into native Reddit if the gate bails.
+ *
+ * Every colour, font and edge in this file comes from a custom property declared in the
+ * block below. That block IS the `classic` theme — the palette this extension shipped
+ * with — and src/styles/themes.css overrides the same names under
+ * `html.shd-active[data-shd-theme="…"]` for the other four. Two consequences worth
+ * knowing before you edit anything here:
+ *
+ *   - Never hard-code a colour in a rule. A literal is invisible to every theme but the
+ *     one it was picked for, which is how a dark theme ends up with #0000ff links.
+ *   - Never move a LAYOUT metric into themes.css. The geometry suite asserts the column
+ *     arithmetic at ten viewport widths and it must hold whichever theme is on, so
+ *     --shd-side-w / --shd-side-gap / --shd-gutter stay here and css-lint fails any theme
+ *     that redeclares them.
+ *
+ * The line between those two is horizontal, not "layout vs paint": a theme may set the
+ * VERTICAL rhythm (--shd-row-gap, --shd-body-line), because density is part of what makes
+ * sepia a reading theme and carbon a dense one, and no amount of vertical space can widen
+ * a column or squeeze a row beside the float. Every rule stays in this file either way —
+ * themes.css declares values, never declarations.
+ */
+
+html.shd-active {
+  /* ---------- the classic palette (also the fallback for every theme) ---------- */
+  --shd-font: Verdana, Arial, Helvetica, sans-serif;
+  --shd-title-font: var(--shd-font);
+  --shd-title-size: 16px;
+  --shd-title-weight: normal;
+  --shd-radius: 0px;
+  --shd-shadow: none;
+  --shd-thread-style: dotted;
+  --shd-row-gap: 10px;               /* vertical only — see the file header */
+  --shd-body-line: 1.4;
+
+  --shd-page-bg: #dae0e6;
+  --shd-bg: #ffffff;
+  /* old reddit's right rail is an UNBOXED column — the widgets inside it carry their own
+     borders, `.side` itself is transparent. Transparent rather than deleted so a theme can
+     still box its sidebar: on a dark palette a card edge is what separates the rail from
+     the page, and classic is the only palette chasing old reddit pixel for pixel. */
+  --shd-panel: transparent;
+  --shd-panel-border: transparent;
+  --shd-text: #000000;
+  --shd-meta: #888888;
+  --shd-link: #0000ff;
+  --shd-visited: #551a8b;
+  --shd-accent: #336699;
+  --shd-border: #cccccc;
+  --shd-topbar-bg: #cee3f8;          /* old reddit's #header is pale blue, not grey */
+  --shd-topbar-text: #000000;
+  --shd-header-bg: #cee3f8;          /* the sort-tab strip */
+  --shd-header-border: #5f99cf;
+  --shd-tab-text: #ff4500;           /* unselected sort tabs are orangered on old reddit */
+  --shd-hover-bg: #dbeaf9;
+  --shd-upvote: #ff8b60;
+  --shd-downvote: #9494ff;
+  --shd-nsfw: #ff0000;          /* old reddit's nsfw stamp was plain red */
+  /* One dim grey for the rank, the score and the vote arrows — old reddit uses #c6c6c6 for
+     all three, which is what puts the score BELOW the tagline in the visual hierarchy
+     rather than level with it. Named --shd-dim rather than --shd-arrow since the rename. */
+  --shd-dim: #c6c6c6;
+  --shd-thumb-bg: #eff1f3;
+  --shd-thumb-border: #d3d5d7;
+  --shd-code-bg: #f7f7f8;
+  --shd-quote-border: #c5c1ad;
+  --shd-quote-text: #444444;
+  --shd-thread-line: #ddddff;   /* old reddit's thread line is blue-tinted, not neutral */
+  /* The selftext box on the comments page, from OLD-REDDIT.md's measurement: #fafafa inside
+     a 1px accent border, radius 7. The radius gets its own token rather than --shd-radius
+     because old reddit draws THIS box rounded while everything else is square — classic's
+     --shd-radius is rightly 0 and must stay 0. */
+  --shd-selftext-bg: #fafafa;
+  --shd-selftext-radius: 7px;
+
+  /* The inline video box. 640px is old reddit's expando width, and it is a CAP rather than
+     a size: the element is max-width:100% underneath it, so a narrow window shrinks it and
+     the post row never widens to fit a video. It must also stay clear of the right rail —
+     .shd-selfpost reserves no gutter, so an uncapped player would slide under the sidebar
+     on a wide window. THEMES MUST NOT TOUCH THIS — it is layout, not palette. */
+  --shd-video-max: 640px;
+
+  /* The right rail, and the gutter the content column reserves for it. These MUST agree:
+     a float intrudes by its MARGIN box, so if the reserved gutter is smaller, every row
+     that vertically overlaps the sidebar gets squeezed narrower than the rows below it.
+     That shipped — the rail's margin box was 338px against a 320px gutter, so rows
+     alongside the sidebar wrapped 18px short and the right edge stepped.
+     #shd-sidebar is border-box so padding and border come out of --shd-side-w, which
+     makes its margin box exactly --shd-gutter. Checked by test/geometry.js.
+     THEMES MUST NOT TOUCH THESE — see the file header. */
+  --shd-side-w: 300px;
+  --shd-side-gap: 10px;
+  --shd-gutter: calc(var(--shd-side-w) + var(--shd-side-gap) * 2);
+}
+
+html.shd-active { background: var(--shd-page-bg); }
+html.shd-active body {
+  background: var(--shd-page-bg) !important;
+  font-family: var(--shd-font) !important;
+  font-size: 12px !important;
+  color: var(--shd-text);
+  /* Reddit's overlays freeze the page with a scroll lock (a class, sometimes reinforced by
+     an inline overflow:hidden). gate.js strips the class; this backstops the inline form.
+     Popups are suppressed under our layout as policy (project decision 2026-08-20), so a
+     frozen scroll would be a lock serving a modal nobody can see. */
+  overflow: visible !important;
+}
+
+/* ---------- header ---------- */
+#shd-header {
+  background: var(--shd-topbar-bg);
+  border-bottom: 1px solid var(--shd-header-border);
+  padding: 4px 10px;
+  font-size: 10px;
+  display: flex;
+  flex-wrap: wrap;              /* see the note on flex-wrap below */
+  align-items: center;
+  gap: 12px;
+}
+#shd-header .pagename a {
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--shd-topbar-text);
+  text-decoration: none;
+}
+
+/* ---------- theme switcher ----------
+ *
+ * Sits at the right end of the header row (margin-left:auto), and wraps onto its own line
+ * on a narrow viewport rather than pushing the header wide — see the flex-wrap note below;
+ * this row is five buttons long and is exactly the kind of thing that overflowed at 360px.
+ *
+ * Structure lives here rather than in themes.css on purpose: themes.css is palettes only,
+ * so every structural rule stays under the checks in test/css-lint.js.
+ */
+.shd-themebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+}
+.shd-themebar .shd-themelabel { color: var(--shd-meta); }
+.shd-theme-btn {
+  font: inherit;
+  line-height: 14px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--shd-radius);
+  background: none;
+  color: var(--shd-accent);
+  cursor: pointer;
+}
+.shd-theme-btn:hover { background: var(--shd-hover-bg); }
+.shd-theme-btn.selected {
+  background: var(--shd-header-bg);
+  border-color: var(--shd-header-border);
+  color: var(--shd-text);
+  font-weight: bold;
+}
+/* The swatch is painted per theme in themes.css, next to that theme's palette. */
+.shd-theme-btn .shd-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 4px;
+  vertical-align: -1px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  background: var(--shd-bg);
+}
+
+/* ---------- tab menu ---------- */
+.tabmenu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;              /* "controversial" at 14px does not fit a 360px viewport */
+  gap: 2px;
+  font-size: 14px;
+}
+/* Old reddit draws EVERY tab as a bordered white folder-tab with orangered text; only the
+   BOTTOM border differs between states — the selected one is painted the content colour so
+   the tab merges into the page below it. Rendering unselected tabs as flat blue pills (what
+   shipped) inverts that: the tabs read as the chrome and the selected one as the odd one
+   out, which is the opposite of the metaphor. */
+.tabmenu li a {
+  display: block;
+  padding: 2px 6px 0;
+  color: var(--shd-tab-text);
+  text-decoration: none;
+  background: var(--shd-bg);
+  border: 1px solid var(--shd-header-border);
+  border-radius: var(--shd-radius) var(--shd-radius) 0 0;
+}
+.tabmenu li.selected a {
+  border-bottom-color: var(--shd-bg);
+  color: var(--shd-text);
+  font-weight: bold;
+}
+.shd-tabmenu-wrap {
+  border-bottom: 1px solid var(--shd-header-border);
+  background: var(--shd-header-bg);
+  padding: 4px 10px 0;
+}
+
+/* ---------- page frame ---------- */
+#shd-root {
+  background: var(--shd-bg);
+  /* Contains the right-floating #shd-sidebar. Without this the sidebar float escapes
+     the root and overlaps whatever follows. Found by test/css-lint.js. */
+  display: flow-root;
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+#shd-root .shd-sitetable { padding: 6px 0 0 6px; margin-right: var(--shd-gutter); }
+#shd-sidebar {
+  float: right;
+  box-sizing: border-box;          /* keeps the margin box exactly --shd-gutter */
+  width: var(--shd-side-w);
+  margin: var(--shd-side-gap);
+  /* No padding: with --shd-panel transparent (classic) the rail is an unboxed column and an
+     inset would just push its text out of line with the content column. The 10px margin is
+     what separates it from the feed, and it is what --shd-gutter is derived from. */
+  padding: 0;
+  background: var(--shd-panel);
+  border: 1px solid var(--shd-panel-border);
+  border-radius: var(--shd-radius);
+  box-shadow: var(--shd-shadow);
+  font-size: 11px;
+}
+#shd-sidebar .redditname a { font-size: 14px; color: var(--shd-accent); text-decoration: none; }
+#shd-sidebar .shd-note { color: var(--shd-meta); margin-top: 6px; font-size: 10px; }
+
+/* ---------- link rows ---------- */
+.thing.link {
+  position: relative;
+  /* flow-root makes each row contain its floated .thumbnail. Without it the float
+     escapes the row and the next row's .entry (a BFC) has to flow around a float that
+     belongs to the previous post. At wide viewports that only costs a couple of pixels,
+     but it is never correct, and it is the failure mode that produces staircase-style
+     indentation when horizontal space is tight. See test/run.js → "float containment". */
+  display: flow-root;
+  /* 88 = rank (42, of which 6 is gutter) + midcol (43) + 3. Both columns are absolutely
+     positioned, so this padding is the only thing holding the text off them —
+     test/css-lint.js checks the sum.
+     It grew from 62px with the type: old reddit sets the rank in 16px Arial and the score in
+     13px, and the columns have to be wide enough for four-digit ranks (infinite scroll caps
+     at 40 pages, so ranks reach four digits) and five-digit scores. It grew again, from 82,
+     when live testing read `218586` off a live front page: see the gutter on .rank below. */
+  padding: 0 0 0 88px;
+  margin: 0 0 var(--shd-row-gap) 0;
+  min-height: 42px;
+}
+.thing.link.compact { margin-bottom: calc(var(--shd-row-gap) - 4px); }
+.thing.link.shd-hidden { display: none; }
+
+/* Arial, not the row's Verdana: old reddit sets the rank in 16px arial and it is one of the
+   few places it deviates from the body face on purpose — the digits are narrower, which is
+   what lets a four-digit rank sit in a column this size. Deliberately NOT var(--shd-font). */
+/* THE 6px IS A GUTTER, AND IT IS THE POINT OF THE BOX-SIZING.
+   The two columns never overlapped — they abut exactly, 0..36 and 36..79 — and both
+   css-lint and the geometry suite were checking precisely that, so both passed while the
+   live front page rendered rank 2 + score 18586 as `218586`. What collides is not the
+   BOXES but the INK: the rank is right-aligned to its box edge, and a 5-digit score at
+   13px bold very nearly fills the midcol it is centred in, so the two strings meet with
+   half a pixel between them and read as one number. Four of them were on the first screen
+   of /r/AmItheAsshole, and an unreadable score is the whole point of the row.
+   So the rank's box grew by the gutter rather than its text area: the content box is still
+   36px, which is what a four-digit rank at 16px Arial needs, and the padding is dead space
+   no glyph can enter. css-lint now measures the ink gap, not the box gap. */
+.thing .rank {
+  position: absolute;
+  left: 0;
+  top: 15px;                     /* old reddit floats the rank with margin-top:15px */
+  box-sizing: content-box;
+  width: 36px;
+  padding-right: 6px;
+  text-align: right;
+  color: var(--shd-dim);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+/* 22px could not fit a 5-digit score: "12247" wrapped onto three lines. Old reddit's midcol
+   measures 43.5px at font-size 13px, which is what these are now — at 13px bold Verdana a
+   5-digit score needs ~42px, so the width and the font-size have to move together. Scores
+   are also kept on one line explicitly. test/css-lint.js checks the pair. */
+.midcol {
+  position: absolute;
+  left: 42px;                    /* 36px rank + its 6px gutter — see .thing .rank above */
+  width: 43px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--shd-dim);
+}
+.midcol .arrow {
+  width: 15px;
+  height: 14px;
+  margin: 0 auto;
+  cursor: pointer;
+  background: no-repeat center;
+  /* Inline triangles keep the extension self-contained (no image assets). */
+}
+.midcol .arrow.up::before    { content: '▲'; display: block; line-height: 14px; color: var(--shd-dim); }
+.midcol .arrow.down::before  { content: '▼'; display: block; line-height: 14px; color: var(--shd-dim); }
+.midcol .arrow.up:hover::before   { color: var(--shd-upvote); }
+.midcol .arrow.down:hover::before { color: var(--shd-downvote); }
+.midcol .score { padding: 1px 0; white-space: nowrap; }
+
+/* Comment rows have no float, but containment also stops margin-collapse between a
+   comment and its .child list, which is what keeps nesting gaps even. */
+.thing.comment { display: flow-root; }
+
+/* 70x70 and NO chrome — old reddit's thumbnail is a bare square. The bordered grey box that
+   shipped was 52px tall, which changed the vertical rhythm of the whole list against the
+   real thing. box-sizing keeps the placeholders below (which do take a border) the same
+   70px as the images, so a mixed feed keeps one baseline. */
+.thumbnail {
+  float: left;
+  box-sizing: border-box;
+  width: 70px;
+  height: 70px;
+  margin: 0 5px 2px 0;
+  overflow: hidden;
+  border-radius: var(--shd-radius);
+  display: block;
+}
+.thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+/* The tile treatment belongs to the PLACEHOLDERS only. They are generated content with no
+   image behind them, so without a fill and an edge they are three grey letters floating in
+   the row — which is why dropping the border globally, as a straight reading of the
+   old.reddit measurement would have it, is wrong here. */
+.thumbnail.self,
+.thumbnail.default,
+.thumbnail.nsfw {
+  background: var(--shd-thumb-bg);
+  border: 1px solid var(--shd-thumb-border);
+}
+/* The self/link placeholders were data-URI SVGs with the label baked in at #888, which no
+   theme could recolour — on a dark theme they read as grey-on-grey. Drawn with generated
+   content instead, so they take the theme's own text colour. */
+.thumbnail.self::after,
+.thumbnail.default::after {
+  display: block;
+  text-align: center;
+  line-height: 68px;   /* 70px box less its 1px border, top and bottom */
+  font-size: 11px;
+  color: var(--shd-meta);
+}
+.thumbnail.self::after { content: 'self'; }
+.thumbnail.default::after { content: 'link'; }
+
+/* Adult content: old reddit's placeholder tile, drawn the same generated-content way as
+   the two above so it takes the theme's colours rather than baking any in. Deliberately
+   NOT a blurred copy of the image — a blur is a filter over the real pixels, still
+   downloaded and one CSS toggle from being legible, which is not what "do not show me
+   this" should mean. */
+.thumbnail.nsfw::after {
+  display: block;
+  text-align: center;
+  line-height: 68px;   /* 70px box less its 1px border, top and bottom */
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--shd-nsfw);
+  content: 'nsfw';
+}
+
+/* The stamp beside the title. Old reddit put it right after the link. */
+.nsfw-stamp {
+  color: var(--shd-nsfw);
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  border: 1px solid var(--shd-nsfw);
+  border-radius: var(--shd-radius);
+  padding: 0 3px;
+  margin-left: 5px;
+  white-space: nowrap;
+}
+
+.entry { overflow: hidden; }
+.entry p { margin: 0 0 1px 0; }
+.entry .title a.title {
+  font-family: var(--shd-title-font);
+  font-size: var(--shd-title-size);
+  font-weight: var(--shd-title-weight);
+  color: var(--shd-link);
+  text-decoration: none;
+  line-height: 1.2;
+}
+.entry .title a.title:visited { color: var(--shd-visited); }
+.entry .title a.title:hover { text-decoration: underline; }
+.entry .domain { font-size: 10px; color: var(--shd-meta); margin-left: 4px; }
+.entry .domain a { color: var(--shd-meta); text-decoration: none; }
+
+.tagline { font-size: 10px; color: var(--shd-meta); }
+.tagline a { color: var(--shd-meta); text-decoration: none; }
+.tagline .author { color: var(--shd-accent); }
+.tagline .subreddit { color: var(--shd-accent); font-weight: bold; }
+
+.flat-list.buttons {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  /* A flex row defaults to nowrap, so these buttons were laid out on one line and simply
+     ran off the side of a narrow viewport — measured 11px of horizontal overflow on a
+     360px comments page. It passed CI for weeks because the fallback font on a Linux
+     container is narrower than the Verdana this stylesheet actually asks for, so the row
+     fitted there and only overflowed on a machine with the real font installed. Every
+     display:flex here wraps, and test/css-lint.js requires it. */
+  flex-wrap: wrap;
+  gap: 0;
+  font-size: 10px;
+  font-weight: bold;
+}
+.flat-list.buttons li { margin-right: 8px; }
+.flat-list.buttons a { color: var(--shd-meta); text-decoration: none; }
+.flat-list.buttons a:hover { text-decoration: underline; }
+/* No colour override on .comments. Old reddit's whole action row is one grey; painting the
+   first item accent blue made every row read as a line of links competing with the title,
+   which is the single most noticeable per-row departure measured against the real thing.
+   The row is meant to recede. */
+
+/* ---------- comments ---------- */
+.shd-comments-root { padding: 10px; }
+/* The post's own text, expanded above the thread — old reddit's selftext box, measured:
+   #fafafa on a 1px #336699 (accent) border, radius 7px, padding 5px 10px, 14px type. The
+   base .usertext-body rule already carries the font-size and the 60em (=840px) measure. */
+.shd-selfpost .shd-selftext {
+  background: var(--shd-selftext-bg);
+  border: 1px solid var(--shd-accent);
+  border-radius: var(--shd-selftext-radius);
+  /* 8px top and bottom, not the measured 5px. The measurement is of old reddit's box
+     around old reddit's markup, whose last paragraph carries no bottom margin; ours wraps
+     a CLONE of Reddit's, and whether that clone's last <p> keeps our 8px margin or gets
+     zeroed by Reddit's own stylesheet is open question 7 — i.e. not ours to decide. Round
+     12 read the losing side of it as "no bottom padding". Padding that does not depend on
+     who wins, plus the last-child rule below, makes the box symmetrical either way. */
+  padding: 8px 10px;
+  margin: 5px 0;
+}
+/* The inline player for a video post (comments page only — see comments.js videoPlayer).
+   `display:block` because a <video> is inline by default and would sit on a text baseline,
+   leaving a few px of phantom descender under the box. */
+.shd-selfpost .shd-video { margin: 5px 0; max-width: var(--shd-video-max); }
+.shd-selfpost .shd-video-el {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  background: #000;      /* letterbox bars, before and around the frame */
+}
+/* Why there is no sound. Small and quiet — it explains a limitation of Reddit's packaging,
+   so it should not read as an error of ours, but it has to be legible or a reader concludes
+   the extension broke their audio. */
+.shd-selfpost .shd-video-note {
+  font-size: x-small;
+  color: var(--shd-meta);
+  margin: 2px 0 0;
+}
+.shd-selfpost { border-bottom: 1px solid var(--shd-border); padding-bottom: 8px; margin-bottom: 10px; }
+.commentarea { margin-right: var(--shd-gutter); }
+
+/* The thread line belongs to .child — the wrapper around a comment's REPLIES — not to the
+   comment itself. Both draw something that looks like a guide line, but they start and stop
+   at different points in the tree: on .comment it brackets the comment you are reading, on
+   .child it runs beside the replies to it, which is the relationship the line is for.
+   Per-level indent is 25px = .child margin (15) + its border (1) + .comment margin (9),
+   matching old reddit; it was 31px, and the extra came from the arrow gutter accumulating
+   at every level (see .entry below). */
+.thing.comment {
+  position: relative;
+  padding: 0 0 3px 0;
+  margin: 6px 0 0 9px;
+}
+/* The arrow gutter sits on .entry, not on .thing.comment. On the row it is padding that
+   every nested level inherits and ADDS to, so a 22px gutter became 22px of indent per
+   level; on .entry it is spent once per comment and the indent stays the .child arithmetic
+   above. Old reddit gets this for free because its midcol is a float rather than absolute. */
+.thing.comment > .entry { padding-left: 22px; }
+/* The arrows get their own narrow column, narrower than the row's 22px left padding, so
+   they cannot reach the tagline. .midcol's base width (34px) is sized for listing scores
+   and overshot here: at left:4px it spanned 4–38px against a tagline starting at 22px,
+   so the hover arrows painted over the [–] and the author name. */
+/* Always visible. The hover-gate here was justified in a comment as old reddit's own
+   behaviour, and a direct measurement of old.reddit says otherwise: its comment midcol is
+   15px wide, floated, and painted at rest. Hiding them also made the arrows unfindable
+   without a pointer, which is the wrong trade for a decorative control. */
+.thing.comment > .midcol {
+  left: 2px;
+  top: 0;
+  width: 15px;
+}
+/* Inline, first in the tagline — old reddit's own placement. */
+.thing.comment .expand {
+  font-size: 10px;
+  color: var(--shd-meta);
+  text-decoration: none;
+  margin-right: 3px;
+}
+
+.thing.comment.collapsed > .child,
+.thing.comment.collapsed > .entry .usertext,
+.thing.comment.collapsed > .entry .buttons { display: none; }
+
+.thing.comment .tagline { font-size: 10px; }
+.thing.comment .tagline .author { color: var(--shd-accent); font-weight: bold; }
+.thing.comment .tagline .score { color: var(--shd-meta); }
+
+/* A PROFILE page's comment rows. They reuse .thing.comment (the classes above are global,
+   not scoped to .commentarea) but sit flat in #siteTable with no midcol and no nesting —
+   so the 22px arrow gutter above would indent them against nothing. The parent line is
+   old reddit's "comment in r/x" header, drawn in the tagline's grey so the row's hierarchy
+   stays body > links > metadata. */
+.thing.comment.shd-profile-comment { margin: 10px 0 0; }
+.thing.comment.shd-profile-comment > .entry { padding-left: 0; }
+.shd-profile-comment .parent {
+  font-size: 10px;
+  color: var(--shd-meta);
+  margin: 0;
+}
+.shd-profile-comment .parent .subreddit { color: var(--shd-meta); font-weight: bold; }
+/* The post being replied to. Old reddit set it in the link colour, which is also what
+   distinguishes it from the community beside it in a line of otherwise uniform grey. */
+.shd-profile-comment .parent .shd-parent-title { color: var(--shd-link); }
+
+.usertext-body {
+  font-size: 14px;
+  line-height: var(--shd-body-line);
+  padding: 2px 0;
+  max-width: 60em;
+}
+/* Cloned bodies wear Reddit's OWN classes (md, text-14-scalable, ...), and Reddit's page
+   stylesheet still matches them — that is open question 7, and it stopped being cosmetic
+   the day it shipped faint text: Reddit's text color rides the HOST page's theme, the host
+   pages run theme-dark, so the clone arrives with near-white text that lands on our light
+   palettes as barely legible grey. Reported from real use ("very hard to read on the light
+   themes"). Force OUR palette's text color down the whole clone, deliberately touching
+   nothing structural — list markers, tables, code layout stay Reddit's. The link and
+   quote rules below must outrank this one, which is why all three carry !important and
+   cascade order does the tie-breaking. */
+.usertext-body,
+.usertext-body :not(a) { color: var(--shd-text) !important; }
+.usertext-body blockquote,
+.usertext-body blockquote :not(a) { color: var(--shd-quote-text) !important; }
+.usertext-body a { color: var(--shd-link) !important; }
+.usertext-body p { margin: 0 0 8px; }
+/* The trailing paragraph's margin is a gap BETWEEN paragraphs; below the last one it is
+   just slack that makes a padded box look bottom-heavy, or — where Reddit's stylesheet
+   wins the p rule above — absent, which makes it look unpadded. Neither is the box we
+   measured. Zeroing it here leaves the container's own padding as the only thing setting
+   the bottom gutter, which is the one part we control. */
+.usertext-body > :last-child { margin-bottom: 0; }
+.usertext-body pre,
+.usertext-body code {
+  font-family: Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: var(--shd-code-bg);
+}
+.usertext-body blockquote {
+  border-left: 2px solid var(--shd-quote-border);
+  margin: 0 0 8px;
+  padding-left: 8px;
+}
+
+/* Old reddit's "load more comments" line: its own row at the bottom of the reply list,
+   never an item in the action row. Sized and coloured like the tagline it sits under, and
+   deliberately a little larger than the buttons so it reads as an affordance rather than
+   as one more grey word in a line of them. .shd-spent is the state a click could not
+   improve — see moreRepliesControl() in comments.js. */
+.shd-more-replies {
+  font-size: 11px;
+  font-weight: bold;
+  margin: 4px 0 2px;
+  padding-left: 22px;              /* clears the same arrow gutter .thing.comment > .entry does */
+  cursor: pointer;
+}
+.shd-more-replies a { color: var(--shd-accent); text-decoration: none; }
+.shd-more-replies a:hover { text-decoration: underline; }
+.shd-more-replies.shd-spent a { color: var(--shd-meta); }
+
+/* No margin-top: we emit a .child for every comment, leaf or not, so a top margin here
+   would add space after every leaf in the tree. The 6px gap before a reply comes from the
+   nested .thing.comment's own margin instead. An empty .child is 0-high, so its border
+   paints nothing. */
+.child {
+  margin: 0 0 0 15px;
+  border-left: 1px var(--shd-thread-style) var(--shd-thread-line);
+}
+
+/* ---------- pagination sentinel ---------- */
+.shd-sentinel {
+  /* Same right gutter as #siteTable, or the sentinel runs out under the floated rail. */
+  margin: 14px var(--shd-gutter) 0 88px;   /* tracks .thing.link's left padding */
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--shd-meta);
+}
+.shd-loadmore {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--shd-header-bg);
+  border: 1px solid var(--shd-header-border);
+  border-radius: var(--shd-radius);
+  color: var(--shd-accent);
+  text-decoration: none;
+  font-weight: bold;
+}
+.shd-loadmore:hover { background: var(--shd-hover-bg); }
+
+/* ---------- responsive-ish fallback ---------- */
+/* Zeroing the gutter variable reclaims the space for #siteTable, .commentarea AND
+   .shd-sentinel at once — they all derive from it, so none can be forgotten here. */
+@media (max-width: 1100px) {
+  html.shd-active { --shd-gutter: 0px; }
+  #shd-sidebar { display: none; }
+}

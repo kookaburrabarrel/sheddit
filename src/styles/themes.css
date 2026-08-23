@@ -1,0 +1,232 @@
+/*
+ * themes.css — values only. Never a layout rule.
+ *
+ * Every rule here declares custom properties (plus one gradient for the button chip); the
+ * declarations that consume them all live in old-reddit.css, so a theme cannot introduce a
+ * float, a flex row or a column width and slip past the checks that guard those. The
+ * vertical rhythm tokens (--shd-row-gap, --shd-body-line) are fair game — density is half
+ * of what makes sepia a reading theme — but the horizontal metrics are not, and css-lint
+ * fails any theme that names one.
+ *
+ * Each theme is three rules, and all three are checked by test/css-lint.js:
+ *
+ *   html[data-shd-theme="x"]                 --shd-blank, the pre-render backdrop
+ *   html.shd-active[data-shd-theme="x"]      the palette
+ *   html.shd-active .shd-theme-btn[…] .shd-swatch   the button's colour chip
+ *
+ * WHY --shd-blank IS SET OUTSIDE .shd-active
+ * suppress.css blanks the page from document_start (`html.shd-gate body { visibility:
+ * hidden }`) and .shd-active is not added until we have rendered something. Everything
+ * between those two moments painted white, which on a dark theme is a flash of exactly the
+ * brightness the theme exists to avoid. `--shd-blank` is the one token that has to apply
+ * before we are active, so it gets its own unscoped rule; nothing else here does.
+ *
+ * WHY THE PALETTE SELECTOR CARRIES .shd-active TWICE OVER
+ * old-reddit.css declares the same names under `html.shd-active` — that block is both the
+ * fallback and the `classic` theme. `html.shd-active[data-shd-theme="x"]` out-specifies it
+ * (0,2,1 vs 0,1,1), so a theme wins regardless of which stylesheet the browser saw first.
+ * That matters because this file is delivered at document_start and old-reddit.css at
+ * document_idle: source order is against us here and specificity is what saves it. Do not
+ * "simplify" these selectors to `html[data-shd-theme="x"]` — that ties with the base block
+ * and the base, arriving later, would win every token.
+ *
+ * `classic` has no palette block by design: it IS old-reddit.css's base block. So a theme
+ * that forgets a token falls back to a classic (light) value, which is why css-lint
+ * requires every colour token in every non-classic theme rather than trusting inheritance.
+ *
+ * The swatch colours are literals because a colour chip has to show a theme the page is
+ * NOT currently painted in — it cannot read that theme's own custom properties. Keep each
+ * chip's two colours equal to that theme's --shd-bg and --shd-accent.
+ */
+
+/* ---------------------------------------------------------------- classic ---------- *
+ * old.reddit.com as it was. Palette lives in old-reddit.css; only the two rules that
+ * cannot live there appear here. */
+html[data-shd-theme="classic"] { --shd-blank: #ffffff; }
+html.shd-active .shd-theme-btn[data-theme="classic"] .shd-swatch {
+  background: linear-gradient(135deg, #ffffff 50%, #336699 50%);
+}
+
+/* ---------------------------------------------------------------- slate ------------ *
+ * The same layout with the edges taken off: system UI font, neutral greys, soft corners
+ * and a hairline shadow on the rail. This is the "less jarring, still old reddit" one. */
+html[data-shd-theme="slate"] { --shd-blank: #eef1f5; }
+html.shd-active[data-shd-theme="slate"] {
+  --shd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --shd-title-size: 15px;
+  --shd-title-weight: 600;
+  --shd-radius: 5px;
+  --shd-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shd-thread-style: solid;
+  --shd-row-gap: 14px;
+  --shd-body-line: 1.55;
+
+  --shd-page-bg: #eef1f5;
+  --shd-bg: #ffffff;
+  --shd-panel: #f8fafc;
+  --shd-panel-border: #e2e8f0;
+  --shd-text: #0f172a;
+  --shd-meta: #64748b;
+  --shd-link: #1d4ed8;
+  --shd-visited: #6d28d9;
+  --shd-accent: #2563eb;
+  --shd-border: #e2e8f0;
+  --shd-topbar-bg: #ffffff;
+  --shd-topbar-text: #0f172a;
+  --shd-header-bg: #e8edf5;
+  --shd-header-border: #cbd5e1;
+  --shd-tab-text: #2563eb;
+  --shd-hover-bg: #dde5f0;
+  --shd-upvote: #f97316;
+  --shd-downvote: #6366f1;
+  --shd-nsfw: #c2410c;
+  --shd-dim: #cbd5e1;
+  --shd-thumb-bg: #f1f5f9;
+  --shd-thumb-border: #e2e8f0;
+  --shd-code-bg: #f1f5f9;
+  --shd-selftext-bg: #f8fafc;
+  --shd-quote-border: #cbd5e1;
+  --shd-quote-text: #475569;
+  --shd-thread-line: #e2e8f0;
+}
+html.shd-active .shd-theme-btn[data-theme="slate"] .shd-swatch {
+  background: linear-gradient(135deg, #ffffff 50%, #2563eb 50%);
+}
+
+/* ---------------------------------------------------------------- sepia ------------ *
+ * Warm paper and serif type. The only theme that changes the type family outright, which
+ * is the point: it is for reading a long thread, not for scanning a feed. */
+html[data-shd-theme="sepia"] { --shd-blank: #e8dfcc; }
+html.shd-active[data-shd-theme="sepia"] {
+  --shd-font: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  --shd-title-size: 17px;
+  --shd-title-weight: normal;
+  --shd-radius: 3px;
+  --shd-shadow: none;
+  --shd-thread-style: solid;
+  --shd-row-gap: 16px;
+  --shd-body-line: 1.65;
+
+  --shd-page-bg: #e8dfcc;
+  --shd-bg: #fbf6ea;
+  --shd-panel: #f4ecd8;
+  --shd-panel-border: #ddceb0;
+  --shd-text: #3b3227;
+  --shd-meta: #8b7d68;
+  --shd-link: #7b3f00;
+  --shd-visited: #5b4636;
+  --shd-accent: #8a5a2b;
+  --shd-border: #ddceb0;
+  --shd-topbar-bg: #f4ecd8;
+  --shd-topbar-text: #3b3227;
+  --shd-header-bg: #efe4cd;
+  --shd-header-border: #c9b48d;
+  --shd-tab-text: #8a5a2b;
+  --shd-hover-bg: #e9dcc2;
+  --shd-upvote: #c1440e;
+  --shd-downvote: #6b705c;
+  --shd-nsfw: #a33a2a;
+  --shd-dim: #c3b393;
+  --shd-thumb-bg: #f0e7d5;
+  --shd-thumb-border: #ddceb0;
+  --shd-code-bg: #f0e7d5;
+  --shd-selftext-bg: #f4ecd8;
+  --shd-quote-border: #c9b48d;
+  --shd-quote-text: #5b5142;
+  --shd-thread-line: #d9c9a8;
+}
+html.shd-active .shd-theme-btn[data-theme="sepia"] .shd-swatch {
+  background: linear-gradient(135deg, #fbf6ea 50%, #8a5a2b 50%);
+}
+
+/* ---------------------------------------------------------------- night ------------ *
+ * Dark, deliberately low contrast: #d7dae0 on #181b21 rather than white on black, because
+ * the point of reading at night is not to be shouted at. */
+html[data-shd-theme="night"] { --shd-blank: #0f1115; }
+html.shd-active[data-shd-theme="night"] {
+  --shd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --shd-title-size: 15px;
+  --shd-title-weight: 600;
+  --shd-radius: 5px;
+  --shd-shadow: none;
+  --shd-thread-style: solid;
+  --shd-row-gap: 14px;
+  --shd-body-line: 1.55;
+
+  --shd-page-bg: #0f1115;
+  --shd-bg: #181b21;
+  --shd-panel: #1e222a;
+  --shd-panel-border: #2a2f39;
+  --shd-text: #d7dae0;
+  --shd-meta: #8b939f;
+  --shd-link: #7fb0ff;
+  --shd-visited: #b79cff;
+  --shd-accent: #6ea8fe;
+  --shd-border: #2a2f39;
+  --shd-topbar-bg: #12151a;
+  --shd-topbar-text: #e6e9ee;
+  --shd-header-bg: #1e222a;
+  --shd-header-border: #343b47;
+  --shd-tab-text: #6ea8fe;
+  --shd-hover-bg: #262b34;
+  --shd-upvote: #ff7043;
+  --shd-downvote: #7c8cff;
+  --shd-nsfw: #ff6b6b;
+  --shd-dim: #4a515c;
+  --shd-thumb-bg: #22262e;
+  --shd-thumb-border: #2f3540;
+  --shd-code-bg: #14171c;
+  --shd-selftext-bg: #1e222a;
+  --shd-quote-border: #3a4150;
+  --shd-quote-text: #a9b2bf;
+  --shd-thread-line: #2b313b;
+}
+html.shd-active .shd-theme-btn[data-theme="night"] .shd-swatch {
+  background: linear-gradient(135deg, #181b21 50%, #6ea8fe 50%);
+}
+
+/* ---------------------------------------------------------------- carbon ----------- *
+ * Near-black, monospaced, sharp corners, reddit orange as the only colour. The opposite
+ * end of the range from sepia: maximum contrast, minimum decoration. */
+html[data-shd-theme="carbon"] { --shd-blank: #000000; }
+html.shd-active[data-shd-theme="carbon"] {
+  --shd-font: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --shd-title-size: 15px;
+  --shd-title-weight: 700;
+  --shd-radius: 0px;
+  --shd-shadow: none;
+  --shd-thread-style: solid;
+  --shd-row-gap: 8px;
+  --shd-body-line: 1.35;
+
+  --shd-page-bg: #000000;
+  --shd-bg: #0a0a0b;
+  --shd-panel: #111113;
+  --shd-panel-border: #26262a;
+  --shd-text: #f2f2f3;
+  --shd-meta: #9a9aa0;
+  --shd-link: #ff7a45;
+  --shd-visited: #c9772f;
+  --shd-accent: #ff4500;
+  --shd-border: #26262a;
+  --shd-topbar-bg: #000000;
+  --shd-topbar-text: #ffffff;
+  --shd-header-bg: #141416;
+  --shd-header-border: #ff4500;
+  --shd-tab-text: #ff4500;
+  --shd-hover-bg: #1c1c20;
+  --shd-upvote: #ff4500;
+  --shd-downvote: #4f8cff;
+  --shd-nsfw: #ff4500;
+  --shd-dim: #55555c;
+  --shd-thumb-bg: #141416;
+  --shd-thumb-border: #2b2b30;
+  --shd-code-bg: #000000;
+  --shd-selftext-bg: #111113;
+  --shd-quote-border: #ff4500;
+  --shd-quote-text: #b9b9bf;
+  --shd-thread-line: #2b2b30;
+}
+html.shd-active .shd-theme-btn[data-theme="carbon"] .shd-swatch {
+  background: linear-gradient(135deg, #0a0a0b 50%, #ff4500 50%);
+}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Sheddit">
+  <!-- Old reddit's header blue, which is the one colour the layout is remembered by. -->
+  <rect width="128" height="128" rx="26" fill="#5f99cf"/>
+  <rect width="128" height="128" rx="26" fill="url(#g)"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".14"/>
+    </linearGradient>
+  </defs>
+  <!-- A shed: the pun, and a silhouette that still reads at 16px. -->
+  <g fill="#fff">
+    <path d="M64 24 111 60.5v7.5h-9.5V60L64 36.5 26.5 60v8H17v-7.5z"/>
+    <path d="M27.5 66h73v38a4 4 0 0 1-4 4h-65a4 4 0 0 1-4-4z"/>
+  </g>
+  <!-- Reddit orangered, for the one warm note. -->
+  <rect x="54" y="80" width="20" height="28" rx="1.5" fill="#ff4500"/>
+</svg>
