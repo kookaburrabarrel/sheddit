@@ -414,8 +414,20 @@ async function boot(html, url, setup) {
       check('...sized from the manifest, so the box does not jump when metadata lands',
         v?.getAttribute('width') === '480' && v?.getAttribute('height') === '854',
         `${v?.getAttribute('width')}x${v?.getAttribute('height')}`);
-      check('...and it says why there is no sound, rather than letting the reader guess',
-        /no sound/i.test(doc.querySelector('.shd-selfpost .shd-video-note')?.textContent || ''),
+      /* The audio half. CMAF has no combined rendition, so sound exists only if the
+         separate track is resolved from the same manifest and played alongside. */
+      const au = doc.querySelector('.shd-selfpost audio.shd-video-audio');
+      check('...with the separate audio track alongside it, which is the only way it has sound',
+        au?.getAttribute('src') === 'https://v.redd.it/nzafnbgwcxkh1/CMAF_AUDIO_128.mp4',
+        au?.getAttribute('src'));
+      /* A video element with no audio track of its own may not be given a volume control by
+         the browser, and a video whose sound cannot be turned down is worse than a silent
+         one — so the row is ours and must be present whenever the audio is. */
+      check('...and a volume control of our own, because the native one may not exist',
+        !!doc.querySelector('.shd-selfpost .shd-video-mute') &&
+        !!doc.querySelector('.shd-selfpost .shd-video-vol'));
+      check('...so it does NOT claim to be silent',
+        !/no sound/i.test(doc.querySelector('.shd-selfpost .shd-video-note')?.textContent || ''),
         doc.querySelector('.shd-selfpost .shd-video-note')?.textContent);
       check('exactly one request, for the manifest of that asset and nothing else',
         calls.length === 1 && calls[0] === 'https://v.redd.it/nzafnbgwcxkh1/DASHPlaylist.mpd',
@@ -433,8 +445,9 @@ async function boot(html, url, setup) {
       check('...the combined file, which is the one that keeps its audio',
         /packaged-media\.redd\.it\/.*m2-res_1080p\.mp4/.test(v?.getAttribute('src') || ''),
         v?.getAttribute('src'));
-      check('...so it carries NO silent note',
-        !doc.querySelector('.shd-selfpost .shd-video-note'));
+      check('...so it carries NO silent note and no paired audio',
+        !doc.querySelector('.shd-selfpost .shd-video-note') &&
+        !doc.querySelector('.shd-selfpost audio'));
       check('...and spends no request at all',
         calls.length === 0, JSON.stringify(calls));
     }
@@ -461,6 +474,23 @@ async function boot(html, url, setup) {
         !doc.querySelector('.shd-selfpost video'));
       check('...and the post itself still renders',
         !!doc.querySelector('.shd-selfpost a.title'));
+    }
+
+    {
+      /* A manifest with video renditions but NO audio AdaptationSet. The post is then
+         genuinely silent, and saying so is the whole point — a reader who hears nothing and
+         is told nothing concludes the extension broke their sound. */
+      const videoOnly = VIDEO_MPD.replace(
+        /<AdaptationSet contentType="audio"[\s\S]*?<\/AdaptationSet>/, '');
+      const { doc } = await bootWithFetch(commentsPage({ cmafPost: true }), CMAF_URL,
+        { body: videoOnly });
+      const ok = await waitFor(() => doc.querySelector('.shd-selfpost video.shd-video-el'));
+      check('a manifest with no audio track still plays the video', ok);
+      check('...with no audio element, because there is nothing to pair',
+        !doc.querySelector('.shd-selfpost audio'));
+      check('...and it says plainly that there is no sound',
+        /no sound/i.test(doc.querySelector('.shd-selfpost .shd-video-note')?.textContent || ''),
+        doc.querySelector('.shd-selfpost .shd-video-note')?.textContent);
     }
 
     {

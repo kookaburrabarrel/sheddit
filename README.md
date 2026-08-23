@@ -259,9 +259,11 @@ analytics, telemetry, or remote configuration, and nothing about you is sent any
 
 The one file it fetches is a video manifest, and only to play video: opening a **video**
 post's comments page reads that video's manifest from Reddit's media server so Sheddit
-knows which file to hand the player. It is a plain request for a static file, sent without
+knows which files to hand the player. It is a plain request for a static file, sent without
 cookies, and it is the same file your browser would read to play the video on Reddit
-itself. Untick *"Play video on the comments page"* in the options and it never happens.
+itself. The video and its sound are then loaded by the player itself — Reddit ships newer
+videos with the audio in a separate file, so the two are played together. Untick *"Play
+video on the comments page"* in the options and none of it happens.
 See [PRIVACY.md](PRIVACY.md).
 
 It requests exactly two permissions:

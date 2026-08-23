@@ -12,6 +12,51 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased — 0.17.0
+
+### Fixed — the inline player has sound
+
+0.16.0 shipped a player that worked and was silent, because CMAF puts the picture and the
+sound in separate files and offers nothing combined. The player now takes both from the
+same manifest and plays them together, so a repackaged video post is watchable *and*
+audible inside the layout. Nothing extra is fetched by the extension to do it — the
+manifest already named the audio track; 0.16.0 resolved it and then had nothing to do
+with it.
+
+**Two elements, not MediaSource — and the reason is that MSE could not be verified here.**
+Feeding both tracks to one element through two SourceBuffers is the textbook answer and is
+what Reddit's own player does. It is not what shipped, because shipping it would have meant
+shipping it untested: the Chromium these tests run against is the open-source build with no
+H.264 and no AAC (`MediaSource.isTypeSupported` returns false for both, measured), and
+Chrome's WebM byte stream accepts only **one** SourceBuffer, so no combination available in
+this project exercises two-buffer MSE. An `<audio>` alongside the `<video>` can be tested
+end to end in a real browser, and now is.
+
+**What made that viable is a measurement, not a hope.** Two media elements were expected to
+drift apart. They do not: eight samples over three seconds held a *constant* −75ms, and a
+seek left it at −67ms. The elements advance in lockstep and the gap is a fixed startup
+offset — one cannot start two elements in the same instant — so what is needed is one
+correction rather than a drift-chasing loop. `pair()` makes the video the clock, corrects
+only the audio, and re-aligns on play, seek, stall and a standing `timeupdate` check.
+
+**The volume control is ours, deliberately.** A video element with no audio track of its
+own may not be given a volume control by the browser, and a video whose sound cannot be
+turned down is worse than one with no sound. The row under the player owns mute and volume;
+it writes to the *video*, which `pair()` mirrors to the audio, so a native control — where
+there is one — and ours can never disagree.
+
+**A new browser suite, `test/media-sync.js`.** jsdom implements no media pipeline at all:
+`play()` resolves nothing, `currentTime` never advances, `timeupdate` never fires. So the
+one part of this feature that could actually fail was the one part run.js structurally
+cannot see. The new suite generates its own VP8/Opus media in the page with `MediaRecorder`
+— no fixture to commit, no network, and nobody's video in the repository — then asserts
+that the audio starts itself, holds within 120ms, recovers from a deliberate 1.5s shove,
+follows a seek, mirrors volume and mute, and stops with the picture. It skips loudly
+without a browser, like the other two.
+
+An asset whose manifest lists no audio track at all is still genuinely silent, and still
+says so on screen.
+
 ## Unreleased — 0.16.0
 
 ### Fixed — video posts play again, inside the layout

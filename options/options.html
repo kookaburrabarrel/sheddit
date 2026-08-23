@@ -31,10 +31,11 @@
 <label><input type="checkbox" data-k="inlineVideo"> Play video on the comments page</label>
 
 <p class="note">
-  Playing video is the one feature that makes a network request: opening a video post's
+  Playing video is the one feature that makes a request of its own: opening a video post's
   comments page fetches that video’s manifest from Reddit’s media CDN, so Sheddit knows
-  which file to play. Nothing else in the extension makes a request of any kind. Turn this
-  off and video posts go back to being a link and a thumbnail.
+  which files to play. Reddit ships newer videos with the sound in a separate file, so the
+  player loads both and keeps them together. Nothing else in the extension makes a request
+  of any kind. Turn this off and video posts go back to being a link and a thumbnail.
 </p>
 
 <p class="note">
