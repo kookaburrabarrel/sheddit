@@ -39,11 +39,15 @@ extension removes them.
   scrolling does — the request is Reddit's, to Reddit, and would have happened anyway.
 - **Playing video, and the one file it reads.** To play a video post inside the layout,
   Sheddit reads that video's manifest — a small XML file listing which versions of the
-  video exist — from Reddit's media server, so it knows which file to hand the player.
+  video exist — from Reddit's media server, so it knows which files to hand the player.
   This is the same kind of file your browser would fetch to play the video on Reddit
   itself: a plain request for a static file, sent **without cookies**, carrying nothing
   about you. It happens only when you open a **video** post's comments page, and only
   while the setting below is on.
+
+  The video and sound files themselves are then loaded by the player, the same way any
+  page loads a video you press play on. Reddit ships newer videos with the sound in a
+  separate file, so there are two of them rather than one.
 
   **Why:** Reddit is repackaging its video, and on a repackaged post the file Sheddit used
   to link to no longer works. Without reading the manifest there is nothing to play.

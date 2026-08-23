@@ -263,7 +263,9 @@ SHD.comments = (() => {
    *   1. `packaged-media-json` (model.mp4Of), when Reddit still offers it: a single
    *      combined file, so it keeps its audio.
    *   2. Failing that, the DASH manifest (media.resolve): CMAF, which splits audio into a
-   *      separate file and offers nothing combined, so it plays SILENT.
+   *      separate file and offers nothing combined — so both are taken from the manifest and
+   *      played as a pair. Sound either way; the combined file is simply the cheaper route
+   *      to it, needing no second element and no clock to keep.
    * The JSON hydrates late — 3 of 4 posts had none at first paint — so (1) is
    * tried again when (2) comes back, by which time it usually has. Without that recheck a
    * legacy post whose player was merely slow would be served a silent file when a
@@ -293,11 +295,46 @@ SHD.comments = (() => {
         video.setAttribute('height', String(info.height));
         video.style.aspectRatio = `${info.width} / ${info.height}`;
       }
-      if (info && info.silent) {
-        box.appendChild(h('p.shd-video-note', { text:
-          'No sound — Reddit serves this video\u2019s audio as a separate file.' }));
-      }
+      if (!info) return;                       // a combined file: it carries its own audio
+      if (info.audioUrl) return attachAudio(info.audioUrl);
+      /* Genuinely no audio rendition. Say so, because a reader who hears nothing will
+         otherwise conclude this extension broke their sound. */
+      box.appendChild(h('p.shd-video-note', { text:
+        'No sound — Reddit lists no audio track for this video.' }));
     };
+
+    /**
+     * The second half of a CMAF post: its audio, as its own element, kept in step by
+     * media.pair(). The volume row is ours because a video element with no audio track of
+     * its own may not be given a volume control by the browser — and a video whose sound
+     * cannot be turned down is worse than one with no sound at all. It writes to the VIDEO,
+     * which pair() mirrors onward, so a native control (where there is one) and this one
+     * can never disagree.
+     */
+    function attachAudio(audioUrl) {
+      const audio = h('audio.shd-video-audio', { src: audioUrl, preload: 'metadata' });
+      box.appendChild(audio);
+      SHD.media.pair(video, audio);
+
+      const mute = h('button.shd-video-mute', {
+        type: 'button', text: 'mute', 'aria-pressed': 'false',
+        onclick: () => {
+          video.muted = !video.muted;
+          mute.textContent = video.muted ? 'unmute' : 'mute';
+          mute.setAttribute('aria-pressed', String(video.muted));
+        }
+      });
+      const vol = h('input.shd-video-vol', {
+        type: 'range', min: '0', max: '1', step: '0.05', value: '1',
+        'aria-label': 'volume',
+        oninput: () => { video.volume = Number(vol.value); video.muted = false;
+                         mute.textContent = 'mute'; mute.setAttribute('aria-pressed', 'false'); }
+      });
+      box.appendChild(h('p.shd-video-note', null, [
+        mute, vol,
+        h('span', { text: 'sound is a separate track — Reddit ships it that way' })
+      ]));
+    }
 
     /* The combined rendition, if it is already there. Synchronous, so a legacy post that
        hydrated before we ran never spends a request at all. */

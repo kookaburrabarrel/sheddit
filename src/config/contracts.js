@@ -418,7 +418,9 @@ SHD.settings = {
      opened, and only then (see media.js and PRIVACY.md). On by default because without it
      a repackaged asset is simply unwatchable with the extension on, which is the bug that
      prompted it; a reader who would rather the extension keep making no requests at all
-     turns it off here and gets the pre-0.16.0 behaviour exactly. */
+     turns it off here and gets the pre-0.16.0 behaviour exactly. Since 0.17.0 the player
+     also carries the post's SOUND, which on a CMAF asset is a second file played alongside
+     the picture — still one request of ours, the manifest, which names both. */
   inlineVideo: true,
   /* Which palette to paint in. The ids live in src/config/themes.js, which also owns the
      fallback: anything not on that list resolves to 'classic'. This is the one setting

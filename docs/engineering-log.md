@@ -1146,9 +1146,15 @@ the way a question got settled is usually more useful than the answer.
    "the `CMAF_*` files are fragmented segments that do not play standalone" was believed,
    was wrong (they are self-contained on-demand fMP4s), and was load-bearing in ruling (c)
    in — corrected above the same day.
-   (c) is NOT closed by this and stays open on its own merits: it is still the only option
-   that would restore **audio**, since what the manifest yields is video-only. What ships
-   today is silent and says so.
+   (c) is NOT closed by this and stays open on its own merits — but **not** as the route to
+   audio, which was how it was framed for a day. 0.17.0 delivers sound without it: the
+   manifest names the separate audio track too, and an `<audio>` paired to the `<video>`
+   plays them together (media.pair, proven in test/media-sync.js). MediaSource would be the
+   textbook way and was rejected on evidence rather than taste — this project's Chromium is
+   the open-source build with no H.264 and no AAC, and Chrome's WebM byte stream takes only
+   one SourceBuffer, so nothing here can exercise two-buffer MSE and it would have shipped
+   untested. What (c) would still buy is Reddit's own player, with its own adaptive
+   switching and its own seek behaviour; that is a real thing to want and no longer urgent.
    **Taken 2026-08-22: (b), shipped in 0.14.0.** The title is the permalink, `watch` carries the
    rendition and re-resolves at click time, and with nothing to resolve it degrades to the
    comments page rather than the bounce — on listing rows only, never on the comments page

@@ -27,11 +27,11 @@
  * which is why no new host permission is needed. PRIVACY.md documents it; before 0.16.0
  * the extension made no requests at all, and that change is deliberate, not incidental.
  *
- * WHAT IT CANNOT DO. CMAF splits video and audio into separate files and offers no
- * combined rendition, so what this resolves is a SILENT video. Playing both together needs
- * MediaSource and a real media engine; the audio URL is returned anyway so that step does
- * not have to re-derive it. comments.js labels the player rather than letting a reader
- * conclude their sound is broken.
+ * SOUND. CMAF splits video and audio into separate files and offers no combined rendition,
+ * so the manifest is read for BOTH and the two are played together as a pair — see pair()
+ * below, and test/media-sync.js, which proves in a real browser that they stay together.
+ * An asset whose manifest lists no audio at all is genuinely silent, and comments.js says
+ * so on screen rather than letting a reader conclude their sound is broken.
  */
 globalThis.SHD = globalThis.SHD || {};
 
@@ -110,10 +110,11 @@ SHD.media = (() => {
       url: `${base}/${best.file}`,
       width: isFinite(best.width) && best.width > 0 ? best.width : null,
       height: best.height,
-      audioUrl: sound ? `${base}/${sound.file}` : null,
-      /* Stated rather than inferred by the caller: nothing in a DASH manifest promises a
-         muxed rendition, and every asset measured so far separates the two. */
-      silent: true
+      /* The separate audio track. CMAF offers no combined rendition, so this is the only
+         way the post has sound — comments.js plays it alongside the video and keeps the
+         two aligned (see pair() below). Null means genuinely silent, and is reported as
+         such on screen rather than left to the reader to wonder about. */
+      audioUrl: sound ? `${base}/${sound.file}` : null
     };
   }
 
@@ -153,8 +154,65 @@ SHD.media = (() => {
     return p;
   }
 
+  /* How far apart the two elements may drift before it is worth a correction. MEASURED,
+     not guessed: two media elements playing the same timeline in Chromium hold a CONSTANT
+     offset rather than diverging — eight samples over three seconds read -75ms every time,
+     and a seek left it at -67ms. So the thing to correct is a fixed startup offset (the
+     elements cannot be started in the same instant), not accumulating drift, and one
+     correction usually settles it for the whole video. 120ms sits above the noise and below
+     the ~150ms where audio lag becomes noticeable against lips. */
+  const SYNC_SLOP = 0.12;
+
+  /**
+   * Play a separate audio file in lockstep with a video element.
+   *
+   * WHY THIS EXISTS AT ALL. Reddit's CMAF packaging has no combined rendition — video and
+   * audio are separate files — so a post either plays silent or plays as two elements kept
+   * together. The alternative is MediaSource with two SourceBuffers, which is the textbook
+   * answer and is NOT used here for a reason worth recording: it would have shipped
+   * unverified. This project's headless Chromium is the open-source build with no H.264 and
+   * no AAC (`isTypeSupported` says false for both), and Chrome's WebM byte stream accepts
+   * only ONE SourceBuffer, so there is no combination available here that exercises
+   * two-buffer MSE. Two media elements can be tested end to end, and are — see
+   * test/media-sync.js, which runs in a real browser.
+   *
+   * THE VIDEO IS THE CLOCK. Every correction moves the audio, never the video, so the
+   * picture never stutters and the reader's scrubbing is never fought. The video element is
+   * also the single source of truth for volume: Chrome may or may not draw a volume control
+   * for a video with no audio track, so ours writes to the video and this mirrors it
+   * onward — whichever control the reader finds, both stay consistent.
+   */
+  function pair(video, audio) {
+    const align = () => { audio.currentTime = video.currentTime; };
+    const drifted = () => Math.abs(audio.currentTime - video.currentTime) > SYNC_SLOP;
+    /* Never let a rejected play() reach the console as an unhandled rejection: autoplay
+       policy rejects it routinely and it is not an error we can or should act on. */
+    const resume = () => { if (!video.paused) audio.play().catch(() => {}); };
+
+    video.addEventListener('play', () => { align(); resume(); });
+    video.addEventListener('pause', () => audio.pause());
+    video.addEventListener('seeking', align);
+    video.addEventListener('ratechange', () => { audio.playbackRate = video.playbackRate; });
+    video.addEventListener('volumechange', () => {
+      audio.volume = video.volume;
+      audio.muted = video.muted;
+    });
+    /* The video buffering is the one case where the audio must wait: it is a fraction of
+       the video's size, so it is almost always the one that is ahead. */
+    video.addEventListener('waiting', () => audio.pause());
+    video.addEventListener('playing', () => { align(); resume(); });
+    video.addEventListener('ended', () => audio.pause());
+    /* The standing correction. timeupdate fires ~4x/second, which is often enough to catch
+       a stall-induced jump and rare enough to cost nothing. */
+    video.addEventListener('timeupdate', () => { if (drifted()) align(); });
+
+    audio.volume = video.volume;
+    audio.muted = video.muted;
+    return { align, drifted };
+  }
+
   /** Drop the memo. Called on teardown so a re-render does not serve a stale resolution. */
   function reset() { inflight.clear(); }
 
-  return { resolve, assetBase, pickRendition, reset };
+  return { resolve, assetBase, pickRendition, pair, reset };
 })();

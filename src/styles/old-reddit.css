@@ -455,14 +455,35 @@ html.shd-active body {
   height: auto;
   background: #000;      /* letterbox bars, before and around the frame */
 }
-/* Why there is no sound. Small and quiet — it explains a limitation of Reddit's packaging,
-   so it should not read as an error of ours, but it has to be legible or a reader concludes
-   the extension broke their audio. */
+/* The audio half of a CMAF post. An <audio> with no controls draws nothing anyway; this
+   says so out loud, so a future stylesheet cannot accidentally give it a box. */
+.shd-selfpost .shd-video-audio { display: none; }
+/* The sound row: our own mute and volume, plus the one line of explanation. Ours because a
+   video element carrying no audio track of its own may not be given a volume control by the
+   browser — see comments.js attachAudio. Also the place the "no audio track at all" note
+   lands, which is why the children are laid out rather than the text alone. */
 .shd-selfpost .shd-video-note {
   font-size: x-small;
   color: var(--shd-meta);
   margin: 2px 0 0;
+  display: flex;
+  align-items: center;
+  /* The row is a button, a slider and a sentence; below ~300px the sentence must be allowed
+     to drop rather than squeeze the slider to nothing. */
+  flex-wrap: wrap;
+  gap: 6px;
 }
+.shd-selfpost .shd-video-mute {
+  font: inherit;
+  color: var(--shd-meta);
+  background: none;
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+  padding: 0 4px;
+  cursor: pointer;
+}
+/* Narrow on purpose: this sits under a 640px player, not a media app. */
+.shd-selfpost .shd-video-vol { width: 70px; }
 .shd-selfpost { border-bottom: 1px solid var(--shd-border); padding-bottom: 8px; margin-bottom: 10px; }
 .commentarea { margin-right: var(--shd-gutter); }
 
