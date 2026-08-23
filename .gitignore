@@ -1,0 +1,5 @@
+node_modules/
+dist/*
+!dist/sheddit.zip
+test/out.*.html
+.DS_Store

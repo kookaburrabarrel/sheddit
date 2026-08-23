@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Sheddit</title>
+<style>
+  body { font: 13px Verdana, Arial, sans-serif; padding: 14px; width: 320px; }
+  h1 { font-size: 15px; margin: 0 0 10px; }
+  label { display: block; margin: 7px 0; }
+  select { font: 12px Verdana, Arial, sans-serif; margin-left: 6px; }
+  .note { color: #888; font-size: 11px; margin-top: 12px; line-height: 1.5; }
+</style>
+<h1>Sheddit</h1>
+
+<label>Theme
+  <select data-k="theme">
+    <option value="classic">classic — old reddit as it was</option>
+    <option value="slate">slate — softened greys</option>
+    <option value="sepia">sepia — warm paper, serif</option>
+    <option value="night">night — dark, low contrast</option>
+    <option value="carbon">carbon — near-black, monospaced</option>
+  </select>
+</label>
+
+<label><input type="checkbox" data-k="listing"> Restyle listings</label>
+<label><input type="checkbox" data-k="comments"> Restyle comments</label>
+<label><input type="checkbox" data-k="profiles"> Restyle user profiles</label>
+<label><input type="checkbox" data-k="chrome"> Header &amp; sidebar</label>
+<label><input type="checkbox" data-k="compactRows"> Compact rows</label>
+<label><input type="checkbox" data-k="showThumbnails"> Thumbnails</label>
+<label><input type="checkbox" data-k="showNsfwThumbnails"> Show adult-content thumbnails</label>
+<label><input type="checkbox" data-k="autoPaginate"> Auto-load more on scroll</label>
+<label><input type="checkbox" data-k="inlineVideo"> Play video on the comments page</label>
+
+<p class="note">
+  Playing video is the one feature that makes a network request: opening a video post's
+  comments page fetches that video’s manifest from Reddit’s media CDN, so Sheddit knows
+  which file to play. Nothing else in the extension makes a request of any kind. Turn this
+  off and video posts go back to being a link and a thumbnail.
+</p>
+
+<p class="note">
+  The theme can also be switched from the buttons at the right of Sheddit's own header,
+  which is quicker — this dropdown is here for when “Header &amp; sidebar” is off and there
+  is no header to switch from.
+</p>
+
+<p class="note">
+  With auto-load off, the feed shows only what Reddit sent with the page and a
+  “load more” button appears instead. Nothing is fetched until you click it.
+</p>
+
+<script src="options.js"></script>

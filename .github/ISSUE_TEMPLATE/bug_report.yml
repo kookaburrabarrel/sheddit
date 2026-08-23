@@ -1,0 +1,86 @@
+name: "Bug report"
+description: "Something renders wrong, behaves wrong, or doesn't work — but Sheddit isn't showing a failure screen."
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If you got Sheddit's **failure screen**, use the *"Reddit changed and Sheddit broke"*
+        template instead — it asks for the diagnostics that make it a one-pass fix.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: "What you saw, and what you expected instead. A screenshot is worth a lot here."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open /r/…
+        2. Scroll to the bottom
+        3. …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Sheddit version
+      description: >
+        From `chrome://extensions`. **Please reload the extension (↻ on its card) and confirm
+        it still happens** — Chrome keeps running the code it read at load time.
+      placeholder: "0.10.2"
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: "Chrome 131, macOS 15"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: session
+    attributes:
+      label: Were you logged in?
+      options:
+        - "Logged out"
+        - "Logged in"
+      default: 0
+    validations:
+      required: true
+
+  - type: input
+    id: theme
+    attributes:
+      label: Which theme?
+      description: "Layout bugs are asserted across all five themes at two widths, so this narrows it fast."
+      placeholder: "classic"
+    validations:
+      required: false
+
+  - type: input
+    id: width
+    attributes:
+      label: Window width
+      description: "Only if it looks like a layout or wrapping problem."
+      placeholder: "1280px"
+    validations:
+      required: false
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: "Anything from the DevTools console, especially lines starting `[shd]`."
+      render: text
+    validations:
+      required: false

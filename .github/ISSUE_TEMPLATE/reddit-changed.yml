@@ -1,0 +1,84 @@
+name: "Reddit changed and Sheddit broke"
+description: "Sheddit shows a failure screen, or renders nothing, on a page that used to work."
+title: "[redesign] "
+labels: ["reddit-drift"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the failure mode Sheddit is designed for, and the failure screen is built to
+        make it a one-pass diagnosis. **The fix is almost always in `src/config/contracts.js`
+        and nowhere else.**
+
+        The single most valuable thing you can attach is the diagnostics block from the
+        failure screen — it already contains everything below.
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: The failure screen's diagnostics
+      description: >
+        Copy the whole diagnostics block, or attach a screenshot of the failure screen.
+        It prints the reason, the version, and the source/stamped/rendered/rejected counts.
+      placeholder: |
+        reason: render-failed
+        version: 0.10.2
+        sources: 26  stamped: 26  rendered: 0  errors: 0
+        rejected: post-title (26)
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Sheddit version
+      description: >
+        From `chrome://extensions`, or the failure screen. **Please confirm you reloaded the
+        extension (the ↻ on its card) after updating** — a pushed commit is not a loaded
+        extension until the card is reloaded.
+      placeholder: "0.10.2"
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: URL shape
+      description: "The kind of page, not necessarily the exact link — `/r/<sub>/comments/<id>/…`, `/user/<name>/`, the front page."
+      placeholder: "/r/programming/comments/abc123/some_title/"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: session
+    attributes:
+      label: Were you logged in?
+      description: "Sheddit is built and tested for logged-out reading, so this changes what's expected."
+      options:
+        - "Logged out"
+        - "Logged in"
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: verify
+    attributes:
+      label: "Output of `npm run verify:live` (if you can run it)"
+      description: >
+        This is the single most useful thing in the whole report. CI cannot run it —
+        datacenter IPs get a bot-mitigation shim instead of the real page — so it can only
+        come from an ordinary machine. It re-checks every contract against live Reddit and
+        names exactly which one drifted.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: "Browser and version, other extensions that might interact, when it started."
+    validations:
+      required: false
