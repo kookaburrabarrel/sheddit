@@ -48,6 +48,29 @@ SHD.paginator = (() => {
   let busySince = 0;
   const MAX_PAGES = 40;         // hard stop; prevents runaway memory on idle tabs
   const TRIGGER_PX = 1200;      // distance from bottom that starts the next fetch
+  /* What the chain may do BEFORE the reader has touched the page.
+
+     Reported twice, independently: opening a comments page locked the tab for 30+ seconds
+     before recovering, and a [-] collapse on a thread did the same. Neither is a render
+     bug — the collapse handler is three operations and cannot reach the render queue — and
+     both are this chain running at rest. attach() re-arms after EVERY flush, so each
+     intermediate render re-pumps; TRIGGER_PX is 1200, so "in range" stays true until
+     roughly two viewports of content sit below the fold; and a load whose content arrives
+     after settle() closes is not credited (see unproductive), so MAX_PAGES does not bound
+     the churn. Together that is a burst of loads nobody asked for, with the main thread
+     saturated while it runs. A collapse restarts it by shrinking the document; a history
+     traversal does the same, because onRoute() rebuilds into a briefly-empty page.
+
+     The fill itself is not the mistake. A listing ships THREE posts and is unusable
+     without it, and it cannot be gated on scrolling because three rows do not make a
+     scrollable page — there is no gesture to wait for. What was missing is a stopping
+     point: fill enough to read and to scroll, then let the reader ask for the rest.
+     FILL_VIEWPORTS is that point, and UNPROMPTED_MAX bounds it by attempts as well as by
+     height, because a run of loads that deliver nothing never grows the page and would
+     otherwise spin against the height test for ever. Past either limit the sentinel simply
+     reads `load more` and waits, which is a clickable, honest floor rather than a freeze. */
+  const FILL_VIEWPORTS = 2;     // stop the unprompted fill once the page is this tall
+  const UNPROMPTED_MAX = 4;     // ...and never spend more attempts than this getting there
   const FIRST_MUTATION_MS = 2000;  // give up waiting if the feed never changes at all
   const SETTLE_IDLE_MS = 400;      // ...and once it has, wait for it to go quiet
   const SETTLE_CEILING_MS = 6000;  // absolute cap on one page load
@@ -61,6 +84,8 @@ SHD.paginator = (() => {
   let ioTicks = 0;          // how many times it has said anything about the CURRENT sentinel
   let serial = 0;           // which sentinel we are on; published so a stale read is detectable
   let pumpTimer = null;
+  let interacted = false;   // the reader has scrolled, or asked for more, on THIS page
+  let unprompted = 0;       // auto attempts spent before that happened
 
   /* Which partial we drive depends on the page. Both are faceplate-partial with the same
      loadContent(); only their container differs. The feed variant was hardcoded, so
@@ -386,10 +411,15 @@ SHD.paginator = (() => {
       SHD.dom.h('a.shd-loadmore', {
         // Whatever the current load is saying, not the idle label — see setStatus().
         href: '#', text: status || 'load more',
-        onclick: (e) => { e.preventDefault(); loadNext('manual'); }
+        // Asking for more IS reader intent: releases the unprompted-fill limits so the
+        // chain behaves normally from here, exactly as a scroll would.
+        onclick: (e) => { e.preventDefault(); interacted = true; loadNext('manual'); }
       })
     );
     container.after(sentinel);
+    // The list just changed shape and the sentinel is a brand new node; anything measured
+    // against the old one describes a page that no longer exists.
+    forget();
 
     if (!SHD.settings.autoPaginate) return;
     io = new IntersectionObserver(entries => {
@@ -447,11 +477,29 @@ SHD.paginator = (() => {
        Bug 40's complaint exactly: nothing on screen said anything had stopped. */
     if (pages >= MAX_PAGES) { setStatus(`stopped after ${MAX_PAGES} pages`); return; }
     if (!inRange() || busy) return;
+    /* The unprompted-fill limits. AFTER the geometry and busy checks, so a page that is
+       already tall never spends a slot; BEFORE the timer is armed, so waiting out a
+       cooldown cannot smuggle one past. Neither limit touches a manual click: loadNext
+       ('manual') is called straight from the sentinel's own handler and never comes
+       through here, which is what keeps a deliberate press immediate. */
+    if (!interacted) {
+      const enough = filled();
+      if (enough || unprompted >= UNPROMPTED_MAX) {
+        lastRefusal = enough ? 'filled' : 'unprompted-limit';
+        diag();
+        return;
+      }
+    }
     const wait = Math.max(0, COOLDOWN_MS - (Date.now() - lastAt));
     pumpTimer = setTimeout(async () => {
       pumpTimer = null;
       diag();
       if (!inRange()) return;
+      /* Counted per ATTEMPT, not per successful page. pages++ only credits a load that
+         delivered (so that the 40-page memory guard measures content), which means a run
+         of loads arriving after settle() closes would never advance it — exactly the churn
+         this limit exists to bound. */
+      if (!interacted) unprompted++;
       if (await loadNext(reason)) pump('follow-up');
       else diag();   // record WHY we stopped, for the reader of the next stall report
     }, wait);
@@ -479,14 +527,61 @@ SHD.paginator = (() => {
    * one door over: never make the continuation of a chain depend on an event that may
    * not fire.
    */
-  function inRange() {
-    if (!sentinel || !sentinel.isConnected) return false;
+  /* ONE layout read per frame, shared by every caller that needs geometry.
+
+     getBoundingClientRect() and scrollHeight both force synchronous layout. inRange() ran
+     one, diag() ran inRange() plus a second rect read of its own, and both are called from
+     every pump and every heartbeat tick — interleaved with renders that invalidate layout
+     again. That is layout thrashing, and it is why a burst of loads presented as a frozen
+     tab with torn, tiled repaints rather than as something merely slow: the work was not
+     the loading, it was measuring between every step of it.
+
+     A frame's worth of staleness cannot change an answer here. The cooldown that pump()
+     waits out before re-measuring is 800ms, two orders of magnitude longer, and attach()
+     drops the cache outright whenever the list has actually grown. */
+  const MEASURE_TTL_MS = 16;
+  let measured = null;
+  let measuredAt = 0;
+
+  function forget() { measured = null; }
+
+  function measure() {
+    if (!sentinel || !sentinel.isConnected) return null;
+    const now = Date.now();
+    if (measured && now - measuredAt < MEASURE_TTL_MS) return measured;
     const r = sentinel.getBoundingClientRect();
+    const doc = document.documentElement;
+    measured = {
+      top: r.top,
+      bottom: r.bottom,
+      empty: !r.top && !r.bottom && !r.height,
+      viewport: innerHeight || doc.clientHeight || 0,
+      pageHeight: doc.scrollHeight || 0
+    };
+    measuredAt = now;
+    return measured;
+  }
+
+  function inRange() {
+    const m = measure();
+    if (!m) return false;
     // A node inserted this tick may not have been laid out yet, and an empty rect means
     // "not measured", not "far away". Treating unknown as far away is the stall above.
-    if (!r.top && !r.bottom && !r.height) return true;
-    const h = innerHeight || document.documentElement.clientHeight || 0;
-    return r.top <= h + TRIGGER_PX && r.bottom >= -TRIGGER_PX;
+    if (m.empty) return true;
+    return m.top <= m.viewport + TRIGGER_PX && m.bottom >= -TRIGGER_PX;
+  }
+
+  /**
+   * Is there enough on the page for the reader to start reading and scrolling?
+   *
+   * The stopping point for the unprompted fill — see FILL_VIEWPORTS. Height rather than a
+   * row count, because rows are wildly uneven: three link posts and three image-heavy
+   * nested comment trees are the same count and nothing like the same page.
+   */
+  function filled() {
+    const m = measure();
+    if (!m || !m.viewport) return false;
+    return m.pageHeight >= m.viewport * FILL_VIEWPORTS;
   }
 
   /* The label SURVIVES a re-attach, which is why it is module state rather than just DOM.
@@ -531,10 +626,18 @@ SHD.paginator = (() => {
     // the live stall was the two disagreeing: shdVisible false with the sentinel on screen.
     // Only shdInRange gates anything now; shdVisible is kept purely so that disagreement
     // stays visible in the next stall report instead of having to be inferred again.
+    // One measurement, read three ways. This used to run inRange()'s rect read and then a
+    // second of its own, on every pump and every tick — see measure().
+    const m = measure();
     d.shdVisible = String(visible);
     d.shdInRange = String(inRange());
-    d.shdTop = sentinel.isConnected
-      ? String(Math.round(sentinel.getBoundingClientRect().top)) : 'detached';
+    d.shdTop = m ? String(Math.round(m.top)) : 'detached';
+    /* Why the chain is idle on a page that has more to give. Without these, the
+       unprompted-fill limits look identical to a stall: sentinel reading `load more`,
+       nothing loading, no refusal that explains it. */
+    d.shdInteracted = String(interacted);
+    d.shdUnprompted = String(unprompted);
+    d.shdFilled = String(filled());
     // How many times the observer has reported on THIS sentinel, and which sentinel it is.
     // Together these separate "the observer went silent" from "the element being read is
     // not the one we are writing to" — two causes that produce identically frozen output.
@@ -567,6 +670,10 @@ SHD.paginator = (() => {
      flush, so a per-sentinel listener would leak or vanish. */
   let lastScrollPump = 0;
   addEventListener('scroll', () => {
+    /* Reader intent, recorded before every early return below. This is the signal that
+       releases the unprompted-fill limits, so it must not depend on a sentinel existing
+       yet, nor be swallowed by the pump throttle. */
+    interacted = true;
     if (!sentinel) return;
     const now = Date.now();
     if (now - lastScrollPump < 250) return;
@@ -587,6 +694,10 @@ SHD.paginator = (() => {
   function reset() {
     detach(); pages = 0; busy = false; lastAt = 0; unproductive = 0; exhausted = 0;
     lastAfter = null;
+    /* A new route is a new page to fill, and the reader has not touched THIS one — the
+       whole point of the limits is that they apply per page. Leaving these set would let
+       one scroll on a listing licence an unbounded burst on every thread opened after it. */
+    interacted = false; unprompted = 0; forget();
     // A new route's sentinel starts idle. Carrying the old page's label across is the same
     // lie the flicker was, one navigation later.
     status = null;

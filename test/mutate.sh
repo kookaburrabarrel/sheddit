@@ -1224,6 +1224,36 @@ mutate "long titles are clipped instead of growing the row" geometry \
   overflow: hidden;
   position: relative;"
 
+# Two independent reports: opening a comments page locked the tab for 30+ seconds, and a
+# [-] collapse did the same. Both are the chain filling an untouched page until it hits a
+# cap. The fill is bounded twice and the halves get SEPARATE rows, because they cover
+# different situations — a page that is already tall, and a run of loads that never makes
+# one — so either alone would leave the other looking covered.
+#
+# The height half. Only geometry can see it: jsdom does no layout and reports scrollHeight
+# 0, so under `run` this mutation changes nothing and would read as a hole that isn't one.
+mutate "the unprompted fill stops noticing the page is already worth scrolling" geometry \
+  src/core/paginator.js "    return m.pageHeight >= m.viewport * FILL_VIEWPORTS;" \
+                        "    return false;"
+
+# The attempt half — the backstop for loads that deliver nothing, which never grow the page
+# and so would spin against the height test for ever.
+mutate "the unprompted fill loses its attempt limit" run \
+  src/core/paginator.js "      if (enough || unprompted >= UNPROMPTED_MAX) {" \
+                        "      if (enough) {"
+
+# And the release. Everything above is only acceptable because scrolling turns the chain
+# back on; without it the limits stop being a pause and become a dead end.
+mutate "scrolling stops counting as a reason to keep loading" run \
+  src/core/paginator.js "    interacted = true;
+    if (!sentinel) return;" "    if (!sentinel) return;"
+
+# NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
+# measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
+# layouts per pump, and it is a COST change with no behavioural consequence — reverting it
+# leaves every assertion in every suite green, correctly. A row for it would survive and
+# read as a hole. What would make it testable is a layout-count probe the suites do not have.
+
 # The accounting. DECLARED is read from this file itself rather than maintained by hand —
 # a count that has to be kept in step with the rows is the same trap as the hand-maintained
 # token list in bug 43, and it would have been wrong the first time a row was added.

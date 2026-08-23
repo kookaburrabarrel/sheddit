@@ -19,7 +19,7 @@ For a new feature, say what it looks like on screen instead.
 
 ## Testing
 
-<!-- Paste the summary line from `npm test`, e.g. "766 passed, 0 failed". -->
+<!-- Paste the summary line from `npm test`, e.g. "792 passed, 0 failed". -->
 
 - [ ] `npm test` passes
 - [ ] Browser suites actually ran (they **skip silently** with no Chromium — say so if they skipped)

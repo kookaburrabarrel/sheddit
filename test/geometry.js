@@ -40,9 +40,11 @@ const { check, report } = makeChecker();
 const r1 = (n) => Math.round(n * 10) / 10;
 
 /** Load a fixture over a real URL, run the bundle on it, wait for our layout to exist. */
-async function open(browser, origin, urlPath, waitFor) {
+async function open(browser, origin, urlPath, waitFor, viewport) {
   const page = await browser.newPage();
-  await page.setViewport({ width: 1280, height: 900 });
+  // Settable before the bundle runs, because the paginator measures the page against the
+  // viewport the moment it attaches — resizing afterwards would be measuring the wrong one.
+  await page.setViewport(viewport || { width: 1280, height: 900 });
   // Fixture image URLs point at real Reddit hosts. Nothing here should touch the network:
   // block subresources so the run is offline and deterministic.
   await page.setRequestInterception(true);
@@ -710,6 +712,68 @@ const overlaps = (a, b) =>
 
     check('no page errors during theme switching', pageErrors.length === 0, pageErrors.join(' | '));
     await page.close();
+  }
+
+  /* ================================================================== *
+   * THE UNPROMPTED FILL
+   * ================================================================== */
+  console.log('\n\x1b[1mLAYOUT GEOMETRY — THE UNPROMPTED FILL\x1b[0m');
+  {
+    /* A page nobody has touched fills until it is worth scrolling, and then waits. Two
+       independent reports of the same failure: opening a comments page locked the tab for
+       30+ seconds, and a [-] collapse did the same, both of them this chain running at
+       rest until it hit a cap.
+
+       The stopping point is FILL_VIEWPORTS, measured against real document height, and
+       this is the ONLY suite that can see it — jsdom does no layout and reports
+       scrollHeight 0, so run.js can exercise the attempt bound and nothing else.
+
+       The fixture is held constant and the VIEWPORT is varied, which isolates the
+       measurement: identical content and identical rows, differing only in whether the
+       document clears two screens. */
+    const settle = async (p) => { await p.evaluate(() => new Promise(r => setTimeout(r, 2600))); };
+    const rows = (p) => p.$$eval('#shd-root .thing.link', n => n.length);
+
+    // Short viewport: the delivered posts already clear two screens, so there is nothing
+    // worth filling and the chain must not spend a load.
+    const tallEnough = await open(browser, origin, PATHS.pager, '#shd-root .thing.link',
+      { width: 1280, height: 200 });
+    const startShort = await rows(tallEnough.page);
+    // Control: the premise. If the fixture did NOT clear two screens this proves nothing,
+    // because parking would be the wrong behaviour rather than the right one.
+    const geom = await tallEnough.page.evaluate(() => ({
+      pageHeight: document.documentElement.scrollHeight, viewport: innerHeight
+    }));
+    check('control: the page really is taller than two screens at this viewport',
+      geom.pageHeight >= geom.viewport * 2, JSON.stringify(geom));
+    await settle(tallEnough.page);
+    check('a page already worth scrolling does not auto-load anything',
+      await rows(tallEnough.page) === startShort,
+      `${startShort} -> ${await rows(tallEnough.page)} rows with no interaction`);
+    check('...and says why on the sentinel',
+      await tallEnough.page.$eval('.shd-sentinel', n => n.dataset.shdFilled) === 'true');
+    // The release, measured in a real engine: scrolling is what turns the fill back on.
+    await tallEnough.page.evaluate(() => { scrollTo(0, 1); dispatchEvent(new Event('scroll')); });
+    await settle(tallEnough.page);
+    check('...until the reader scrolls, and then it loads',
+      await rows(tallEnough.page) > startShort,
+      `${startShort} -> ${await rows(tallEnough.page)} rows after a scroll`);
+    check('no page errors during the fill', tallEnough.pageErrors.length === 0,
+      tallEnough.pageErrors.join(' | '));
+    await tallEnough.page.close();
+
+    /* The counterweight, and the reason this cannot simply be "never load until scrolled":
+       a listing ships three posts and is unusable without a fill, and three rows do not
+       make a scrollable page — there is no gesture to wait for. Same fixture, a viewport
+       tall enough that the content does NOT clear two screens. */
+    const tooShort = await open(browser, origin, PATHS.pager, '#shd-root .thing.link',
+      { width: 1280, height: 2000 });
+    const startTall = await rows(tooShort.page);
+    await settle(tooShort.page);
+    check('a page that does not fill the window loads without being asked',
+      await rows(tooShort.page) > startTall,
+      `${startTall} -> ${await rows(tooShort.page)} rows, untouched`);
+    await tooShort.page.close();
   }
 
   await browser.close();
