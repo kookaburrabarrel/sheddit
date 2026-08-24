@@ -8,14 +8,30 @@
 
 ### Shed the casino. Keep the conversation.
 
+**Read Reddit without being read back.**
+
+The modern feed is a harvesting rig with sentiment manipulation built on top: it measures
+what you pause on and what provokes you, compiles that into the profile advertisers buy,
+then tunes what you see next to work on you. Sheddit is the opt-out — **logged out,
+unprofiled, un-nudged**: no account to pin a profile to, zero API calls, zero telemetry,
+and a front page ranked by votes rather than by what an engagement model predicts will
+keep you scrolling, or seething. If the harvesting and the manipulation are why you left —
+or why you never log in — this is the safe way to keep reading.
+
+[![account: none](https://img.shields.io/badge/account-none-success?style=flat-square)](#why)
+[![profile: starved](https://img.shields.io/badge/profile-starved-success?style=flat-square)](#why)
 [![API calls: zero](https://img.shields.io/badge/API_calls-zero-success?style=flat-square)](#privacy)
+[![tracking: none](https://img.shields.io/badge/tracking-none-success?style=flat-square)](#privacy)
+[![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
+[![feed: ranked by votes, not you](https://img.shields.io/badge/feed-ranked_by_votes,_not_you-success?style=flat-square)](#why)
+
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
 <br>
 
-**Five ways to read it, all of them content to let you leave.**
+**Five ways to read it, all of them content to let you leave — and none of them watching you read.**
 
 <img src="docs/assets/themes.gif" alt="Sheddit cycling through its five themes: classic, slate, sepia, night and carbon" width="900">
 
@@ -25,21 +41,35 @@
 
 ## Why
 
-Most complaints about new Reddit land on wasted space and low information density. But the
-redesign isn't a worse layout that happened to ship — it is a layout built to a different
-purpose: a slot machine's psychology applied to a link aggregator. It works very well for
-the Reddit C-suite worried about stock prices, but not so much for users.
+Reddit is what Facebook is: **a data-harvesting operation with sentiment manipulation
+built on top.** The feed is not "curated" for you — it is engineered to work on you.
+Every pause, expansion, return visit and comment is harvested into a profile; the profile
+is what advertisers buy; and the feed is tuned against that profile to provoke the
+reactions that fatten it — outrage, habit, one more scroll. A session that ends is a
+session that stops producing.
 
-Old Reddit was dense, fast, and got out of your way — a page of ranked links you could
-scan and pick from. What replaced it is built for scrolling, because a session that ends
-is a session that stops earning.
+The harvest needs you logged in. Identity is what ties every scroll and hesitation to one
+durable profile that follows you across devices and years; logged out, the data scatters
+and the profile starves. That is why logged-out reading is being squeezed on purpose: a
+login wall that raises itself half a minute into reading, with no close button and no way
+to dismiss it; `old.reddit.com` vanishing behind account requirements for days at a
+stretch, with no announcement; the anonymous JSON API gated off entirely. None of that is
+about features. It is about making the untracked reader extinct.
 
-Sheddit doesn't tune that. It sheds it. A row whose title fits on one line is **72 pixels
-tall in every theme** — the geometry suite pins that, and the floor under it — so a
-1280×800 window holds roughly nine posts, with their scores, subreddits and comment counts
-all visible at once. Titles too long for the row grow it by a line rather than being cut
-short, so a subreddit that titles in paragraphs (`/r/todayilearned`) is looser than one
-that doesn't. Open `reddit.com` beside it and compare.
+**Sheddit is the opt-out.** It takes the page Reddit already sent your browser and
+re-renders it locally into old reddit's layout — no account, no credentials, and zero API
+calls of its own. What you read is the list Reddit serves to a stranger: ranked by votes,
+not by your profile, because there is no profile. The login wall is removed outright
+rather than negotiated with. Nothing is recommended *to you*, nothing is harvested *from
+you*, and the session ends when you decide it does.
+
+The layout is the visible half of the same decision. Old Reddit was dense, fast, and got
+out of your way — a page of ranked links you could scan and pick from; what replaced it
+is built for scrolling, a slot machine's psychology applied to a link aggregator. Sheddit
+sheds that too: a row whose title fits on one line is **72 pixels tall in every theme** —
+the geometry suite pins that, and the floor under it — so a 1280×800 window holds roughly
+nine posts with their scores, subreddits and comment counts all visible at once. Open
+`reddit.com` beside it and compare.
 
 What's left is a ranked list of links that stops when you do. Everything below is about
 keeping it working on a site that has no reason to help.
@@ -58,8 +88,8 @@ pattern, no announcement, logged-out access just stops for a stretch and comes b
 later. This project's own measurements already caught the milder version of the same
 thing: a long unreachable spell that lifted with no notice. A redirect extension inherits
 whatever `old.reddit.com` decides on a given day, and the direction of travel is an
-account requirement for any access at all — a logged-out reader is a reader Reddit cannot
-measure or sell.
+account requirement for any access at all — the pressure described [above](#why), applied
+to the one refuge a redirect depends on.
 
 Rebuilding from Reddit's JSON API gets you real old-Reddit markup, but it rides your
 logged-in session — the [Classic Layout][cl] project documents needing an authenticated
@@ -253,6 +283,14 @@ against. What follows from that, stated plainly:
 are classified as unhandled and left alone.
 
 ## Privacy
+
+For most extensions this section is fine print. Here it is the point: an extension built
+so you can read without being profiled had better not profile you itself, and had better
+be checkable on that claim rather than taken at its word. Everything below is verifiable
+from the source in this repository — and the one feature that fetches anything (the video
+player, below) is tested by **counting its requests**: one per video post opened, none
+anywhere else, none at all with the setting off. A change that quietly started fetching
+more would fail the build, not just the code review.
 
 Sheddit makes **no API calls** — not to Reddit's API, not to anyone else's. There is no
 analytics, telemetry, or remote configuration, and nothing about you is sent anywhere.
