@@ -12,6 +12,20 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased — 0.20.0
+
+### Changed — the store summary says "no tracking"
+
+The manifest description — which the Chrome Web Store displays as the listing's summary,
+read out of the uploaded zip — now reads: *"Renders modern Reddit in the classic
+old.reddit.com layout, locally in your browser. No API, no login, no tracking."* The
+previous line spent its characters on mechanics; this one closes on the question a reader
+of an extension that rewrites a site they browse actually wants answered. The store
+listing copy and the README landing were rewritten to match: both now lead with reading
+logged out and unprofiled, with the layout as the visible half of that decision rather
+than the headline. No code changed; the version moves because the manifest did, and two
+builds must never share a version number.
+
 ## Unreleased — 0.19.0
 
 ### Added — image posts show their image
