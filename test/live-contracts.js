@@ -753,6 +753,54 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
    * all — a user with no comments looks identical to a completely wrong tag name, the
    * same trap the adult-flag section documents.
    */
+  /* ---------------- the comment-sort values ---------------- */
+  /**
+   * C.COMMENT_SORTS is the one contract shipped with an "UNVERIFIED LIVE" stamp on the
+   * values themselves: they are the classic API's names, chosen where live confirmation
+   * was impossible, and the comments-page sort menu builds `?sort=` links from them. The
+   * failure is soft (an unrecognised value falls back to the default order), which is
+   * exactly why no error will ever announce it — a menu built on wrong names looks
+   * perfect and simply never changes the order.
+   *
+   * The discriminator needs no knowledge of what "best" means: `new` and `old` are
+   * REVERSES of each other over top-level comments, so if Reddit accepts the values, the
+   * two orders must differ — and if it ignores them, both equal the default and come back
+   * identical. Comparing either against the default alone cannot tell "accepted" from
+   * "coincides with the default", which on a `best`-defaulting thread `top` often does.
+   */
+  console.log('\n\x1b[1mLIVE CONTRACTS — COMMENT SORT VALUES\x1b[0m');
+  {
+    const idsHere = async () => page.evaluate((C) =>
+      [...document.querySelectorAll(C.COMMENT)]
+        .filter(c => !c.parentElement.closest(C.COMMENT))     // top-level only
+        .map(c => c.getAttribute(C.COMMENT_ATTR.id))
+        .filter(Boolean).slice(0, 8), C);
+    const base = 'https://www.reddit.com' + permalink;
+    const sortedIds = async (sort) => {
+      await page.goto(`${base}?sort=${sort}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.waitForSelector(C.COMMENT, { timeout: 30000 }).catch(() => null);
+      return idsHere();
+    };
+    const asNew = await sortedIds('new');
+    const asOld = await sortedIds('old');
+    console.log(`  \x1b[2m?sort=new: ${asNew.length} top-level ids; ` +
+                `?sort=old: ${asOld.length}\x1b[0m`);
+    if (asNew.length < 3 || asOld.length < 3) {
+      console.log('  \x1b[33mINCONCLUSIVE: too few top-level comments to compare orders — ' +
+        'rerun against a busier thread before concluding anything about C.COMMENT_SORTS.\x1b[0m');
+    } else {
+      check('?sort=new and ?sort=old produce different orders (the values are accepted)',
+        asNew.join() !== asOld.join(),
+        'identical order under opposite sorts — Reddit is ignoring these values, and the ' +
+        'sort menu quietly does nothing. C.COMMENT_SORTS is the suspect: capture the hrefs ' +
+        "of Reddit's own sort control on this page and update the list from those");
+      check('...and the same comments are present either way (a reorder, not a refetch miss)',
+        [...asNew].sort().join() === [...asOld].sort().join(),
+        'different comment SETS under the two sorts — the comparison is measuring ' +
+        'delivery differences, not order; treat the row above as unsettled');
+    }
+  }
+
   console.log('\n\x1b[1mLIVE CONTRACTS — USER PROFILES\x1b[0m');
   const PROFILE_USER = (process.argv.find(a => a.startsWith('--user=')) || '').split('=')[1]
     || postAuthorForProfile;
