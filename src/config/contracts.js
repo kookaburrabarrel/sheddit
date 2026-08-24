@@ -422,6 +422,15 @@ SHD.settings = {
      also carries the post's SOUND, which on a CMAF asset is a second file played alongside
      the picture — still one request of ours, the manifest, which names both. */
   inlineVideo: true,
+  /* Show the post's own picture: open on its comments page, and behind old reddit's
+     expando on a listing row. Costs no request of ours — the URL is already in the page
+     and the browser fetches the file the same way it fetches a thumbnail, on the row only
+     once the reader opens it.
+     Adult posts are NOT covered by this: they answer to showNsfwThumbnails above, exactly
+     as the thumbnail does, because rendering our own <img> is what walks past the blur
+     Reddit applies for logged-out readers and a full-size copy is that same bypass. Both
+     settings must say yes. */
+  inlineImages: true,
   /* Which palette to paint in. The ids live in src/config/themes.js, which also owns the
      fallback: anything not on that list resolves to 'classic'. This is the one setting
      that is not a boolean, and the only one a page can change by itself — the header's

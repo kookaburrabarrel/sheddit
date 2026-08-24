@@ -44,12 +44,33 @@ const POSTS = [
     imgs: ['external-preview.redd.it/nasa-thumb.jpg']
   },
   {
+    /* An image post as one was REPORTED live: the comments page showed a title and a 70px
+       thumbnail and nothing else, and clicking the thumbnail left the layout for Reddit's
+       own /media viewer. So content-href here is that viewer URL rather than a direct
+       image link — which is the shape that makes the substitution in model.post necessary,
+       and the shape the old fixture could not express, because it assumed content-href was
+       already the picture.
+
+       The responsive set lists the LARGEST IN THE MIDDLE, deliberately. A resolver that
+       takes the first entry, or the last, picks wrong and the fixture says so; only one
+       that reads the `w` descriptors gets 1080. Same trap the video renditions carry.
+
+       Still a GUESS in one respect, and the reason verify:live gained an IMAGE POSTS
+       section: the viewer URL is inferred from what clicking did, not from a capture, and
+       nobody has recorded where a live comments page keeps the full-size file. A wrong
+       guess costs the picture and nothing else — every path falls back to what shipped
+       before. */
     id: 't3_image1', type: 'image', title: 'A very good dog',
     permalink: '/r/aww/comments/image1/a_very_good_dog/',
-    contentHref: 'https://i.redd.it/gooddog.jpg',
+    contentHref: 'https://www.reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fgooddog.jpg',
     score: '43110', comments: '902', domain: 'i.redd.it',
     author: 'dogperson', sub: 'aww',
-    imgs: ['i.redd.it/gooddog.jpg']
+    imgs: [{
+      src: 'i.redd.it/gooddog.jpg',
+      srcset: 'https://preview.redd.it/gooddog-320.jpg 320w, ' +
+              'https://preview.redd.it/gooddog-1080.jpg 1080w, ' +
+              'https://preview.redd.it/gooddog-640.jpg 640w'
+    }]
   },
   {
     id: 't3_video1', type: 'video', title: 'Timelapse of a thunderstorm',
@@ -324,7 +345,12 @@ const SR_OUTLET = `
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
 function postHtml(p) {
-  const imgs = p.imgs.map(u => `<img src="https://${u}" alt="">`).join('');
+  /* A plain string is a bare <img>; an object carries a responsive set, which is where a
+     full-size version lives when Reddit offers one. Both shapes are real and the model has
+     to read either. */
+  const imgs = p.imgs.map(u => typeof u === 'string'
+    ? `<img src="https://${u}" alt="">`
+    : `<img src="https://${u.src}" srcset="${esc(u.srcset)}" alt="">`).join('');
   const avatar = p.avatarImg
     ? `<a href="/user/${p.author}"><img src="https://${p.avatarImg}" alt=""></a>` : '';
   const flair = `<shreddit-post-flair><img src="https://emoji.redditmedia.com/flair_${p.id}.png" alt=""></shreddit-post-flair>`;
@@ -767,6 +793,8 @@ function commentsPage(opts = {}) {
   const post = opts.selfPost ? SELF_POST
     : opts.cmafPost ? CMAF_POST
     : opts.videoPost ? POSTS.find(p => p.id === 't3_video1')
+    : opts.imagePost ? POSTS.find(p => p.id === 't3_image1')
+    : opts.nsfwPost ? POSTS.find(p => p.id === 't3_nsfw1')
     : POSTS[2];
   const deliver = opts.deliver ?? COMMENT_DEPTHS.length;
   let delivered = COMMENT_DEPTHS.slice(0, deliver).map(commentHtml).join('');

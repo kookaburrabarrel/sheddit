@@ -12,6 +12,43 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased — 0.19.0
+
+### Added — image posts show their image
+
+**An image post's comments page now has the picture on it, and the thumbnail no longer
+throws you out of the layout.** Reported twice in one round: the page rendered a title, a
+70px thumbnail and nothing else, and clicking that thumbnail landed in Reddit's own
+`/media` viewer — a page this extension does not render.
+
+One gap with two faces, and the third instance of the same root cause: **post content is
+not an attribute.** A text post's body had it, a video's rendition had it, and images were
+the member of that set with no handling at all. The picture is read out of the page the
+same way the body is, scoped to the post it belongs to, through the same host allowlist
+the thumbnail uses. Where Reddit offers a responsive set, the widest entry wins.
+
+The link substitution is deliberately narrow: only when the post is an image, a picture was
+found, *and* the link points back into reddit.com. A link that already goes straight to a
+file is left alone, and any miss falls back to exactly what shipped before — so getting
+this wrong costs the picture and never the post.
+
+**Listing rows get old reddit's expando**, which opens the picture in place rather than
+navigating away. It loads on first open, not at render: a listing is dozens of rows, and
+building them all up front would fetch every full-size image on the page for rows nobody
+opened.
+
+**Adult posts are not quietly enlarged.** Both new surfaces answer to the same
+"show adult-content thumbnails" setting the tile does, because rendering our own `<img>` is
+what bypasses the blur Reddit applies for logged-out readers, and a full-size inline copy is
+that same bypass made larger.
+
+Two things a fixture cannot settle, so `verify:live` gained a section that reports them: the
+`/media` link shape is inferred from what clicking did rather than from a capture, and where
+a live comments page keeps the full-size file is still unrecorded. Expect the picture to
+resolve to the largest size the page offers, which on some posts may be the thumbnail.
+
+There is a new **Show images inline** setting, on by default, that turns both off.
+
 ## Unreleased — 0.18.0
 
 ### Fixed — opening a comments page no longer locks the tab
