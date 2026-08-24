@@ -294,9 +294,20 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   const video = await page.evaluate((C) => {
     const posts = [...document.querySelectorAll(C.POST)]
       .filter(p => p.getAttribute(C.POST_ATTR.type) === 'video');
+    /* Read the attribute the way model.js reads it: QUERIED in the post's subtree,
+       scoped to this post. The attribute sits on a nested <shreddit-player>, not on
+       <shreddit-post> — that was one of the three corrections a live capture made at
+       once, and this probe had preserved the pre-correction read, so it could report
+       0/N against a page where every player carried the JSON. Measure what the code
+       measures, or the probe indicts the wrong suspect. */
+    const carrierOf = (p) => [...p.querySelectorAll(`[${C.POST_VIDEO_JSON}]`)]
+      .find(n => n.closest(C.POST) === p) || null;
+    const raw = (p) => carrierOf(p)?.getAttribute(C.POST_VIDEO_JSON) ?? null;
     return {
       count: posts.length,
-      withAttr: posts.filter(p => p.getAttribute(C.POST_VIDEO_JSON) !== null).length,
+      withPlayer: posts.filter(p => p.querySelector('shreddit-player, shreddit-player-2')).length,
+      withAttr: posts.filter(p => raw(p) !== null).length,
+      onPostItself: posts.filter(p => p.getAttribute(C.POST_VIDEO_JSON) !== null).length,
       mp4able: posts.filter(p => {
         try {
           const urls = [];
@@ -304,7 +315,7 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
             if (typeof v === 'string') { if (/^https:\/\/\S+\.mp4(\?|$)/i.test(v)) urls.push(v); }
             else if (v && typeof v === 'object') for (const k of Object.keys(v)) walk(v[k]);
           };
-          walk(JSON.parse(p.getAttribute(C.POST_VIDEO_JSON) || 'null'));
+          walk(JSON.parse(raw(p) || 'null'));
           return urls.length > 0;
         } catch { return false; }
       }).length
@@ -315,12 +326,25 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
       '--sub=<a video-heavy subreddit> (r/aww worked in live testing) before concluding ' +
       'anything about C.POST_VIDEO_JSON.\x1b[0m');
   } else {
-    check(`every video post carries ${C.POST_VIDEO_JSON} (${video.withAttr}/${video.count})`,
-      video.withAttr === video.count,
-      'the attribute name is wrong or not universal — video titles fall back to the closed loop');
-    check(`...and an mp4 URL deep-scans out of it (${video.mp4able}/${video.count})`,
-      video.mp4able === video.count,
-      'attribute present but no mp4 found — the JSON shape needs a look, paste one raw value');
+    console.log(`  \x1b[2m${video.withPlayer}/${video.count} have a player element; ` +
+      `${video.withAttr} carry ${C.POST_VIDEO_JSON} in the subtree ` +
+      `(${video.onPostItself} on the post element itself)\x1b[0m`);
+    /* Zero carriers stopped being a failure when the player learned to read the DASH
+       manifest: the attribute is the PREFERRED source (a combined file keeps its audio),
+       the manifest is the load-bearing one, and the attribute is known to hydrate late
+       AND to be dying asset-by-asset with the CMAF migration. What is still a hard
+       failure is an attribute that is PRESENT but yields no mp4 — that is a shape
+       change, not scarcity. */
+    if (video.withAttr === 0) {
+      console.log('  \x1b[33mNOTE\x1b[0m no video post carries the attribute at probe time — ' +
+        'consistent with late hydration and with the CMAF migration retiring it. The ' +
+        'manifest player is the load-bearing path either way; nothing here is broken.');
+    } else {
+      check(`an mp4 URL deep-scans out of every present ${C.POST_VIDEO_JSON} ` +
+        `(${video.mp4able}/${video.withAttr})`,
+        video.mp4able === video.withAttr,
+        'attribute present but no mp4 found — the JSON shape changed, paste one raw value');
+    }
   }
 
   /* ---------------- image posts: the two halves of a reported gap ---------------- */
@@ -812,19 +836,32 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
     const asOld = await sortedIds('old');
     console.log(`  \x1b[2m?sort=new: ${asNew.length} top-level ids; ` +
                 `?sort=old: ${asOld.length}\x1b[0m`);
+    /* A first cut compared the two deliveries as SETS and read a difference as a
+       confound. Wrong calibration: on any thread bigger than one page, newest-25 and
+       oldest-25 are DIFFERENT comments — a set difference is what a working sort looks
+       like, not noise. The discriminator that survives big threads is recency itself:
+       comment ids are base36-sequential over time, so the ids delivered under ?sort=new
+       must be numerically NEWER than under ?sort=old. If Reddit ignores the values, both
+       loads serve the identical default slice and the medians tie. */
+    const numOf = (id) => parseInt(String(id).replace(/^t\d+_/, ''), 36);
+    const median = (xs) => {
+      const s = xs.map(numOf).filter(Number.isFinite).sort((a, b) => a - b);
+      return s.length ? s[Math.floor(s.length / 2)] : NaN;
+    };
     if (asNew.length < 3 || asOld.length < 3) {
-      console.log('  \x1b[33mINCONCLUSIVE: too few top-level comments to compare orders — ' +
+      console.log('  \x1b[33mINCONCLUSIVE: too few top-level comments to compare — ' +
         'rerun against a busier thread before concluding anything about C.COMMENT_SORTS.\x1b[0m');
     } else {
-      check('?sort=new and ?sort=old produce different orders (the values are accepted)',
-        asNew.join() !== asOld.join(),
-        'identical order under opposite sorts — Reddit is ignoring these values, and the ' +
-        'sort menu quietly does nothing. C.COMMENT_SORTS is the suspect: capture the hrefs ' +
-        "of Reddit's own sort control on this page and update the list from those");
-      check('...and the same comments are present either way (a reorder, not a refetch miss)',
-        [...asNew].sort().join() === [...asOld].sort().join(),
-        'different comment SETS under the two sorts — the comparison is measuring ' +
-        'delivery differences, not order; treat the row above as unsettled');
+      const mNew = median(asNew), mOld = median(asOld);
+      console.log(`  \x1b[2mmedian id (base36): new=${mNew.toString(36)} old=${mOld.toString(36)}\x1b[0m`);
+      check('?sort=new delivers newer comments than ?sort=old (the values are accepted)',
+        mNew > mOld,
+        mNew === mOld
+          ? 'identical medians — Reddit is serving the same slice under opposite sorts, ' +
+            'i.e. ignoring the values. C.COMMENT_SORTS is the suspect: capture the hrefs ' +
+            "of Reddit's own sort control on this page and update the list from those"
+          : 'the OLD sort delivered newer comments than the NEW sort — the id-recency ' +
+            'premise is broken or the labels are crossed; paste both id lists');
     }
   }
 

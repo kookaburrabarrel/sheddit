@@ -12,6 +12,35 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased — 0.22.0
+
+### Fixed — clicking an image post no longer dumps you into Reddit's viewer
+
+The reported bounce is re-diagnosed, measured, and closed from the other end. A live run
+showed image posts carrying a bare `i.redd.it` content-href (16/16) — not the `/media`
+viewer URL 0.19.0's fix assumed — and probing that URL found the real mechanism:
+`i.redd.it` serves an image fetch normally and **307-redirects a navigation** to the
+`/media` viewer, discriminated on the Accept header. **`preview.redd.it` does the same**,
+so pointing links at the resolved preview file cannot escape the viewer either. There is
+no URL a logged-out click can reach that shows the bare picture.
+
+So the design follows video's precedent instead of chasing a destination that does not
+exist: an image post's title (and thumbnail) now route to its own comments page, where
+the full-size picture renders inline — and the inline pictures lost their link wrappers,
+because a link under an already-rendered picture can only bounce the reader out of the
+layout. An image post whose link goes somewhere genuinely external is untouched.
+
+### Fixed — verify:live stopped indicting contracts its own probes were misreading
+
+The video section read `packaged-media-json` off `shreddit-post` — the exact location the
+model was corrected away from when a capture showed the attribute lives on a nested
+player — so it could report 0/N against a page whose players all carried the JSON. It
+queries the subtree now, and zero carriers is a note rather than a failure, since the
+manifest player has been the load-bearing path since 0.16.0. The comment-sort check also
+recalibrated: it compared the two sorted deliveries as sets, and on any thread bigger
+than one page, newest-25 and oldest-25 are different comments — a set difference is what
+a working sort looks like. It now compares id recency, which survives big threads.
+
 ## Unreleased — 0.21.0
 
 ### Added — the comments page has a sort menu, and an `all N comments` escape hatch
