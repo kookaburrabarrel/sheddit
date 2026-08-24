@@ -187,6 +187,10 @@ SHD.model = (() => {
          thumbnail-only row on a listing has nothing bigger to find, and every consumer
          treats null as "no picture" rather than as an error. */
       image: imageUrl,
+      /* A gallery's frames, each at its own best size — peers, not candidates for one
+         winner. Empty is ordinary for the same reason `image` is null: a listing row
+         carries only the thumbnail, and the consumer renders nothing rather than erring. */
+      images: type === 'gallery' ? imagesOf(el) : [],
       /* The bare `v.redd.it/<id>` URL, kept because it is the asset IDENTIFIER even though
          it is useless as a link (it 302s a logged-out reader back to the comments page).
          media.js turns it into a manifest URL; nothing else should make it an href. */
@@ -298,6 +302,30 @@ SHD.model = (() => {
       }
     }
     return best;
+  }
+
+  /**
+   * Every picture a GALLERY post is carrying, one per <img>, each at its own best size.
+   *
+   * imageOf() above answers "the single largest picture in this post", which is right for
+   * an image post and wrong for a gallery — there the frames are peers, and reducing them
+   * to the biggest one silently drops the rest. Same scoping, same allowlist, same
+   * exclusions; the only difference is the unit of ranking (per element, not per post).
+   */
+  function imagesOf(el) {
+    const out = [];
+    for (const img of el.querySelectorAll('img')) {
+      if (img.closest(C.POST) !== el) continue;
+      if (img.closest(C.THUMB_EXCLUDE)) continue;
+      let best = null, bestW = -1;
+      for (const c of imageCandidates(img)) {
+        const host = (c.url || '').split('/')[2] || '';
+        if (!C.THUMB_HOSTS.test(host)) continue;
+        if (c.w > bestW) { bestW = c.w; best = c.url; }
+      }
+      if (best && !out.includes(best)) out.push(best);
+    }
+    return out;
   }
 
   /**

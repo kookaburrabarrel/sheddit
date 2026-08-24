@@ -305,11 +305,57 @@ SHD.listing = (() => {
     ]);
   }
 
+  /* How long to keep watching a source element for a timestamp that has not arrived.
+     Long enough for any real hydration, short enough that a row which genuinely has no
+     <time> does not hold an observer for the life of the page. */
+  const LATE_TIME_MS = 15000;
+
+  /**
+   * Patch the timestamp in late, when the source hydrates after consume time.
+   *
+   * Observed live, twice: a history traversal re-inserts Reddit's cached profile elements
+   * and the pipeline re-consumes them MID-HYDRATION — `created` is read once, from a
+   * rendered `<time>` that may not exist yet, so the row lost its timestamp permanently
+   * even though the element grew one moments later. The field is optional (the row is
+   * usable without it), which is exactly why nothing ever failed loudly.
+   *
+   * Scoped like the model's own read (closest === source), and armed only when the time
+   * was missing — the ordinary fully-hydrated row costs nothing. The observer disconnects
+   * on first success or at LATE_TIME_MS, whichever comes first, so it cannot accumulate.
+   */
+  function armLateTime(thing, m) {
+    if (m.created || !m.source) return;
+    const tagline = thing.querySelector('.tagline');
+    if (!tagline) return;
+    const read = () => {
+      const t = [...m.source.querySelectorAll('time[datetime]')]
+        .find(n => n.closest(C.PROFILE_COMMENT) === m.source);
+      return t ? t.getAttribute('datetime') : null;
+    };
+    const obs = new MutationObserver(() => {
+      const created = read();
+      if (!created) return;
+      obs.disconnect();
+      clearTimeout(stop);
+      // The row may have been torn down by a route change while we waited; the source
+      // element outliving OUR render is normal on Reddit's side.
+      if (!thing.isConnected) return;
+      tagline.appendChild(document.createTextNode(' '));
+      tagline.appendChild(h('time', { title: created, text: ago(created) }));
+    });
+    obs.observe(m.source, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ['datetime']
+    });
+    const stop = setTimeout(() => obs.disconnect(), LATE_TIME_MS);
+  }
+
   /** Called by the pipeline for each newly-seen profile comment (either candidate tag). */
   function consumeProfileComment(el) {
     const m = SHD.model.profileComment(el);
     if (!m) return false;
-    ensureContainer().appendChild(renderProfileComment(m));
+    const thing = renderProfileComment(m);
+    ensureContainer().appendChild(thing);
+    armLateTime(thing, m);
     return true;
   }
 

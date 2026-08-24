@@ -1016,6 +1016,22 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     in-process instead, still offline, and the row-growth assertion is what proves the
     image is actually there.
 
+80. **The page-cap test starved the very timer it was waiting on.** A manual-drive loop —
+    `while (pages < 40) await loadNext('manual')` — failed roughly one run in forty with
+    `pages` frozen low and the guard exhausted, and the mechanism is worth keeping because
+    it will read as "flaky infrastructure" every time it appears: `loadNext` refuses
+    `busy` SYNCHRONOUSLY, an `await` of a synchronously-resolved promise continues on a
+    MICROTASK, and a loop that never touches the macrotask queue starves the timers — which
+    is where the in-flight load's settle lives. So whenever the attach-pump's auto load
+    happened to still be in flight when the loop started, the loop burned all sixty guard
+    attempts against a `busy` that could not clear *because the loop itself was blocking
+    the timer that would clear it*. The fix is one macrotask: a refused attempt now
+    `await hold(5)` before retrying, which is not the forbidden guard-widening (bug 69's
+    anti-pattern) — sixty attempts stay sixty attempts, they just stop being sixty
+    microtasks inside one frozen tick. The general rule: **a polling loop that awaits a
+    function which can refuse synchronously must yield a macrotask on refusal**, or it
+    starves whatever it is polling for.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
@@ -1142,11 +1158,12 @@ the way a question got settled is usually more useful than the answer.
    `comment-id` and `href`; bug 65) **and the body in live testing** — `.md` is right and
    profiles render on real users, 24/24 and 33/33. See bug 67 for the trap that came with
    it. THREE smaller profile unknowns replace it, all observed once and none diagnosed:
-   **(a)** a timestamp vanished from a row after a history traversal — restored elements
-   are re-consumed mid-hydration and `created` is read once, at consume time, from a
-   `<time>` that may not be there yet. Cosmetic (the field is optional), but it is the
-   visible edge of a general question: what ELSE is not ready on a restored element. Bug
-   68 removed the sharp end of that. **(b)** the rendered row count ran AHEAD of the published
+   ~~**(a)** a timestamp vanished from a row after a history traversal~~ — **closed in
+   0.21.0**: restored elements are re-consumed mid-hydration and `created` was read once,
+   at consume time, from a `<time>` that may not be there yet; a row rendered without one
+   now watches its source and patches the time in when it lands. What survives of (a) is
+   its general form — what ELSE is not ready on a restored element — with bug 68 having
+   removed the sharp end and the timestamp now the worked example of the per-field cure. **(b)** the rendered row count ran AHEAD of the published
    source count on a paginating profile (108 rows against 100 sources, gap widening per
    page). Three candidate causes and only one is ours — duplicate rows, which the suite
    now asserts against; Reddit removing consumed elements; or `shdSources` simply being a

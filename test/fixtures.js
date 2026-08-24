@@ -21,9 +21,21 @@ const POSTS = [
     contentHref: 'https://www.reddit.com/gallery/gallery1',
     score: '12247', comments: '1270', domain: 'reddit.com',
     author: 'Wonderfulhumanss', sub: 'interesting',
+    /* Two real gallery frames with responsive sets, beside the community-icon and flair
+       decoys bug 1 is about. Each frame lists its LARGEST midway (640/1280/960) so a
+       first-or-last resolver picks visibly wrong, and the two frames must BOTH survive —
+       a gallery reduced to one picture is the failure the comments-page stack asserts
+       against. */
     imgs: ['styles.redditmedia.com/t5_2qib0/styles/communityIcon_x.png',
            'emoji.redditmedia.com/abc_t5_3nqvj/snoo_sim.png',
-           'preview.redd.it/bubble-boy-photo.jpg']
+           { src: 'preview.redd.it/bubble-boy-photo.jpg',
+             srcset: 'https://preview.redd.it/bubble-1-640.jpg 640w, ' +
+                     'https://preview.redd.it/bubble-1-1280.jpg 1280w, ' +
+                     'https://preview.redd.it/bubble-1-960.jpg 960w' },
+           { src: 'preview.redd.it/bubble-boy-photo-2.jpg',
+             srcset: 'https://preview.redd.it/bubble-2-640.jpg 640w, ' +
+                     'https://preview.redd.it/bubble-2-1280.jpg 1280w, ' +
+                     'https://preview.redd.it/bubble-2-960.jpg 960w' }]
   },
   {
     id: 't3_text1', type: 'text', title: 'Got Laid Off, Took My 2-Year-Old Son to Return My Laptop',
@@ -463,7 +475,7 @@ const PROFILE_HREFS = [
 const PROFILE_LINKED_SUB = 'recovered';
 const PROFILE_LINKED_TITLE = 'The post this comment is replying to';
 function profileCommentHtml(i, { tag = 'shreddit-profile-comment', unreadable = false,
-                                 noBody = false } = {}) {
+                                 noBody = false, lateTime = false } = {}) {
   const href = PROFILE_HREFS[i % PROFILE_HREFS.length];
   const attrs = unreadable
     ? `data-ks-item="" data-foreign-id="pc${i}" item-state="UNMODERATED"`
@@ -501,11 +513,20 @@ function profileCommentHtml(i, { tag = 'shreddit-profile-comment', unreadable = 
     ? `<a href="/r/${PROFILE_LINKED_SUB}/">r/${PROFILE_LINKED_SUB}</a>
        <a href="/user/tester/comments/pthread2/">${PROFILE_LINKED_TITLE}</a>`
     : '';
+  /* lateTime models the restored-element shape a history traversal produces: the element
+     is re-consumed MID-HYDRATION, so its <time> is absent at consume time and arrives on
+     a later tick. Observed live twice as a row whose timestamp had vanished. The fixture
+     ships NO time element; the TEST inserts it after the render, because this suite runs
+     jsdom with runScripts: 'outside-only' and an inline fixture script would silently
+     never execute — a page that looks like it models late delivery while modelling none. */
+  const timeEl = lateTime
+    ? ''
+    : '<time datetime="2026-08-12T08:17:36.499000+0000">2 days ago</time>';
   return `
   <${tag} ${attrs}>
     <shreddit-comment-author-modifier-icon></shreddit-comment-author-modifier-icon>
     <shreddit-comment-badges></shreddit-comment-badges>
-    <time datetime="2026-08-12T08:17:36.499000+0000">2 days ago</time>
+    ${timeEl}
     ${rendered}
     ${body}
     <shreddit-comment-action-row>
@@ -519,7 +540,8 @@ function profileCommentHtml(i, { tag = 'shreddit-profile-comment', unreadable = 
  *  otherwise fine profile, which must NOT cost the whole page. */
 function profilePage(opts = {}) {
   const c = (i) => profileCommentHtml(i,
-    opts.badIndex === i ? { ...opts, unreadable: true } : opts);
+    opts.badIndex === i ? { ...opts, unreadable: true }
+      : opts.lateIndex === i ? { ...opts, lateTime: true } : opts);
   return `<!DOCTYPE html><html><head><title>u/tester</title>${REDDIT_PAGE_CSS}</head><body>
   <shreddit-app>
     <reddit-header-large></reddit-header-large>
@@ -794,6 +816,7 @@ function commentsPage(opts = {}) {
     : opts.cmafPost ? CMAF_POST
     : opts.videoPost ? POSTS.find(p => p.id === 't3_video1')
     : opts.imagePost ? POSTS.find(p => p.id === 't3_image1')
+    : opts.galleryPost ? POSTS.find(p => p.id === 't3_gallery1')
     : opts.nsfwPost ? POSTS.find(p => p.id === 't3_nsfw1')
     : POSTS[2];
   const deliver = opts.deliver ?? COMMENT_DEPTHS.length;

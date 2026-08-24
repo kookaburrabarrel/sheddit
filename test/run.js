@@ -543,6 +543,63 @@ async function boot(html, url, setup) {
      halves of one gap — the picture is not an attribute, so nothing read it. This is the
      same shape as a text post's body (bug 49) and a video post's rendition, and it is the
      last of the three that had no handling at all. */
+  /* Requested twice from live use: old reddit's `all N comments` + `sorted by:` strip
+     above the thread. The sort links are plain hrefs onto the post's permalink with
+     `?sort=`, so a deep link (?context, a single-comment page) gets its escape hatch for
+     free and route.js needs nothing new. The sort VALUES are an unverified contract
+     (C.COMMENT_SORTS says why); what run.js can pin is everything downstream of them. */
+  console.log('\n\x1b[1mCOMMENTS PAGE — THE SORT MENU\x1b[0m');
+  {
+    const { doc, window } = await boot(commentsPage(),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    const head = doc.querySelector('#shd-root .commentarea .shd-commentarea-head');
+    check('the strip renders above the comment list', !!head);
+    check('...before the comments, not after them',
+      !!head && head.nextElementSibling?.classList.contains('sitetable'));
+
+    const all = head?.querySelector('.panestack-title a');
+    check('`all N comments` carries the post\'s own count',
+      /^all \d+ comments$/.test(all?.textContent || ''), all?.textContent);
+    /* The href must come from the POST'S OWN permalink attribute, not from the page URL —
+       the fixture makes them differ (attribute says nottheonion, page says programming),
+       so agreeing with the URL fails here. The attribute is the canonical page. */
+    check('...and links the post\'s own permalink, which is the deep-link escape hatch',
+      all?.getAttribute('href') === '/r/nottheonion/comments/link1/nasa/',
+      all?.getAttribute('href'));
+
+    const labels = [...(head?.querySelectorAll('.menuarea a, .menuarea .selected') || [])]
+      .map(n => n.textContent);
+    check('every registered sort is offered, from the contract list, not a hardcode',
+      window.SHD.C.COMMENT_SORTS.every(s => labels.includes(s.label)) &&
+      labels.length === window.SHD.C.COMMENT_SORTS.length, labels.join(', '));
+    check('the default sort is marked current, as a non-link',
+      head?.querySelector('.menuarea .selected')?.textContent === 'best');
+    check('...and the others are links carrying ?sort=',
+      [...head.querySelectorAll('.menuarea a')].every(a =>
+        /\?sort=[a-z]+$/.test(a.getAttribute('href') || '')));
+
+    // Idempotency: a second flush over the same page must not stack a second strip.
+    window.SHD.pipeline.kick?.();
+    check('one strip, no matter how many flushes',
+      doc.querySelectorAll('.shd-commentarea-head').length === 1);
+
+    /* Arriving WITH a sort in the URL: that one is current, `best` becomes a link. This
+       is the assertion that catches a strip which always marks the default. */
+    const { doc: sorted } = await boot(commentsPage(),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/?sort=new');
+    const sortedHead = sorted.querySelector('.shd-commentarea-head');
+    check('?sort=new marks `new` as current',
+      sortedHead?.querySelector('.menuarea .selected')?.textContent === 'new');
+    check('...and `best` goes back to being a link',
+      [...sortedHead.querySelectorAll('.menuarea a')].some(a => a.textContent === 'best'));
+    /* An unknown sort value must not blank the marker: unrecognised falls back to the
+       default rather than rendering a menu where nothing is current. */
+    const { doc: junk } = await boot(commentsPage(),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/?sort=upsidedown');
+    check('an unrecognised ?sort falls back to marking the default',
+      junk.querySelector('.shd-commentarea-head .menuarea .selected')?.textContent === 'best');
+  }
+
   console.log('\n\x1b[1mCOMMENTS PAGE — AN IMAGE SUBMISSION\x1b[0m');
   {
     const { doc } = await boot(commentsPage({ imagePost: true }),
@@ -578,6 +635,27 @@ async function boot(html, url, setup) {
       linkDoc.querySelector('.shd-selfpost a.title')?.getAttribute('href'));
     check('...and a post with no picture grows no image box',
       !linkDoc.querySelector('.shd-image'));
+  }
+
+  /* A gallery's frames are peers — reducing them to the single largest (which is what the
+     image post's resolver rightly does) silently drops the rest. Same machinery, ranked
+     per element instead of per post. */
+  console.log('\n\x1b[1mCOMMENTS PAGE — A GALLERY SUBMISSION\x1b[0m');
+  {
+    const { doc } = await boot(commentsPage({ galleryPost: true }),
+      'https://www.reddit.com/r/interesting/comments/gallery1/bubble_boy/');
+    const imgs = [...doc.querySelectorAll('#shd-root .shd-selfpost .shd-image img')];
+    check('a gallery shows every frame, not just the largest one', imgs.length === 2,
+      `${imgs.length} imgs`);
+    /* Each frame's set lists 640/1280/960 — the largest midway, so first-or-last picks
+       visibly wrong, per frame. */
+    check('...each at its own best resolution',
+      imgs.every((i, n) => new RegExp(`bubble-${n + 1}-1280\\.jpg$`).test(i.getAttribute('src') || '')),
+      imgs.map(i => i.getAttribute('src')).join(', '));
+    check('...and the community-icon and flair decoys are not among them',
+      imgs.every(i => !/styles\.redditmedia|emoji\.redditmedia/.test(i.getAttribute('src') || '')));
+    check('each frame links its own file',
+      imgs.every(i => i.closest('a')?.getAttribute('href') === i.getAttribute('src')));
   }
 
   /* The gate that exists because rendering our own <img> walks straight past the blur
@@ -1668,6 +1746,45 @@ async function boot(html, url, setup) {
     window.SHD.paginator.reset();
   }
 
+  /* The other face of mid-hydration re-consumption, observed live twice: the element is
+     readable but its <time> has not arrived yet, `created` is read once at consume time,
+     and the row lost its timestamp permanently even though the element grew one moments
+     later. Optional field, so nothing ever failed loudly. The row now watches the source
+     and patches the time in when it lands. */
+  console.log('\n\x1b[1mPROFILE — A TIMESTAMP THAT ARRIVES LATE STILL LANDS\x1b[0m');
+  {
+    const { doc, window } = await boot(profilePage({ lateIndex: 1 }),
+      'https://www.reddit.com/user/tester/');
+    await waitFor(() => doc.querySelectorAll('#shd-root .shd-profile-comment').length
+      === PROFILE_COMMENT_COUNT);
+    const rows = [...doc.querySelectorAll('#shd-root .shd-profile-comment')];
+    const late = rows.find(r => r.dataset.fullname === 't1_pc1');
+
+    /* Control: the row really was consumed before its time existed. Without this the
+       section passes on a fixture that simply delivered the time up front. */
+    check('control: the late row rendered without a timestamp at consume time',
+      !!late && !late.querySelector('.tagline time'));
+    check('...while an ordinary row has its timestamp immediately',
+      !!rows.find(r => r !== late)?.querySelector('.tagline time'));
+
+    /* The late hydration itself, driven from here because this suite's jsdom runs
+       runScripts: 'outside-only' — a fixture script would silently never execute. Same
+       DOM either way; what matters is that the <time> arrives AFTER consume. */
+    window.eval(`document.querySelector('shreddit-profile-comment[comment-id="t1_pc1"]')
+      .insertAdjacentHTML('afterbegin',
+        '<time datetime="2026-08-12T08:17:36.499000+0000">2 days ago</time>');`);
+    const landed = await waitFor(() => !!late.querySelector('.tagline time'), { timeout: 3000 });
+    check('the timestamp lands once the source hydrates', landed);
+    check('...with the datetime the source declared',
+      late.querySelector('.tagline time')?.getAttribute('title') ===
+        '2026-08-12T08:17:36.499000+0000',
+      late.querySelector('.tagline time')?.getAttribute('title'));
+    check('...and exactly once, not once per mutation the observer saw',
+      late.querySelectorAll('.tagline time').length === 1,
+      String(late.querySelectorAll('.tagline time').length));
+    window.SHD.paginator.reset();
+  }
+
   {
     /* The body selector is the one part of the profile contract still uncaptured
        (C.PROFILE_COMMENT_BODY), so the case where it MISSES is the one most likely to be
@@ -2345,7 +2462,13 @@ async function boot(html, url, setup) {
        it fire would test that instead of pump's — the branch that was actually broken. */
     let guard = 0;
     while (window.SHD.paginator.pages < 40 && guard++ < 60) {
-      await window.SHD.paginator.loadNext('manual');
+      /* A refused attempt must yield a MACROTASK, not just a microtask. loadNext refuses
+         `busy` synchronously, so a bare `await` loops on microtasks alone — and a
+         pure-microtask spin starves the timer queue, which is where the in-flight load's
+         settle lives. The loop then burns all 60 attempts waiting on a timer it is itself
+         blocking: pages froze low, ~1 run in 40, whenever the attach-pump's auto load was
+         still in flight when this loop started. hold() is the macrotask. */
+      if (!(await window.SHD.paginator.loadNext('manual'))) await hold(5);
     }
     check('setup: the chain sits exactly at the 40-page cap',
       window.SHD.paginator.pages === 40, String(window.SHD.paginator.pages));

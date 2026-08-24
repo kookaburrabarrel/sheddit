@@ -73,10 +73,11 @@ WHAT YOU GET
 • The classic listing: compact rows, ranks, scores, thumbnails, subreddit and author
   lines — the density that fits a screenful of posts instead of three.
 • The classic comment tree: threaded, collapsible, with the indentation lines that make
-  a long argument readable.
+  a long argument readable — and old reddit's sort menu (best, top, new, controversial,
+  old, q&a) with an "all N comments" link above it.
 • Video posts that play on their comments page, sound included.
-• Image posts that show their image — full size on the comments page, and behind
-  old reddit's [+] expando on listing rows.
+• Image posts that show their image — full size on the comments page, galleries with
+  every frame, and old reddit's [+] expando on listing rows.
 • User profile pages in the same layout.
 • Paging that ends: the next page loads as you read, driven by Reddit's own loader, and
   stops when the feed is spent instead of spinning to keep the session open.
