@@ -1297,6 +1297,33 @@ mutate "the comments-page picture loses its width cap" geometry \
   src/styles/old-reddit.css ".shd-selfpost .shd-image { margin: 5px 0; max-width: var(--shd-video-max); }" \
                             ".shd-selfpost .shd-image { margin: 5px 0; }"
 
+# The comments-page head: `all N comments` + the sort menu, requested twice from live use.
+mutate "the comment sort strip vanishes again" run \
+  src/modules/comments.js "    ensureCommentHead(r, m);" "    ;"
+
+# The current-sort marker read from the URL. Gutting it marks `best` always — caught by the
+# ?sort=new boot, which exists precisely because a strip that always marks the default
+# looks perfectly correct on the default page.
+mutate "the sort strip stops noticing which sort the page is on" run \
+  src/modules/comments.js "      if (q && C.COMMENT_SORTS.some(s => s.id === q)) current = q;" \
+                          "      if (false) current = q;"
+
+# The late-timestamp patch: a restored profile element re-consumed mid-hydration grows its
+# <time> after consume, and the row used to lose it permanently.
+mutate "a timestamp that arrives late is lost again" run \
+  src/modules/listing.js "    armLateTime(thing, m);" "    ;"
+
+# A gallery reduced to its single largest frame — the exact reduction imageOf() rightly
+# performs for an image post, wrong here because frames are peers.
+mutate "a gallery collapses to one picture" run \
+  src/modules/comments.js "      : m.type === 'gallery' ? m.images : [];" \
+                          "      : m.type === 'gallery' && m.images.length ? [m.images[0]] : [];"
+
+# Per-frame ranking: scoring frames into one global winner is the same bug one level down.
+mutate "gallery frames stop being ranked per element" run \
+  src/core/model.js "      if (best && !out.includes(best)) out.push(best);" \
+                    "      if (best && !out.length) out.push(best);"
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it

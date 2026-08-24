@@ -526,6 +526,28 @@ html.shd-active body {
 .shd-selfpost { border-bottom: 1px solid var(--shd-border); padding-bottom: 8px; margin-bottom: 10px; }
 .commentarea { margin-right: var(--shd-gutter); }
 
+/* The strip above the comment list: `all N comments`, then the sort menu. Old reddit's
+   own sizes — a 14px bold title line over a 10px grey menu row. Inline content wraps on
+   its own at narrow widths, so no flex is involved and no flex-wrap rule applies. */
+.shd-commentarea-head { margin: 10px 0 8px; }
+.shd-commentarea-head .panestack-title {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.shd-commentarea-head .title-button {
+  color: var(--shd-link);
+  font-weight: bold;
+  text-decoration: underline;
+}
+.shd-commentarea-head .menuarea {
+  font-size: 10px;
+  color: var(--shd-meta);
+}
+.shd-commentarea-head .menuarea a { color: var(--shd-link); }
+/* The active sort is old reddit's bold non-link, so the row answers "which one am I on"
+   at a glance and the current choice is not a clickable no-op. */
+.shd-commentarea-head .menuarea .selected { font-weight: bold; color: var(--shd-text); }
+
 /* The thread line belongs to .child — the wrapper around a comment's REPLIES — not to the
    comment itself. Both draw something that looks like a guide line, but they start and stop
    at different points in the tree: on .comment it brackets the comment you are reading, on

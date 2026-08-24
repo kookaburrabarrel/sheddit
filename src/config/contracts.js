@@ -57,6 +57,24 @@ SHD.C = {
      "70 more replies", "28 more replies" — counts vary, the phrase does not. English-only,
      like the age-gate matcher; a miss fails safe (no extra control is rendered). */
   MORE_REPLIES_TEXT: /more repl/i,
+  /* The comment-sort values Reddit's own page accepts in `?sort=`, with old reddit's
+     labels for them. Requested twice from live use ("no comment-sort dropdown").
+
+     The VALUES are a contract and they are UNVERIFIED LIVE — chosen from the classic
+     API's names (`confidence` is what old reddit called "best"), because a container
+     cannot reach real Reddit to confirm what shreddit's own dropdown emits. The failure
+     is soft by construction: a value Reddit does not recognise falls back to the default
+     order and the page still loads — a link that mis-sorts, never a link that breaks.
+     verify:live's COMMENT SORT section is what settles them; if it reports the order
+     unchanged under ?sort=new, THESE names are the first suspect. */
+  COMMENT_SORTS: [
+    { id: 'confidence', label: 'best' },
+    { id: 'top', label: 'top' },
+    { id: 'new', label: 'new' },
+    { id: 'controversial', label: 'controversial' },
+    { id: 'old', label: 'old' },
+    { id: 'qa', label: 'q&a' }
+  ],
   /* Video posts. A bare v.redd.it link 302s a LOGGED-OUT session straight back to the
      post's comments page (measured live) — with our layout on, a closed loop: we
      render the destination, whose title links back to v.redd.it.
@@ -108,8 +126,9 @@ SHD.C = {
 
   /* Observed post-type values: text, link, image, gallery, video, multi_media, crosspost
      (crosspost added 2026-08-14 by npm run verify:live; falls through the same non-text
-     path as link/image/etc. in model.js — no dedicated handling yet, works by accident of
-     the existing fallback, not by design. Add a crosspost fixture before trusting that). */
+     path as link/image/etc. in model.js. The fallback is covered rather than accidental:
+     t3_crosspost1 in test/fixtures.js carries the live shape, and run.js asserts the row
+     renders with the right thumbnail host). */
   /* NOT USED BY ANYTHING. model.js decides self-vs-link inline with
      `/^self\./.test(domain) || type === 'text'`, so editing this list changes no behaviour
      — a trap for whoever assumes otherwise. Left in place rather than deleted because it

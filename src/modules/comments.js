@@ -285,14 +285,21 @@ SHD.comments = (() => {
    * only larger. Anything that draws a picture must ask the same question.
    */
   function postImage(m) {
-    if (m.type !== 'image' || !m.image) return null;
     if (!SHD.settings.inlineImages) return null;
     if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;
-    // Wrapped in a link to the file itself, so "see it full size" costs one click and
+    /* A gallery renders every frame it is carrying, stacked — the frames are peers, and
+       showing only the largest would silently drop the rest. An image post is the
+       single-picture case of the same box. Both fall through to null when nothing
+       resolved, so a page whose full-size files live elsewhere costs the picture and
+       never the post. */
+    const urls = m.type === 'image' && m.image ? [m.image]
+      : m.type === 'gallery' ? m.images : [];
+    if (!urls.length) return null;
+    // Each wrapped in a link to its own file, so "see it full size" costs one click and
     // lands on the picture rather than on Reddit's viewer.
-    return h('div.shd-image', null,
-      h('a', { href: m.image, rel: 'noopener' },
-        h('img.shd-image-el', { src: m.image, alt: '', loading: 'lazy' })));
+    return h('div.shd-image', null, urls.map(u =>
+      h('a', { href: u, rel: 'noopener' },
+        h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }))));
   }
 
   function videoPlayer(m) {
@@ -416,7 +423,48 @@ SHD.comments = (() => {
         h('div.usertext-body.shd-selftext', null, m.bodyNode.cloneNode(true)));
     }
     r.prepend(h('div.shd-selfpost', null, row));
+    ensureCommentHead(r, m);
     return true;
+  }
+
+  /**
+   * Old reddit's strip above the comment list: `all N comments`, then `sorted by: best`.
+   *
+   * Requested twice from live use. The links are ordinary hrefs onto the post's own
+   * permalink — a full navigation, exactly as old reddit sorted — so route.js needs no
+   * new machinery and a deep link (?context, a single-comment permalink) gets its escape
+   * hatch for free: `all N comments` IS the canonical page.
+   *
+   * The current sort is read from location.search at consume time, which is safe here in
+   * a way it is not in onRoute(): comments render post-commit (the page that delivered
+   * them is the page on screen), whereas onRoute runs pre-commit when location still
+   * holds the outgoing URL. Do not move this read into a route handler.
+   */
+  function ensureCommentHead(r, m) {
+    const area = r.querySelector('.commentarea');
+    if (!area || area.querySelector('.shd-commentarea-head')) return;
+    let current = 'confidence';
+    try {
+      const q = new URLSearchParams(location.search).get('sort');
+      if (q && C.COMMENT_SORTS.some(s => s.id === q)) current = q;
+    } catch { /* an unparseable search string means the default order */ }
+    const head = h('div.shd-commentarea-head', null, [
+      h('div.panestack-title', null,
+        h('a.title-button', {
+          href: m.permalink,
+          text: `all ${m.comments} comment${m.comments === 1 ? '' : 's'}`
+        })),
+      h('div.menuarea', null, [
+        'sorted by: ',
+        ...C.COMMENT_SORTS.flatMap((s, i) => {
+          const el = s.id === current
+            ? h('span.selected', { text: s.label })
+            : h('a', { href: `${m.permalink}?sort=${s.id}`, text: s.label });
+          return i ? [' | ', el] : [el];
+        })
+      ])
+    ]);
+    area.prepend(head);
   }
 
   return { consume, consumePost, reset, timings };

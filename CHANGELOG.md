@@ -12,6 +12,53 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased — 0.21.0
+
+### Added — the comments page has a sort menu, and an `all N comments` escape hatch
+
+Requested twice from live use: old reddit's strip above the thread — `all N comments`,
+then `sorted by: best | top | new | controversial | old | q&a`. The links are ordinary
+hrefs onto the post's own permalink with `?sort=`, so a deep link (a `?context` view, a
+single-comment permalink) gets its way back to the whole thread for free, and the current
+sort is marked as old reddit marked it, a bold non-link.
+
+The sort **values** are a contract and they are stated as unverified in `contracts.js`:
+they are the classic API's names (`confidence` is what old reddit called "best"), chosen
+because a container cannot reach real Reddit to confirm what the current site accepts.
+The failure is soft by construction — a value Reddit does not recognise falls back to the
+default order and the page still loads — and `verify:live` is what settles them.
+
+### Added — galleries show every frame
+
+The image work in 0.19.0 covered single-image posts; a gallery's comments page still
+showed a title and a thumbnail. Galleries now render every frame the page is carrying,
+stacked, each at its own best resolution — the frames are peers, and the single-winner
+ranking that is right for an image post silently drops all but the largest frame of a
+gallery. Same host allowlist, same post scoping, same adult-content gate, same fallback:
+a gallery whose full-size files are not in the page costs the pictures and never the post.
+
+### Fixed — a paginator test starved the timer it was waiting on
+
+A suite bug, and the recognisable kind: the page-cap test failed roughly one run in
+forty with pages frozen low, which reads as flaky infrastructure right up until someone
+starts ignoring red builds. Its manual-drive loop awaited a function that refuses
+synchronously while a load is in flight — and an await of a synchronously-resolved
+promise continues on a microtask, so the loop never yielded to the timer queue where
+that load's completion lived. It burned all sixty attempts against a state that could
+not change *because the loop itself was blocking it*. A refused attempt now yields one
+macrotask before retrying; the attempt budget is unchanged. See the engineering log for
+the general rule this leaves behind.
+
+### Fixed — a profile timestamp that arrived late was lost for good
+
+Observed live twice: after a back-navigation, a profile row rendered without its
+timestamp. Reddit restores cached elements on history traversals and the pipeline
+re-consumes them mid-hydration, so the `<time>` could be read once — before it existed —
+and the row stayed bare even though the element grew its timestamp moments later. The
+field is optional, which is why nothing ever failed loudly. A row that rendered without a
+timestamp now watches its source element and patches the time in when it lands, with the
+watch dropped on first success or after fifteen seconds, whichever comes first.
+
 ## Unreleased — 0.20.0
 
 ### Changed — the store summary says "no tracking"
