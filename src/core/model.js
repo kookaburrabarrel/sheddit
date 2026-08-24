@@ -169,15 +169,18 @@ SHD.model = (() => {
       permalink,
       /* Self posts point at the comments page; link posts point outward — and a video
          post counts as neither, because its outbound URL is a redirect back here.
-         An image post is a fourth case: its content-href can be Reddit's own /media
-         viewer, a page this extension does not render, so a reader who clicks the
-         thumbnail is dropped out of the layout. Where the picture itself is visible, that
-         is the better destination. Deliberately narrow — the substitution happens ONLY
-         when the link points back into reddit.com AND a picture was resolved, so a
-         content-href that is already a direct image URL is left exactly as it was, and a
-         miss falls back untouched. */
+         An image post is the same case since 2026-08-24, measured: its content-href is a
+         bare i.redd.it URL, and BOTH of Reddit's image hosts 307 a logged-out navigation
+         into the reddit.com/media viewer (see viewerBound) — so every "link to the
+         picture" is a link to the viewer wearing the picture's name. 0.19.0 shipped a
+         substitution to the resolved preview URL on exactly that theory, and the
+         measurement killed it: preview.redd.it bounces the same way. The comments page,
+         which renders the picture inline, is where the reader actually gets to see it —
+         video's precedent exactly. Narrow as before: only a viewer-bound link with a
+         RESOLVED picture is rerouted, so an image post linking somewhere genuinely
+         external (imgur, a blog) is untouched, and a miss falls back untouched. */
       href: (isSelf || type === 'video') ? permalink
-        : (type === 'image' && imageUrl && pointsAtReddit(contentHref)) ? imageUrl
+        : (type === 'image' && imageUrl && viewerBound(contentHref)) ? permalink
           : (contentHref || permalink),
       /* The watchable rendition, when Reddit has one and has hydrated it. Null is
          ordinary — the player carries the JSON late, or (increasingly) not at all — and
@@ -329,15 +332,27 @@ SHD.model = (() => {
   }
 
   /**
-   * Does this URL lead back into Reddit rather than to something we can show?
+   * Does navigating to this URL land the reader in Reddit's /media viewer?
    *
-   * A relative path counts, because it is same-origin by definition. Reddit's media hosts
-   * (i.redd.it, preview.redd.it) deliberately do NOT, since those are the files themselves.
+   * MEASURED 2026-08-24, and it reversed this function's original premise. The premise
+   * was that i.redd.it/preview.redd.it are "the files themselves" and only reddit.com
+   * URLs lead back into Reddit. Live: BOTH image hosts serve an <img> fetch
+   * (Accept: image/*) normally and 307-redirect a top-level NAVIGATION
+   * (Accept: text/html) to reddit.com/media?url=… — the viewer. Two hosts, four URLs
+   * probed, all four; the Accept header is the discriminator. Same pattern as
+   * v.redd.it's 302 to the comments page (bug 58), applied to images: there is no URL a
+   * logged-out click can reach that shows the bare picture.
+   *
+   * So the consumer's question is not "which URL escapes the viewer" — none does — but
+   * "is this link viewer-bound", in which case the comments page, with the picture
+   * rendered inline ON it, is the better destination. Video posts set that precedent.
+   * A relative path counts as viewer-bound (same-origin by definition).
    */
-  function pointsAtReddit(url) {
+  function viewerBound(url) {
     if (!url) return false;
     const host = /^https?:\/\//i.test(url) ? (url.split('/')[2] || '') : '';
-    return !host || /(^|\.)reddit\.com$/i.test(host);
+    return !host || /(^|\.)reddit\.com$/i.test(host) ||
+      /^(i|preview|external-preview)\.redd\.it$/i.test(host);
   }
 
   /** @returns {object|null} */

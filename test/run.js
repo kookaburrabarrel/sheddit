@@ -614,15 +614,20 @@ async function boot(html, url, setup) {
     check('...at the largest resolution the set offers, not the first or the last',
       /gooddog-1080\.jpg$/.test(pic?.getAttribute('src') || ''), pic?.getAttribute('src'));
 
+    /* The title routes to the COMMENTS PAGE, not to the image URL. Measured 2026-08-24:
+       i.redd.it and preview.redd.it both 307 a logged-out navigation into Reddit's /media
+       viewer (Accept-header discriminated), so every direct image link is the viewer
+       wearing the picture's name — the page that renders the picture inline is the only
+       destination that shows it. Video posts set the precedent. */
     const title = doc.querySelector('.shd-selfpost a.title');
-    check('the title no longer points at Reddit\'s own media viewer',
-      !/reddit\.com\/media/.test(title?.getAttribute('href') || ''), title?.getAttribute('href'));
-    check('...it points at the picture', /gooddog-1080\.jpg$/.test(title?.getAttribute('href') || ''),
+    check('the title routes to the comments page, where the picture is',
+      title?.getAttribute('href') === '/r/aww/comments/image1/a_very_good_dog/',
       title?.getAttribute('href'));
-    // Control: the fixture really is serving the viewer URL, so the two checks above are
-    // testing a substitution rather than agreeing with a fixture that never had the problem.
-    check('control: the source post really does carry a /media content-href',
-      /reddit\.com\/media/.test(
+    // Control: the fixture carries the measured live shape — a bare i.redd.it
+    // content-href — so the check above tests the reroute, not a fixture that already
+    // pointed at the permalink.
+    check('control: the source post carries a bare i.redd.it content-href',
+      /^https:\/\/i\.redd\.it\//.test(
         doc.querySelector('shreddit-post')?.getAttribute('content-href') || ''));
 
     /* A content-href that is ALREADY a direct file must be left exactly as it was. The
@@ -654,8 +659,11 @@ async function boot(html, url, setup) {
       imgs.map(i => i.getAttribute('src')).join(', '));
     check('...and the community-icon and flair decoys are not among them',
       imgs.every(i => !/styles\.redditmedia|emoji\.redditmedia/.test(i.getAttribute('src') || '')));
-    check('each frame links its own file',
-      imgs.every(i => i.closest('a')?.getAttribute('href') === i.getAttribute('src')));
+    /* No anchors around the frames — a link to "the file" is a link to the /media
+       viewer since the 2026-08-24 measurement, so a wrapper could only bounce the
+       reader out of the layout. */
+    check('frames carry no viewer-bound link wrappers',
+      imgs.every(i => !i.closest('a')));
   }
 
   /* The gate that exists because rendering our own <img> walks straight past the blur

@@ -1262,9 +1262,9 @@ mutate "the largest rendition stops winning, and the first one does" run \
   src/core/model.js "        if (c.w > bestW) { bestW = c.w; best = c.url; }" \
                     "        if (bestW < 0) { bestW = c.w; best = c.url; }"
 
-mutate "the thumbnail points back at Reddit's media viewer again" run \
-  src/core/model.js "        : (type === 'image' && imageUrl && pointsAtReddit(contentHref)) ? imageUrl" \
-                    "        : false ? imageUrl"
+mutate "an image title points at the viewer-bound image URL again" run \
+  src/core/model.js "        : (type === 'image' && imageUrl && viewerBound(contentHref)) ? permalink" \
+                    "        : false ? permalink"
 
 # The adult-content gate, on BOTH surfaces that draw a picture. Separate rows on purpose:
 # they are different call sites covering different pages, so removing one leaves the other

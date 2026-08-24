@@ -56,25 +56,20 @@ const POSTS = [
     imgs: ['external-preview.redd.it/nasa-thumb.jpg']
   },
   {
-    /* An image post as one was REPORTED live: the comments page showed a title and a 70px
-       thumbnail and nothing else, and clicking the thumbnail left the layout for Reddit's
-       own /media viewer. So content-href here is that viewer URL rather than a direct
-       image link — which is the shape that makes the substitution in model.post necessary,
-       and the shape the old fixture could not express, because it assumed content-href was
-       already the picture.
+    /* An image post in its MEASURED live shape (verify:live 2026-08-24, 16/16 on a real
+       listing): content-href is a bare i.redd.it URL — NOT the /media viewer URL an
+       earlier fixture guessed. The guess was not wrong about the destination, only about
+       the mechanism: i.redd.it (and preview.redd.it) 307 a logged-out NAVIGATION into the
+       viewer, discriminated on the Accept header, so the bare URL and the viewer URL are
+       the same place for a click. model.viewerBound carries the probe; the title routes
+       to the comments page, where the picture renders inline.
 
        The responsive set lists the LARGEST IN THE MIDDLE, deliberately. A resolver that
        takes the first entry, or the last, picks wrong and the fixture says so; only one
-       that reads the `w` descriptors gets 1080. Same trap the video renditions carry.
-
-       Still a GUESS in one respect, and the reason verify:live gained an IMAGE POSTS
-       section: the viewer URL is inferred from what clicking did, not from a capture, and
-       nobody has recorded where a live comments page keeps the full-size file. A wrong
-       guess costs the picture and nothing else — every path falls back to what shipped
-       before. */
+       that reads the `w` descriptors gets 1080. Same trap the video renditions carry. */
     id: 't3_image1', type: 'image', title: 'A very good dog',
     permalink: '/r/aww/comments/image1/a_very_good_dog/',
-    contentHref: 'https://www.reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fgooddog.jpg',
+    contentHref: 'https://i.redd.it/gooddog.jpg',
     score: '43110', comments: '902', domain: 'i.redd.it',
     author: 'dogperson', sub: 'aww',
     imgs: [{

@@ -606,6 +606,15 @@ after a stretch of matching nothing. No behaviour change needed — the broader 
 clause was already driving the right elements — but the "matches nothing live" note in
 `contracts.js` dates from the earlier shape.
 
+**Measured the same day, from the run's own findings (curl, both image hosts, four
+URLs):** `i.redd.it` and `preview.redd.it` each serve an `<img>` fetch
+(`Accept: image/*`) normally and **307-redirect a top-level navigation**
+(`Accept: text/html`) to `reddit.com/media?url=…` — the viewer. There is no URL a
+logged-out click can reach that shows the bare picture, which re-diagnoses the reported
+"thumbnail dumps you into the /media viewer" bounce: the content-href was a bare
+`i.redd.it` URL all along (16/16 on this run), and the CDN itself does the bouncing.
+Image titles route to the comments page as a result; see the engineering log.
+
 **Unchanged:** the upvote control is still unreachable logged out (20 open shadow roots
 searched, nothing), which is the documented scope state rather than a failure — the
 verify script now reports it as a note instead of failing an otherwise-clean run over a

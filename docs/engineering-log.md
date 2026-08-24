@@ -1032,6 +1032,32 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     function which can refuse synchronously must yield a macrotask on refusal**, or it
     starves whatever it is polling for.
 
+81. **Every "link to the picture" was a link to the viewer wearing the picture's name.**
+    verify:live's IMAGE POSTS section reported `content-href` as a bare `i.redd.it` URL on
+    16/16 live image posts — so the substitution built for a `/media` viewer URL never
+    fires. Probing the bare URL found why the reported bounce happens anyway: `i.redd.it`
+    **307-redirects a top-level navigation** (`Accept: text/html`) to
+    `reddit.com/media?url=…` while serving an `<img>` fetch (`Accept: image/*`) normally —
+    **and `preview.redd.it` does the same**, which kills the substitution's replacement
+    too. Four URLs probed across both hosts, four redirects; the Accept header is the
+    discriminator. Bug 58's pattern (v.redd.it 302 → comments page), applied to images:
+    there is no URL a logged-out click can reach that shows the bare picture. So the
+    design inverts rather than adapts — an image post's title routes to its COMMENTS
+    PAGE, where the picture renders inline (video's precedent exactly), and the inline
+    pictures lost their `<a>` wrappers, because a link under an already-rendered picture
+    can only bounce the reader out of the layout. The fixture now carries the measured
+    shape (bare `i.redd.it` content-href), with the reroute asserted against it.
+    The same run indicted a probe, and that lesson is the half worth keeping: the video
+    section reported `packaged-media-json` 0/4 FAIL — but it was reading the attribute
+    off `shreddit-post`, the exact pre-correction location bug 61(a) moved the MODEL past
+    (the attribute lives on a nested `shreddit-player`). A probe that measures something
+    other than what the code measures indicts the contract when it should indict itself.
+    It queries the subtree now, reports where it found the attribute, and zero carriers
+    is a NOTE rather than a failure — the manifest player has been the load-bearing path
+    since 0.16.0, and the attribute is known to hydrate late and to be dying with the
+    CMAF migration. Whether that 0/4 was probe error or the migration completing, the
+    next run reads directly.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

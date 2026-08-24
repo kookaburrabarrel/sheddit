@@ -295,11 +295,14 @@ SHD.comments = (() => {
     const urls = m.type === 'image' && m.image ? [m.image]
       : m.type === 'gallery' ? m.images : [];
     if (!urls.length) return null;
-    // Each wrapped in a link to its own file, so "see it full size" costs one click and
-    // lands on the picture rather than on Reddit's viewer.
+    /* Bare <img>, no anchor — deliberately, since 2026-08-24. These used to link "the
+       file itself", and measurement showed there is no such destination for a logged-out
+       click: i.redd.it AND preview.redd.it both 307 a navigation into Reddit's /media
+       viewer (model.viewerBound documents the probe). The <img> fetch itself is fine —
+       the redirect discriminates on the Accept header — so the picture renders here and
+       a link under it could only bounce the reader out of the layout. */
     return h('div.shd-image', null, urls.map(u =>
-      h('a', { href: u, rel: 'noopener' },
-        h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }))));
+      h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' })));
   }
 
   function videoPlayer(m) {
