@@ -36,6 +36,22 @@ const { resolveChrome, noChromeMessage, makeChecker } = require('./harness');
 const HEADED = process.argv.includes('--headed');
 const SUB = (process.argv.find(a => a.startsWith('--sub=')) || '--sub=programming').split('=')[1];
 
+/* A malformed flag must FAIL, not silently mean "the default". A live run typed
+   `--sub-aww` (dash for equals); the parser above did not match it, the run went against
+   the default subreddit, and three sections came back INCONCLUSIVE — the whole purpose of
+   the run lost to a typo that nothing reported. These runs need a human and a residential
+   connection, so a wasted one costs a person's time, not CI minutes. */
+{
+  const KNOWN = [/^--sub=.+$/, /^--user=.+$/, /^--headed$/];
+  const bad = process.argv.slice(2).filter(a => a.startsWith('-') && !KNOWN.some(r => r.test(a)));
+  if (bad.length) {
+    console.error(`\n  unrecognised option(s): ${bad.join(', ')}` +
+      '\n  known options: --sub=<subreddit>   --user=<name>   --headed' +
+      '\n  (the likely slip: --sub-aww for --sub=aww)\n');
+    process.exit(1);
+  }
+}
+
 const EXE = resolveChrome();
 if (!EXE) { console.error('\n  ' + noChromeMessage() + '\n'); process.exit(1); }
 
@@ -395,12 +411,23 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   console.log(`  \x1b[2mupvote control lives in: ${world}\x1b[0m`);
   console.log(`  \x1b[2m${JSON.stringify(vote)}\x1b[0m`);
 
-  check('the native upvote control is reachable at all', vote.deep,
-    'delegation cannot work — the control is absent or in a CLOSED shadow root. ' +
-    'Voting needs a different mechanism (see ARCHITECTURE §5 tier 3).');
-  if (vote.deep && !vote.light) {
-    console.log('  \x1b[33mNOTE\x1b[0m reachable ONLY through a shadow root — ' +
-                'dom.deepQuery is load-bearing, do not simplify it back to querySelector.');
+  /* NOT a pass/fail row any more. Unreachable-when-logged-out is the SETTLED, documented
+     state (measured 2026-08-14, 21 open shadow roots searched, nothing; voting is out of
+     scope and the arrows are decorative for the primary use case) — so failing on it made
+     every otherwise-clean logged-out run exit red over a scope decision, which trains the
+     reader to ignore the one summary line that matters. The section still reports, because
+     the interesting transitions are the OTHER ones: a logged-in run finding the control
+     (delegation becomes live), or a logged-out run suddenly finding one (Reddit changed). */
+  if (vote.deep) {
+    console.log('  \x1b[33mNOTE\x1b[0m the upvote control IS reachable on this session — ' +
+      'delegation is live. If this session is logged out, that is a Reddit change worth recording.');
+    if (!vote.light) {
+      console.log('  \x1b[33mNOTE\x1b[0m reachable ONLY through a shadow root — ' +
+                  'dom.deepQuery is load-bearing, do not simplify it back to querySelector.');
+    }
+  } else {
+    console.log('  \x1b[2mnot reachable — the documented logged-out state (voting is out ' +
+                'of scope; the arrows are decorative for a logged-out session)\x1b[0m');
   }
 
   /* ---------------- comments ---------------- */
