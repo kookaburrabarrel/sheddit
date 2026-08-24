@@ -55,8 +55,9 @@ const valueOf = (sel, prop) => {
  * check below fails loudly if you forget.
  */
 const FLOAT_CONTAINERS = {
-  '.thumbnail': '.thing.link',   // post thumbnail floats left inside a link row
-  '#shd-sidebar': '#shd-root'    // right rail floats right inside the page root
+  '.thumbnail': '.thing.link',       // post thumbnail floats left inside a link row
+  '.expando-button': '.thing.link',  // the [+] control sits beside it, same row
+  '#shd-sidebar': '#shd-root'        // right rail floats right inside the page root
 };
 const BFC = /(display\s*:\s*flow-root)|(overflow\s*:\s*(hidden|auto|scroll))|(display\s*:\s*(flex|grid|inline-block|table))|(position\s*:\s*absolute)|(float\s*:\s*(left|right))/;
 

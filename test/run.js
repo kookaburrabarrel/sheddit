@@ -538,6 +538,114 @@ async function boot(html, url, setup) {
     check('a post with no text gets no selftext box', !linkDoc.querySelector('.shd-selftext'));
   }
 
+  /* Reported: an image post's comments page rendered a title, a 70px thumbnail and nothing
+     else, and clicking the thumbnail left the layout for Reddit's own /media viewer. Two
+     halves of one gap — the picture is not an attribute, so nothing read it. This is the
+     same shape as a text post's body (bug 49) and a video post's rendition, and it is the
+     last of the three that had no handling at all. */
+  console.log('\n\x1b[1mCOMMENTS PAGE — AN IMAGE SUBMISSION\x1b[0m');
+  {
+    const { doc } = await boot(commentsPage({ imagePost: true }),
+      'https://www.reddit.com/r/aww/comments/image1/a_very_good_dog/');
+
+    const pic = doc.querySelector('#shd-root .shd-selfpost .shd-image img');
+    check('an image post shows its picture on the comments page', !!pic);
+    check('...inside the row\'s entry, where old reddit hangs the expando',
+      !!doc.querySelector('.shd-selfpost .entry .shd-image'));
+    /* The set lists 320, then 1080, then 640. Taking the first or the last picks wrong;
+       only reading the `w` descriptors gets the biggest. */
+    check('...at the largest resolution the set offers, not the first or the last',
+      /gooddog-1080\.jpg$/.test(pic?.getAttribute('src') || ''), pic?.getAttribute('src'));
+
+    const title = doc.querySelector('.shd-selfpost a.title');
+    check('the title no longer points at Reddit\'s own media viewer',
+      !/reddit\.com\/media/.test(title?.getAttribute('href') || ''), title?.getAttribute('href'));
+    check('...it points at the picture', /gooddog-1080\.jpg$/.test(title?.getAttribute('href') || ''),
+      title?.getAttribute('href'));
+    // Control: the fixture really is serving the viewer URL, so the two checks above are
+    // testing a substitution rather than agreeing with a fixture that never had the problem.
+    check('control: the source post really does carry a /media content-href',
+      /reddit\.com\/media/.test(
+        doc.querySelector('shreddit-post')?.getAttribute('content-href') || ''));
+
+    /* A content-href that is ALREADY a direct file must be left exactly as it was. The
+       substitution is narrow on purpose — it fires only for a link back into reddit.com. */
+    const { doc: linkDoc } = await boot(commentsPage(),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    check('a link post\'s outbound href is untouched',
+      /fashiontimes\.co\.uk/.test(
+        linkDoc.querySelector('.shd-selfpost a.title')?.getAttribute('href') || ''),
+      linkDoc.querySelector('.shd-selfpost a.title')?.getAttribute('href'));
+    check('...and a post with no picture grows no image box',
+      !linkDoc.querySelector('.shd-image'));
+  }
+
+  /* The gate that exists because rendering our own <img> walks straight past the blur
+     Reddit applies to adult thumbnails for logged-out readers (bug 41). An inline
+     full-size copy is that identical bypass, larger, so it has to ask the same question —
+     and this is the assertion that would have caught shipping it without one. */
+  console.log('\n\x1b[1mAN ADULT IMAGE POST IS NOT QUIETLY ENLARGED\x1b[0m');
+  {
+    const { doc } = await boot(commentsPage({ nsfwPost: true }),
+      'https://www.reddit.com/r/UkraineWarVideoReport/comments/nsfw1/footage/');
+    check('no inline picture for an adult post at the default setting',
+      !doc.querySelector('.shd-selfpost .shd-image'));
+    // ...and the gate costs the PICTURE, not the post. A blank comments page would be a
+    // worse failure than the one being prevented.
+    check('...but the submission itself still renders',
+      !!doc.querySelector('.shd-selfpost a.title'));
+    check('...and it is still stamped adult, which is what labels it',
+      !!doc.querySelector('.shd-selfpost .nsfw-stamp'));
+    // Control: the picture is genuinely resolvable, so its absence is the gate and not a
+    // fixture that simply has no image in it.
+    check('control: the post really is carrying an image the model can see',
+      [...doc.querySelectorAll('shreddit-post img')]
+        .some(i => /i\.redd\.it/.test(i.getAttribute('src') || '')));
+  }
+
+  /* Old reddit's expando, the other half of the report: an image row navigated away
+     instead of opening in place. */
+  console.log('\n\x1b[1mLISTING — THE IMAGE EXPANDO\x1b[0m');
+  {
+    const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/', noAuto);
+    const row = (id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"]`);
+    const imgRow = row('t3_image1');
+    const btn = imgRow?.querySelector('.expando-button');
+    const box = imgRow?.querySelector('.expando');
+
+    check('an image row gets an expando control', !!btn);
+    check('...and a box to open, hidden to begin with', !!box && box.hasAttribute('hidden'));
+    /* Lazily attached, and this is the point of the control rather than a detail: a
+       listing is dozens of rows, and building every <img> up front would fetch every
+       full-size picture on the page for rows nobody opened. */
+    check('...carrying no <img> until it is opened', !box?.querySelector('img'));
+
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    check('clicking it reveals the box', !box.hasAttribute('hidden'));
+    check('...and attaches the picture at full resolution',
+      /gooddog-1080\.jpg$/.test(box.querySelector('img')?.getAttribute('src') || ''),
+      box.querySelector('img')?.getAttribute('src'));
+    check('...and the control says it is open',
+      btn.classList.contains('expanded') && btn.getAttribute('aria-expanded') === 'true');
+
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    check('clicking again closes it', box.hasAttribute('hidden') &&
+      btn.getAttribute('aria-expanded') === 'false');
+    check('...without discarding the picture it already fetched', !!box.querySelector('img'));
+    /* And exactly one of it. Appending on every toggle instead of on first open leaves a
+       stack of identical pictures that only shows up as a row growing each time it is
+       reopened — found by a mutation that survived because nothing counted them. */
+    check('...and without stacking a second copy behind it',
+      box.querySelectorAll('img').length === 1, `${box.querySelectorAll('img').length} imgs`);
+
+    /* A row with nothing to open must not grow a control that does nothing — a control
+       that ignores a click is worse than no control (bug 62). */
+    check('a text post gets no expando control', !row('t3_text1')?.querySelector('.expando-button'));
+    check('a link post gets no expando control', !row('t3_link1')?.querySelector('.expando-button'));
+    check('an adult row gets none either, at the default setting',
+      !row('t3_nsfw1')?.querySelector('.expando-button'));
+  }
+
   /* One report diagnosed its broken page as "one unbuildable post zeroes
      out the whole thread". The architecture makes that impossible — every element is
      consumed independently — but nothing ASSERTED it, and the report's fix list was built

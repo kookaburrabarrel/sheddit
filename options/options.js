@@ -4,7 +4,7 @@
 const DEFAULTS = {
   listing: true, comments: true, chrome: true, profiles: true,
   compactRows: true, showThumbnails: true, showNsfwThumbnails: false, autoPaginate: true,
-  inlineVideo: true,
+  inlineVideo: true, inlineImages: true,
   theme: 'classic'
 };
 

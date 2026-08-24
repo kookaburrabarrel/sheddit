@@ -275,6 +275,26 @@ SHD.comments = (() => {
    * extension broke their sound. Hence the note, which is rendered from what the resolver
    * states rather than from an assumption about the URL.
    */
+  /**
+   * The post's own picture, on its comments page, where old reddit put the open expando.
+   *
+   * The adult-content gate is not optional here, and it is the same one the thumbnail
+   * carries. The reason that gate exists is that this extension reads the image URL off
+   * the post and renders its own <img>, which walks straight past the blur Reddit applies
+   * for logged-out readers (bug 41) — and a full-size inline copy is that identical bypass,
+   * only larger. Anything that draws a picture must ask the same question.
+   */
+  function postImage(m) {
+    if (m.type !== 'image' || !m.image) return null;
+    if (!SHD.settings.inlineImages) return null;
+    if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;
+    // Wrapped in a link to the file itself, so "see it full size" costs one click and
+    // lands on the picture rather than on Reddit's viewer.
+    return h('div.shd-image', null,
+      h('a', { href: m.image, rel: 'noopener' },
+        h('img.shd-image-el', { src: m.image, alt: '', loading: 'lazy' })));
+  }
+
   function videoPlayer(m) {
     if (m.type !== 'video' || !SHD.settings.inlineVideo) return null;
 
@@ -376,6 +396,14 @@ SHD.comments = (() => {
     let player = null;
     try { player = videoPlayer(m); } catch { player = null; }
     if (player) row.querySelector('.entry').appendChild(player);
+    /* An image post got the same treatment a text post got in bug 49 and a video post got
+       in 0.16.0, and for the same underlying reason: the picture is not an attribute, so
+       nothing read it. Reported as a comments page showing a title, a 70px thumbnail and
+       nothing else. Guarded exactly like the player — an enhancement must never be able to
+       take the row it decorates down with it. */
+    let picture = null;
+    try { picture = postImage(m); } catch { picture = null; }
+    if (picture) row.querySelector('.entry').appendChild(picture);
     // The post's own text, expanded — old reddit shows the selftext open on the comments
     // page, and this extension shipped without it: the row builder reads attributes, the
     // text is not an attribute (it is slotted light DOM, C.POST_BODY), and no fixture

@@ -447,6 +447,45 @@ html.shd-active body {
 /* The inline player for a video post (comments page only — see comments.js videoPlayer).
    `display:block` because a <video> is inline by default and would sit on a text baseline,
    leaving a few px of phantom descender under the box. */
+/* The post's own picture on its comments page, in the slot old reddit gave the open
+   expando. Bounded by the same width the player uses, so a portrait phone photo cannot
+   push the column to the height of the screen, and `height: auto` keeps its aspect. */
+.shd-selfpost .shd-image { margin: 5px 0; max-width: var(--shd-video-max); }
+.shd-selfpost .shd-image-el {
+  display: block;          /* an <img> is inline: without this it sits on a text baseline */
+  width: auto;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Old reddit's expando control and the box it opens, on a listing row.
+   The button is a small square in front of the entry, matching the thumbnail's rhythm; the
+   box spans the row beneath the buttons. `flow-root` because the thumbnail beside it is a
+   float and an expanded picture must not wrap around it (bug 4's rule, one element on). */
+.expando-button {
+  float: left;
+  width: 23px;
+  height: 23px;
+  margin: 2px 5px 0 0;
+  cursor: pointer;
+  border: 1px solid var(--shd-thumb-border);
+  background: var(--shd-thumb-bg);
+  color: var(--shd-meta);
+  font: bold 15px/21px monospace;
+  text-align: center;
+  user-select: none;
+}
+.expando-button::before { content: '+'; }
+.expando-button.expanded::before { content: '\2212'; }   /* a real minus, not a hyphen */
+.expando-button:hover { border-color: var(--shd-accent); color: var(--shd-accent); }
+.expando {
+  display: flow-root;
+  clear: both;
+  margin: 5px 0 0;
+  max-width: var(--shd-video-max);
+}
+.shd-expando-img { display: block; width: auto; max-width: 100%; height: auto; }
+
 .shd-selfpost .shd-video { margin: 5px 0; max-width: var(--shd-video-max); }
 .shd-selfpost .shd-video-el {
   display: block;

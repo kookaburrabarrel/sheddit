@@ -168,10 +168,14 @@ function serveFixtures() {
     // does NOT remove itself when driven. A paginator that re-queries its selector picks the
     // same one for ever, so this is the fixture that can tell a working advance from a spin.
     const wantsBranches = /branches/.test(pathname);
+    // An image submission, for the browser suites: the picture's box is layout, and layout
+    // is the one thing jsdom cannot answer for.
+    const wantsImage = /\/image1\//.test(pathname);
     let body = /\/comments\//.test(pathname)
       // A thread that ships a slice and lazy-loads the rest, which is what a real one does.
       ? commentsPage(wantsBranches ? { deliver: COMMENT_SLICE, branchPager: true }
-        : wantsPager ? { deliver: COMMENT_SLICE, pager: true } : {})
+        : wantsImage ? { imagePost: true }
+          : wantsPager ? { deliver: COMMENT_SLICE, pager: true } : {})
       : listingPage({ pager: wantsPager });
     // /r/spa/ is a listing whose page-world script does what Reddit's router does: it
     // intercepts sort-tab navigations via the real Navigation API — reporting
@@ -437,6 +441,7 @@ const PATHS = {
   listing: '/',
   subreddit: '/r/programming/',
   comments: '/r/programming/comments/link1/nasa/',
+  imageComments: '/r/aww/comments/image1/a_very_good_dog/',   // an image submission
   broken: '/r/broken/',         // posts missing a required attribute -> real render failure
   pager: '/r/pager/',           // faceplate-partial with a working loadContent()
   spa: '/r/spa/',               // page-world router intercepts sort navs like live Reddit

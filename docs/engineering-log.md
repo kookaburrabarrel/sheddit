@@ -973,6 +973,49 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     measurement cache gets no row at all, deliberately — it is a cost change with no
     behavioural consequence, so a row for it would survive and read as a hole.
 
+79. **An image post never showed its image.** Reported twice in one round: an image post's
+    comments page rendered a title, a 70px thumbnail and nothing else, and clicking that
+    thumbnail left the layout entirely for Reddit's own `/media` viewer — a page this
+    extension does not render. One gap with two faces, and it is the third instance of the
+    same root cause: **post CONTENT is not an attribute.** Bug 49 found it for a text
+    post's body, 0.16.0 found it for a video's rendition, and images were the member of
+    that set that had no handling at all — `consumePost()` built the row, then a player,
+    then the selftext, and there was simply no branch for a picture.
+    The picture is resolved the way the body is: out of the light DOM, scoped with
+    `closest(POST) === el` so a crosspost cannot lend us its parent's image (bug 25's
+    lesson, applied before a reshuffle rather than after one), through the same host
+    allowlist the thumbnail uses, because a loose match turns every community icon and
+    flair emoji into a picture (bug 1). Where an `<img>` offers a responsive set, the `w`
+    descriptors are ranked and the widest wins — the fixture lists 320, **1080**, 640 in
+    that order precisely so that taking the first or the last is a visible failure rather
+    than a coin flip that happens to land right, which is the trap the video rendition rank
+    fell into twice.
+    The link is substituted **narrowly**: only when the post is an image, a picture
+    resolved, AND `content-href` points back into reddit.com. A content-href that is
+    already a direct file is left exactly as it was, and every miss falls back to what
+    shipped before — so a wrong guess costs the picture and never the post.
+    On listing rows the answer is old reddit's expando, and it is lazy on purpose: a
+    listing is dozens of rows, and building every `<img>` at render time fetches every
+    full-size picture on the page for rows nobody opened. **Two properties, two rows**, and
+    the second only exists because a mutation survived: nothing counted the images, so
+    appending on every toggle instead of on first open left a stack of identical pictures
+    that showed up only as a row growing each time it was reopened.
+    **The adult-content gate is duplicated deliberately.** Both new surfaces draw a picture
+    and both ask `showNsfwThumbnails`, because rendering our own `<img>` is exactly what
+    walks past the blur Reddit applies for logged-out readers (bug 41) and a full-size
+    inline copy is that same bypass, enlarged. The two call sites get **separate** mutation
+    rows: they cover different pages, so removing one would leave the other looking covered.
+    Two things this could not settle from a fixture, and why `verify:live` gained an IMAGE
+    POSTS section: the `/media` content-href is inferred from what clicking did rather than
+    from a capture, and nobody has recorded where a live comments page keeps the full-size
+    file. Both are reported by that section rather than asserted here.
+    A testing note worth keeping: the geometry suite aborts subresources to stay offline,
+    which leaves an `<img>` with no intrinsic size — so every "does the picture fit inside
+    the row" assertion would have passed on a 0×0 box. That is a vacuous green reading as
+    coverage of exactly the overflow the section exists to catch. It generates a real PNG
+    in-process instead, still offline, and the row-growth assertion is what proves the
+    image is actually there.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

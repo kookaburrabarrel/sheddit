@@ -154,18 +154,39 @@ SHD.model = (() => {
        instead of the whole post. See open question 9. */
     const videoUrl = type === 'video' ? mp4Of(el) : null;
 
+    /* The post's own picture, at the best resolution the page is offering.
+       Reported: an image post's comments page rendered a title and a 70px thumbnail and
+       nothing else, and clicking the thumbnail left the layout for Reddit's own /media
+       viewer. Two consequences of the same gap — the picture is not an attribute, so
+       nothing read it. It is in the light DOM, exactly like a text post's body, and it is
+       resolved the same way (bug 49). */
+    const imageUrl = type === 'image' ? imageOf(el) : null;
+
     return {
       kind: 'post',
       id,
       title,
       permalink,
       /* Self posts point at the comments page; link posts point outward — and a video
-         post counts as neither, because its outbound URL is a redirect back here. */
-      href: (isSelf || type === 'video') ? permalink : (contentHref || permalink),
+         post counts as neither, because its outbound URL is a redirect back here.
+         An image post is a fourth case: its content-href can be Reddit's own /media
+         viewer, a page this extension does not render, so a reader who clicks the
+         thumbnail is dropped out of the layout. Where the picture itself is visible, that
+         is the better destination. Deliberately narrow — the substitution happens ONLY
+         when the link points back into reddit.com AND a picture was resolved, so a
+         content-href that is already a direct image URL is left exactly as it was, and a
+         miss falls back untouched. */
+      href: (isSelf || type === 'video') ? permalink
+        : (type === 'image' && imageUrl && pointsAtReddit(contentHref)) ? imageUrl
+          : (contentHref || permalink),
       /* The watchable rendition, when Reddit has one and has hydrated it. Null is
          ordinary — the player carries the JSON late, or (increasingly) not at all — and
          listing.js re-resolves at click time for exactly that reason. */
       mp4: videoUrl,
+      /* The full-size picture, when the page is carrying one. Null is ordinary: a
+         thumbnail-only row on a listing has nothing bigger to find, and every consumer
+         treats null as "no picture" rather than as an error. */
+      image: imageUrl,
       /* The bare `v.redd.it/<id>` URL, kept because it is the asset IDENTIFIER even though
          it is useless as a link (it 302s a logged-out reader back to the comments page).
          media.js turns it into a manifest URL; nothing else should make it an href. */
@@ -231,6 +252,64 @@ SHD.model = (() => {
       return img.currentSrc || img.src;
     }
     return null;
+  }
+
+  /**
+   * Every URL an <img> offers, with the width it claims.
+   *
+   * srcset is where a full-size version lives when there is one: Reddit serves a
+   * responsive set and `src` is usually the small member of it. A `w` descriptor states
+   * the width outright; anything else — a bare URL, an `x` descriptor — scores zero, so a
+   * set whose sizes cannot be read never outranks one whose sizes can.
+   */
+  function imageCandidates(img) {
+    const out = [];
+    for (const part of (img.getAttribute('srcset') || '').split(',')) {
+      const bits = part.trim().split(/\s+/);
+      if (!bits[0]) continue;
+      const w = /^(\d+)w$/.exec(bits[1] || '');
+      out.push({ url: bits[0], w: w ? parseInt(w[1], 10) : 0 });
+    }
+    const plain = img.currentSrc || img.src;
+    if (plain) out.push({ url: plain, w: 0 });
+    return out;
+  }
+
+  /**
+   * The largest picture this post is carrying, or null.
+   *
+   * The same host allowlist and ancestor exclusion as the thumbnail, for the same reason:
+   * a loose match turned every community icon and flair emoji into a picture (bug 1). And
+   * scoped to THIS post with closest(), because a post's subtree can contain another
+   * post's markup — the lesson from the comment-body lookup (bug 25), applied before a
+   * reshuffle rather than after one.
+   *
+   * Null is the ordinary answer on a listing row, where the only image IS the thumbnail.
+   */
+  function imageOf(el) {
+    let best = null, bestW = -1;
+    for (const img of el.querySelectorAll('img')) {
+      if (img.closest(C.POST) !== el) continue;
+      if (img.closest(C.THUMB_EXCLUDE)) continue;
+      for (const c of imageCandidates(img)) {
+        const host = (c.url || '').split('/')[2] || '';
+        if (!C.THUMB_HOSTS.test(host)) continue;
+        if (c.w > bestW) { bestW = c.w; best = c.url; }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Does this URL lead back into Reddit rather than to something we can show?
+   *
+   * A relative path counts, because it is same-origin by definition. Reddit's media hosts
+   * (i.redd.it, preview.redd.it) deliberately do NOT, since those are the files themselves.
+   */
+  function pointsAtReddit(url) {
+    if (!url) return false;
+    const host = /^https?:\/\//i.test(url) ? (url.split('/')[2] || '') : '';
+    return !host || /(^|\.)reddit\.com$/i.test(host);
   }
 
   /** @returns {object|null} */

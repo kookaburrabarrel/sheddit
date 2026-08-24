@@ -1248,6 +1248,55 @@ mutate "scrolling stops counting as a reason to keep loading" run \
   src/core/paginator.js "    interacted = true;
     if (!sentinel) return;" "    if (!sentinel) return;"
 
+# An image post's comments page showed a title, a 70px thumbnail and nothing else, and the
+# thumbnail navigated out of the layout into Reddit's own /media viewer. Two halves of one
+# gap: the picture is not an attribute, so nothing read it.
+mutate "an image submission loses its picture again" run \
+  src/modules/comments.js "    try { picture = postImage(m); } catch { picture = null; }" \
+                          "    try { picture = null; } catch { picture = null; }"
+
+# The responsive set lists 320, 1080, 640. Taking the first is the same mistake the video
+# rendition rank made: it scores every candidate zero and the stable sort hands back
+# whichever Reddit happened to list first, which is the SMALLEST.
+mutate "the largest rendition stops winning, and the first one does" run \
+  src/core/model.js "        if (c.w > bestW) { bestW = c.w; best = c.url; }" \
+                    "        if (bestW < 0) { bestW = c.w; best = c.url; }"
+
+mutate "the thumbnail points back at Reddit's media viewer again" run \
+  src/core/model.js "        : (type === 'image' && imageUrl && pointsAtReddit(contentHref)) ? imageUrl" \
+                    "        : false ? imageUrl"
+
+# The adult-content gate, on BOTH surfaces that draw a picture. Separate rows on purpose:
+# they are different call sites covering different pages, so removing one leaves the other
+# looking covered. This is bug 41's family — rendering our own <img> is what walks past the
+# blur Reddit applies for logged-out readers, and a full-size copy is that bypass enlarged.
+mutate "an adult post is enlarged on its comments page" run \
+  src/modules/comments.js "    if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;" \
+                          "    if (false) return null;"
+
+mutate "an adult row gets an expando that opens the picture" run \
+  src/modules/listing.js "    if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;" \
+                         "    if (false) return null;"
+
+# Building the <img> at render time instead of on first open. A listing is dozens of rows,
+# so this fetches every full-size picture on the page for rows nobody opened — the exact
+# cost old reddit's expando exists to avoid, and invisible on screen.
+mutate "every row fetches its full-size picture up front" run \
+  src/modules/listing.js "    return h('div.expando', { hidden: true, dataset: { shdSrc: m.image } });" \
+                         "    return h('div.expando', { hidden: true, dataset: { shdSrc: m.image } }, h('img.shd-expando-img', { src: m.image, alt: '' }));"
+
+# The other half, and it needs its own row: appending on every toggle rather than on first
+# open leaves a stack of identical pictures. Nothing counted them until a mutation survived.
+mutate "reopening an expando stacks another copy of the picture" run \
+  src/modules/listing.js "      if (opening && !box.firstChild) {" \
+                         "      if (true) {"
+
+# The cap. A picture arrives at whatever size Reddit stored it at, so without this a wide
+# photo widens the column and pushes the document sideways. Only geometry can see it.
+mutate "the comments-page picture loses its width cap" geometry \
+  src/styles/old-reddit.css ".shd-selfpost .shd-image { margin: 5px 0; max-width: var(--shd-video-max); }" \
+                            ".shd-selfpost .shd-image { margin: 5px 0; }"
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it

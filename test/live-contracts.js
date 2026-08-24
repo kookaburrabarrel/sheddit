@@ -307,6 +307,70 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
       'attribute present but no mp4 found — the JSON shape needs a look, paste one raw value');
   }
 
+  /* ---------------- image posts: the two halves of a reported gap ---------------- */
+  console.log('\n\x1b[1mLIVE CONTRACTS — IMAGE POSTS\x1b[0m');
+  /* Reported, not captured: an image post's comments page showed a title and a 70px
+     thumbnail and nothing else, and clicking the thumbnail left the layout for Reddit's
+     own /media viewer. The fix reads the picture out of the light DOM and substitutes it
+     for a content-href that points back into reddit.com — but BOTH of those are inferred
+     from what clicking did, so this section is what turns them into measurements.
+
+     What the output should settle:
+       - is content-href on an image post really a reddit.com/media URL, or something else?
+       - does the post carry a responsive set, and does it state widths we can rank on?
+       - is the biggest candidate meaningfully bigger than the thumbnail, i.e. is there a
+         full-size file here at all, or only ever the small one? */
+  const images = await page.evaluate((C) => {
+    const posts = [...document.querySelectorAll(C.POST)]
+      .filter(p => p.getAttribute(C.POST_ATTR.type) === 'image');
+    const hostOf = (u) => { try { return new URL(u, location.href).host; } catch { return ''; } };
+    return {
+      count: posts.length,
+      hrefHosts: [...new Set(posts.map(p => hostOf(p.getAttribute(C.POST_ATTR.contentHref))))],
+      viewerHrefs: posts.filter(p =>
+        /(^|\.)reddit\.com$/i.test(hostOf(p.getAttribute(C.POST_ATTR.contentHref)))).length,
+      withSrcset: posts.filter(p =>
+        [...p.querySelectorAll('img')].some(i => (i.getAttribute('srcset') || '').trim())).length,
+      // Widest `w` descriptor anywhere in the post, against the plain src, so the two can
+      // be compared: if they match there is no larger file to find here.
+      samples: posts.slice(0, 3).map(p => {
+        const set = [...p.querySelectorAll('img')]
+          .flatMap(i => (i.getAttribute('srcset') || '').split(',')
+            .map(s => s.trim().split(/\s+/))
+            .filter(b => b[0])
+            .map(b => ({ url: b[0], w: /^(\d+)w$/.test(b[1] || '') ? parseInt(b[1], 10) : 0 })));
+        const widest = set.sort((a, b) => b.w - a.w)[0] || null;
+        return {
+          contentHref: (p.getAttribute(C.POST_ATTR.contentHref) || '').slice(0, 110),
+          candidates: set.length,
+          widest: widest && { w: widest.w, url: widest.url.slice(0, 90) },
+          plainSrc: ([...p.querySelectorAll('img')]
+            .map(i => i.currentSrc || i.src).find(u => /redd\.it/.test(u)) || '').slice(0, 90)
+        };
+      })
+    };
+  }, C);
+  if (images.count === 0) {
+    console.log('  \x1b[33mINCONCLUSIVE: no image posts on this page — rerun with ' +
+      '--sub=<an image-heavy subreddit> (r/aww, r/pics) before concluding anything. ' +
+      'A page with no image posts reports exactly what a wrong contract reports.\x1b[0m');
+  } else {
+    console.log('  content-href hosts seen: ' + images.hrefHosts.join(', '));
+    console.log('  samples: ' + JSON.stringify(images.samples, null, 2));
+    /* Not a pass/fail — it is a fork, and either answer is actionable. Pointing at the
+       viewer means the substitution is doing real work; pointing straight at the file
+       means the reported bounce has some other cause and model.post's narrow rule is
+       correctly leaving those posts alone. */
+    console.log(`  ${images.viewerHrefs}/${images.count} point back into reddit.com ` +
+      '(the /media viewer). 0 here means the substitution never fires live and the ' +
+      'reported bounce needs re-diagnosing.');
+    check(`image posts carry a responsive set to rank (${images.withSrcset}/${images.count})`,
+      images.withSrcset > 0,
+      'no srcset anywhere: the model falls back to the plain src, which is the thumbnail — ' +
+      'so the comments page would show a small picture rather than none. Paste a post\'s ' +
+      'img markup; the full-size URL is somewhere else.');
+  }
+
   /* ---------------- vote reachability: the question that matters ---------------- */
   console.log('\n\x1b[1mLIVE CONTRACTS — VOTE DELEGATION\x1b[0m');
   await page.evaluate(BUNDLE);                       // gives the page SHD.dom.deepQuery

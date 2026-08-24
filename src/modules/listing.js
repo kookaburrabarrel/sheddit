@@ -92,6 +92,61 @@ SHD.listing = (() => {
     return h('a.thumbnail.' + cls, { href: m.href, rel: 'noopener' });
   }
 
+  /**
+   * The container old reddit opens under a row, holding the post's own picture.
+   *
+   * Returns null unless there is genuinely something to show, which is what keeps the
+   * button and the box in step — see render().
+   *
+   * The adult-content gate is the thumbnail's, and it is not optional. This extension
+   * reads the image URL and renders its own <img>, walking past the blur Reddit applies
+   * for logged-out readers (bug 41); an expando is that same bypass behind one click, so
+   * it asks the same question the tile does.
+   */
+  function expandoBox(m) {
+    if (m.type !== 'image' || !m.image) return null;
+    if (!SHD.settings.inlineImages) return null;
+    if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;
+    // The URL rides on the box rather than being closed over, so the button can stay a
+    // pure function of the box and the two cannot disagree about which picture this is.
+    return h('div.expando', { hidden: true, dataset: { shdSrc: m.image } });
+  }
+
+  /**
+   * The [+]/[-] control in front of the row.
+   *
+   * The picture is attached on FIRST OPEN, never at render time. A listing is dozens of
+   * rows and the whole point of a thumbnail is that the full image has not been fetched —
+   * building the <img> up front would pull every full-size picture on the page for rows
+   * nobody opened, which is the cost old reddit's expando exists to avoid.
+   */
+  function expandoButton(box) {
+    if (!box) return null;
+    const btn = h('div.expando-button.collapsed', {
+      role: 'button', tabindex: '0', 'aria-expanded': 'false', 'aria-label': 'expand image'
+    });
+    const toggle = () => {
+      const opening = box.hasAttribute('hidden');
+      if (opening && !box.firstChild) {
+        box.appendChild(h('img.shd-expando-img', {
+          src: box.dataset.shdSrc, alt: '', loading: 'lazy'
+        }));
+      }
+      if (opening) box.removeAttribute('hidden'); else box.setAttribute('hidden', '');
+      btn.classList.toggle('collapsed', !opening);
+      btn.classList.toggle('expanded', opening);
+      btn.setAttribute('aria-expanded', String(opening));
+      btn.setAttribute('aria-label', opening ? 'collapse image' : 'expand image');
+    };
+    btn.addEventListener('click', toggle);
+    // Keyboard parity: this is a div playing the part of a button, so it has to answer to
+    // the keys a real one would.
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+    return btn;
+  }
+
   function tagline(m) {
     return h('p.tagline', null, [
       'submitted ',
@@ -154,6 +209,11 @@ SHD.listing = (() => {
        wrong anyway: comment rows sit between the posts, so the visible sequence would
        skip. */
     const onProfile = SHD.route.current === SHD.route.PROFILE;
+    /* Old reddit's expando: the picture opens under the row instead of navigating away.
+       Both halves are null together for a row with nothing to open, so a row never grows a
+       control that does nothing — a control that ignores a click is worse than no control
+       (bug 62), and that is as true before a report as after one. */
+    const box = expandoBox(m);
     return h('div.thing.link', {
       dataset: { fullname: m.id, type: m.type, subreddit: m.subreddit },
       class: (m.isSelf ? 'self' : 'linkpost') + (SHD.settings.compactRows ? ' compact' : '')
@@ -161,6 +221,7 @@ SHD.listing = (() => {
       onProfile ? null : h('span.rank', { text: String(rank) }),
       midcol(m),
       thumb(m),
+      expandoButton(box),
       h('div.entry', null, [
         h('p.title', null, [
           /* A video post's title is its comments page (model.js says why); the mp4 is a
@@ -176,7 +237,8 @@ SHD.listing = (() => {
           m.domain ? h('span.domain', null, ['(', h('a', { href: m.isSelf ? `/r/${m.subreddit}/` : `//${domain(m.domain)}`, text: domain(m.domain) }), ')']) : null
         ]),
         tagline(m),
-        buttons(m)
+        buttons(m),
+        box
       ])
     ]);
   }

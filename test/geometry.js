@@ -39,16 +39,62 @@ const WIDTHS = [360, 480, 500, 640, 768, 900, 1024, 1100, 1280, 1440, 1920];
 const { check, report } = makeChecker();
 const r1 = (n) => Math.round(n * 10) / 10;
 
+/**
+ * A solid-colour PNG of given size, built here so image tests have a picture with a real
+ * INTRINSIC size without committing a binary or touching the network.
+ *
+ * Aborting image requests — which this suite does, to stay offline — leaves an <img> with
+ * no intrinsic dimensions, and every "does the picture fit inside the row" assertion then
+ * passes on a zero-sized box. That is a vacuous green, which is worse than no assertion:
+ * it reads as coverage of exactly the overflow this section exists to catch.
+ */
+function png(width, height) {
+  const zlib = require('zlib');
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body) >>> 0);
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; ihdr[9] = 2;                       // 8-bit, truecolour RGB
+  // One filter byte per scanline, then 3 bytes per pixel.
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x80)]);
+  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))
+  ]);
+}
+function crc32(buf) {
+  let c = ~0;
+  for (const b of buf) {
+    c ^= b;
+    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+  }
+  return ~c;
+}
+const TEST_PNG = png(1000, 750);
+
 /** Load a fixture over a real URL, run the bundle on it, wait for our layout to exist. */
-async function open(browser, origin, urlPath, waitFor, viewport) {
+async function open(browser, origin, urlPath, waitFor, viewport, { images = false } = {}) {
   const page = await browser.newPage();
   // Settable before the bundle runs, because the paginator measures the page against the
   // viewport the moment it attaches — resizing afterwards would be measuring the wrong one.
   await page.setViewport(viewport || { width: 1280, height: 900 });
   // Fixture image URLs point at real Reddit hosts. Nothing here should touch the network:
-  // block subresources so the run is offline and deterministic.
+  // block subresources so the run is offline and deterministic. Sections that measure a
+  // picture opt in to a locally generated one instead — still offline, but with a real
+  // intrinsic size, without which their assertions would measure a 0x0 box.
   await page.setRequestInterception(true);
-  page.on('request', (req) => (req.isNavigationRequest() ? req.continue() : req.abort()));
+  page.on('request', (req) => {
+    if (req.isNavigationRequest()) return req.continue();
+    if (images && req.resourceType() === 'image') {
+      return req.respond({ status: 200, contentType: 'image/png', body: TEST_PNG });
+    }
+    return req.abort();
+  });
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(String(e)));
   await page.goto(origin + urlPath, { waitUntil: 'domcontentloaded' });
@@ -712,6 +758,97 @@ const overlaps = (a, b) =>
 
     check('no page errors during theme switching', pageErrors.length === 0, pageErrors.join(' | '));
     await page.close();
+  }
+
+  /* ================================================================== *
+   * IMAGES
+   * ================================================================== */
+  console.log('\n\x1b[1mLAYOUT GEOMETRY — IMAGES\x1b[0m');
+  {
+    /* A picture is the one thing in this layout whose size the page does not control: the
+       file arrives at whatever dimensions Reddit stored it at, and a 4000px-wide photo will
+       widen the column, overflow the row and push the whole document sideways unless it is
+       capped. jsdom cannot see any of that. */
+    const { page, pageErrors } = await open(browser, origin, PATHS.imageComments,
+      '#shd-root .shd-selfpost', undefined, { images: true });
+    await page.evaluate(() => Promise.all(
+      [...document.images].map(i => i.complete ? null : new Promise(r => {
+        i.addEventListener('load', r); i.addEventListener('error', r);
+      }))));
+
+    const box = await page.$eval('.shd-selfpost .shd-image img',
+      n => { const r = n.getBoundingClientRect(); return { w: r.width, right: r.right }; });
+    const cap = await page.evaluate(() => parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--shd-video-max')));
+    check('the comments-page picture is capped at the expando width',
+      box.w > 0 && box.w <= cap + 1, `${Math.round(box.w)}px against a ${cap}px cap`);
+
+    const doc = await page.evaluate(() => ({
+      scrollW: document.documentElement.scrollWidth,
+      clientW: document.documentElement.clientWidth
+    }));
+    check('...and the page does not scroll sideways because of it',
+      doc.scrollW <= doc.clientW + 1, JSON.stringify(doc));
+
+    // Narrow: the cap is a ceiling, not a width. A phone-width window must shrink it
+    // rather than keep 640px and overflow.
+    await page.setViewport({ width: 360, height: 900 });
+    const narrow = await page.evaluate(() => ({
+      img: document.querySelector('.shd-selfpost .shd-image img').getBoundingClientRect().width,
+      scrollW: document.documentElement.scrollWidth,
+      clientW: document.documentElement.clientWidth
+    }));
+    check('at 360px the picture shrinks to fit instead of overflowing',
+      narrow.img <= narrow.clientW && narrow.scrollW <= narrow.clientW + 1,
+      JSON.stringify(narrow));
+    check('no page errors on an image submission', pageErrors.length === 0,
+      pageErrors.join(' | '));
+    await page.close();
+
+    /* The expando on a listing row. Two floats now sit in front of the entry — the
+       thumbnail and the control — and an opened picture must clear both rather than
+       wrapping around them (bug 4's rule, one element on). */
+    const listing = await open(browser, origin, PATHS.listing, '#shd-root .thing.link',
+      undefined, { images: true });
+    const sel = '.thing[data-fullname="t3_image1"]';
+    const before = await listing.page.$eval(sel, n => n.getBoundingClientRect().height);
+    const rects = await listing.page.$eval(sel, n => {
+      const t = n.querySelector('.thumbnail')?.getBoundingClientRect();
+      const b = n.querySelector('.expando-button').getBoundingClientRect();
+      return { t: t && { l: t.left, r: t.right }, b: { l: b.left, r: b.right, w: b.width } };
+    });
+    check('the expando control has a real box', rects.b.w > 0, JSON.stringify(rects.b));
+    check('...and does not sit on top of the thumbnail',
+      !rects.t || rects.b.l >= rects.t.r || rects.b.r <= rects.t.l,
+      JSON.stringify(rects));
+
+    await listing.page.click(`${sel} .expando-button`);
+    await listing.page.evaluate((s) => {
+      const i = document.querySelector(`${s} .expando img`);
+      return i && !i.complete
+        ? new Promise(r => { i.addEventListener('load', r); i.addEventListener('error', r); })
+        : null;
+    }, sel);
+    const after = await listing.page.evaluate((s) => {
+      const row = document.querySelector(s);
+      const img = row.querySelector('.expando img');
+      return {
+        rowH: row.getBoundingClientRect().height,
+        imgRight: img ? img.getBoundingClientRect().right : null,
+        rowRight: row.getBoundingClientRect().right,
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth
+      };
+    }, sel);
+    check('opening the expando grows the row', after.rowH > before,
+      `${Math.round(before)} -> ${Math.round(after.rowH)}`);
+    check('...with the picture inside the row, not spilling past it',
+      after.imgRight !== null && after.imgRight <= after.rowRight + 1, JSON.stringify(after));
+    check('...and still no sideways scroll',
+      after.scrollW <= after.clientW + 1, JSON.stringify(after));
+    check('no page errors from the expando', listing.pageErrors.length === 0,
+      listing.pageErrors.join(' | '));
+    await listing.page.close();
   }
 
   /* ================================================================== *
