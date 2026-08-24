@@ -583,6 +583,34 @@ giving up, and distinguishes a genuine challenge from "does not look like Reddit
 Reddit but empty after 30 s". A diagnostic that names a cause it did not observe is worse
 than one that says it does not know.
 
+## 7e. Live re-verification (real reddit.com, 2026-08-24)
+
+Run against `/r/programming/` and a 523-comment thread, logged out. Every listing,
+comment and profile contract passed — `POST_ATTR` on 27/27 posts, `COMMENT_ATTR` on
+25/25 comments, `depth` agreeing with the DOM 25/25, and `shreddit-profile-comment`
+readable 29/29 with the body at `.md` and every row able to name its community.
+
+**Settled: what driving a comment-tree partial actually does.** Five consecutive drives
+of the element the paginator would pick, measured individually: every driven partial
+**removed itself** (5/5), every drive delivered comments (10, 2, 1, 1, 2 — all nested
+under the host branch, none at depth zero), and repeated calls kept making progress
+rather than re-expanding one branch. The mechanism is **subthread expansion**, not
+next-page — one partial per truncated branch, consumed on use. `paginator.js`'s
+stamp-and-exclude approach was designed to be correct under either mechanism; it is now
+known to be running under this one.
+
+**Moved since 2026-08-14:** a live tree now carries partials with
+`loading="programmatic"` again (2 of 22 in-tree, beside 19 per-branch
+`loading="action"` expanders and 1 `lazy`), so `COMMENT_PARTIAL` matches real elements
+after a stretch of matching nothing. No behaviour change needed — the broader fallback
+clause was already driving the right elements — but the "matches nothing live" note in
+`contracts.js` dates from the earlier shape.
+
+**Unchanged:** the upvote control is still unreachable logged out (20 open shadow roots
+searched, nothing), which is the documented scope state rather than a failure — the
+verify script now reports it as a note instead of failing an otherwise-clean run over a
+settled decision.
+
 ---
 
 ## 8. Deliberate v1 scope
