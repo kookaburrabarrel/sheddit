@@ -34,20 +34,13 @@ The dashboard shows this as "Summary from package" and will not let you type int
 is `manifest.json`'s own `description`, read out of the uploaded zip:
 
 ```
-Re-renders modern Reddit into the old.reddit.com layout on the fly. No API calls, no login.
-```
-
-91 characters, against a 132 limit. Changing it means editing the manifest, bumping the
-version and re-uploading — not editing the listing. Worth knowing before you go looking
-for the field.
-
-If it is ever rewritten, this is the line to use — it buys the word "tracking", which is
-the thing a reader of an extension that rewrites a site they are logged into actually
-wants answered, and it still fits:
-
-```
 Renders modern Reddit in the classic old.reddit.com layout, locally in your browser. No API, no login, no tracking.
 ```
+
+115 characters, against a 132 limit. It leads with "locally" and closes on "no tracking"
+because that is the question a reader of an extension that rewrites a site they browse
+actually wants answered. Changing it means editing the manifest, bumping the version and
+re-uploading — not editing the listing. Worth knowing before you go looking for the field.
 
 ## Description — the empty box under the summary
 
@@ -59,11 +52,20 @@ the store indexes for search. Repeating ninety characters into a sixteen-thousan
 character box is the whole listing's worst trade.
 
 ```
-Sheddit re-renders modern Reddit into the old.reddit.com layout as you browse.
+Sheddit re-renders modern Reddit into the classic old.reddit.com layout as you browse —
+built for reading logged out, with nothing measuring you while you read.
 
-It works on the page you already loaded. There are no API calls, no login, no account,
-and no server in the middle — the extension reads the post and comment data modern
-Reddit has already put in the page and draws the old layout from it. If Sheddit cannot
+A modern feed is a feedback loop: it measures what you pause on, what you expand, what
+you come back to, builds a profile from those measurements, and arranges what you see
+next to keep the session going. That loop works best when you are logged in and every
+visit lands in one durable profile — which is why reading logged out keeps getting
+harder, from login prompts that cannot be dismissed to the classic site disappearing
+behind account requirements.
+
+Sheddit is built for the other direction. It takes the page Reddit already sent your
+browser and redraws it locally: no account, no login, no API calls, no server in the
+middle. What you read is the list Reddit serves to a stranger — ranked by votes, not by
+a profile of you — in the dense, readable layout old.reddit.com had. If Sheddit cannot
 render a page, it gets out of the way and leaves Reddit exactly as it was.
 
 WHAT YOU GET
@@ -72,22 +74,27 @@ WHAT YOU GET
   lines — the density that fits a screenful of posts instead of three.
 • The classic comment tree: threaded, collapsible, with the indentation lines that make
   a long argument readable.
+• Video posts that play on their comments page, sound included.
+• Image posts that show their image — full size on the comments page, and behind
+  old reddit's [+] expando on listing rows.
 • User profile pages in the same layout.
-• Continuous paging: the next page loads when you reach the bottom, driven by Reddit's
-  own loader rather than by requests of its own.
+• Paging that ends: the next page loads as you read, driven by Reddit's own loader, and
+  stops when the feed is spent instead of spinning to keep the session open.
 • Five themes — classic, slate, sepia, night and carbon — switchable from the header.
   Classic is old.reddit.com as it was: Verdana, blue links, square corners.
 • An options page for turning any of it off: listings, comments, profiles, thumbnails,
-  compact rows, auto-paging.
+  compact rows, auto-paging, inline video and images.
 
 PRIVACY
 
-Sheddit collects nothing and transmits nothing about you. It makes no API calls, has no
-analytics, and stores exactly one thing: your display preferences, in Chrome's own
-settings storage. It never sees your Reddit login or session. To play a video post it
-reads that video's manifest from Reddit's media server — a static file, no cookies, and
-switchable off in the options. The full policy is at
-https://github.com/kookaburrabarrel/sheddit/blob/main/PRIVACY.md
+For an extension whose point is reading without being profiled, privacy is the product,
+not the fine print. Sheddit collects nothing and transmits nothing about you. It makes
+no API calls, has no analytics, and stores exactly one thing: your display preferences,
+in Chrome's own settings storage. It never sees your Reddit login or session. To play a
+video post it reads that video's manifest from Reddit's media server — a static file,
+fetched without cookies, switchable off in the options — and the test suite counts those
+requests, so a change that quietly fetched more would fail the build. The full policy is
+at https://github.com/kookaburrabarrel/sheddit/blob/main/PRIVACY.md
 
 OPEN SOURCE
 
