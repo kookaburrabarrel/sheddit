@@ -161,6 +161,7 @@ sheddit/
 │   ├── run.js                  the bundle in jsdom
 │   ├── geometry.js             the bundle in Chromium — REAL layout boxes
 │   ├── extension.js            the PACKED extension in Chromium — manifest wiring
+│   ├── extension-firefox.js    the Firefox build in a real Firefox — Gecko's realm rules
 │   ├── media-sync.js           real media playback in Chromium — the audio pairing
 │   ├── live-contracts.js       re-verify contracts.js against real reddit.com
 │   └── mutate.sh               reintroduce shipped bugs, prove the suites catch them
@@ -299,6 +300,36 @@ as data, `contracts.js` remains the single point of breakage.
 
 If you need another Reddit-defined method later, extend the bridge. And do not let the dev
 harness tell you whether it works — only `test/extension.js` runs in the world the users get.
+
+The bridge carries a second protocol since 0.24.0: a **history relay**. `history` is a
+page-realm object too — Reddit's router calls the page's `pushState`, and a copy patched
+in the isolated realm is a copy nothing calls. That mistake shipped as route.js's
+no-navigation-API fallback and passed every one-world environment (jsdom, the dev
+bundle, DevTools) for the same reason pagination's did; Firefox is where it mattered,
+because Firefox ESR has no `navigation` API and its realm separation is strict
+(engineering log bug 82). The bridge patches `pushState`/`replaceState` in the page
+realm and dispatches `BRIDGE.navigated` after each commit; route.js re-reads `location`
+on the event. Primitive-only, like the load-more protocol, and asserted in step with
+`contracts.js` the same way.
+
+### 5.0b Firefox
+
+The same source runs on Firefox 128+ (the current ESR): `world: "MAIN"` in manifest
+content scripts is a Firefox 128 capability, which is what sets the floor. The Firefox
+manifest is **derived** — `firefoxManifest()` in `package-extension.js` adds the gecko
+block (id, `strict_min_version: "128.0"`, a data-collection declaration of `none`) and
+drops the Chrome-only version key; nothing else may differ, and a test asserts the
+content scripts come through the transform byte-identical. Measured while porting, in a
+real Firefox 154 via `test/extension-firefox.js`, on Linux and macOS both: the Xray
+boundary passes the whole
+bridge protocol, Gecko resolves the theme tie the same way Chromium does, promise-style
+`chrome.*` calls work, and — the ground having moved under the plan — current Firefox
+release ships the `navigation` API, so only the ESR line rides the relay alone (the
+suite prefs the API off to pin that configuration). Two Firefox-only behaviours worth
+remembering: MV3 host permissions are revocable there, which the options page's access
+warning exists for; and reddit.com sits on the HSTS preload list, which is a testing
+concern only (the suite prefs it off to reach the plain-http fixture server), never a
+production one.
 
 ### 5.1 Pagination and the "no API calls" constraint
 

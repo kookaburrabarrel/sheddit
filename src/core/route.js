@@ -2,7 +2,9 @@
  * route.js — classifies the current URL and fires change events.
  *
  * Reddit is a client-side-routed app and the `navigation` API is available on the page
- * (verified). We prefer it, and fall back to patching history for older Chrome.
+ * in Chrome (verified). We prefer it, and fall back to the bridge's history relay where
+ * it does not exist — Firefox's ESR line has no navigation API (measured: absent in ESR
+ * 128, present in release 154), so the relay is the only route signal there.
  *
  * THE TRAP IN THE NAVIGATION API — read before touching start().
  *
@@ -120,6 +122,24 @@ SHD.route = (() => {
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
   function start() {
+    /* The bridge's history relay — the only route-change signal a browser without the
+     * `navigation` API gets (Firefox ESR 128, the Firefox build floor, has none;
+     * current Firefox release does). Patching history OURSELVES
+     * here was the old fallback, and it is the classic realm mistake: a content
+     * script's `history` binding is its own world's, Reddit's router calls the page
+     * realm's, and under Firefox's realm separation the patch never fires — every SPA
+     * navigation went unseen and only popstate worked. bridge.js patches the realm
+     * Reddit actually calls and relays each commit as a bare event; by dispatch time
+     * location already holds the NEW url, and the dispatch is synchronous inside
+     * Reddit's own pushState call, so teardown still precedes the feed swap. Do not
+     * reintroduce a same-realm patch: it masks a dead relay in every one-world test
+     * environment while shipping broken. See docs/engineering-log.md bug 82.
+     *
+     * Registered even when the navigation API exists — emit() is idempotent per path,
+     * so on Chrome this is one more post-commit safety net, same role as
+     * navigatesuccess below. */
+    addEventListener(SHD.C.BRIDGE.navigated, () => emit(location.pathname));
+    addEventListener('popstate', () => emit(location.pathname));
     if (typeof navigation !== 'undefined' && navigation.addEventListener) {
       navigation.addEventListener('navigate', (e) => {
         // Deliberately NOT filtered on e.destination.sameDocument. Measured on live
@@ -145,21 +165,6 @@ SHD.route = (() => {
       // that reached the URL without a navigate event we understood. emit() is idempotent
       // per path, so this is free when the pre-commit emit already did the work.
       navigation.addEventListener('navigatesuccess', () => emit(location.pathname));
-      addEventListener('popstate', () => emit(location.pathname));
-    } else {
-      // This branch was always correct: orig.apply() updates the URL synchronously, so
-      // location.pathname is right by the time we read it. The microtask hop it used to
-      // have is gone — it was only ever load-bearing as a (failed) commit-wait in the
-      // branch above, and here there is nothing to wait for.
-      for (const m of ['pushState', 'replaceState']) {
-        const orig = history[m];
-        history[m] = function (...args) {
-          const r = orig.apply(this, args);
-          emit(location.pathname);
-          return r;
-        };
-      }
-      addEventListener('popstate', () => emit(location.pathname));
     }
     emit(location.pathname);
   }

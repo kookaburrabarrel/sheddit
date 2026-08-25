@@ -1,5 +1,6 @@
 node_modules/
 dist/*
 !dist/sheddit.zip
+!dist/sheddit-firefox.zip
 test/out.*.html
 .DS_Store

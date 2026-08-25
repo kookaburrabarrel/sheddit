@@ -1,7 +1,9 @@
-# Chrome Web Store listing — copy and answers
+# Store listings — copy and answers
 
-Everything the submission form asks for, written out so it can be pasted rather than
-improvised at 11pm in a text field with no undo. Field limits are the store's own.
+Everything the submission forms ask for, written out so it can be pasted rather than
+improvised at 11pm in a text field with no undo. Field limits are the stores' own.
+The Chrome Web Store listing is first; the addons.mozilla.org section is at the end and
+leans on this one, because the copy is deliberately shared.
 
 The upload itself comes from `npm run package`, which runs the full suite first and then
 writes `dist/sheddit.zip` from a fixed list — `manifest.json`, `icons/`, `src/`,
@@ -244,3 +246,54 @@ well as the front page answers more of what a visitor is deciding about.
   while one is still settling is rejected with "a previous visibility change is still in
   progress" — that is the lock, not a failure, and the first change has usually already
   taken effect.
+
+---
+
+# addons.mozilla.org (Firefox)
+
+The upload is `dist/sheddit-firefox.zip` from `npm run package` — same files as Chrome's
+zip, with the manifest derived by `firefoxManifest()` in `package-extension.js`. That
+transform already answers the AMO-specific manifest questions, so they are decisions
+made once in code rather than in a form:
+
+- **Add-on id**: `sheddit@kookaburrabarrel.github.io`, an identifier in AMO's email-like
+  format, not a mailbox. It is permanent — changing it after the first submission
+  orphans every installed copy.
+- **Minimum version**: Firefox 128.0. The `world: "MAIN"` content script (the bridge) is
+  a Firefox 128 capability, and 128 is the current ESR, so the floor costs no real users.
+- **Data collection**: declared in the manifest itself
+  (`data_collection_permissions: { required: ["none"] }`), which AMO requires of new
+  submissions and surfaces on the listing. "None" is the truthful answer and doubles as
+  a selling point: the manifest, not the marketing, is what attests it.
+
+## Copy
+
+The name, description and single-purpose text transplant from the Chrome sections above
+unchanged — AMO's description field takes the same text, and its **Summary** field
+(editable, unlike Chrome's) takes the manifest description line verbatim. Category:
+choose the closest to social/news reading AMO offers at submission time. The privacy
+policy URL is the same `PRIVACY.md` link.
+
+## Review notes
+
+Worth stating in the "notes to reviewer" box, because it makes the review short: the zip
+contains plain unminified source — no build step, no bundler, no generated code — so the
+uploaded files ARE the source and no source-code package accompanies the submission. The
+extension makes no API calls; its one request class is a GET of Reddit's static video
+manifest, discussed in PRIVACY.md.
+
+Pre-flight, before uploading:
+
+```bash
+npm run package
+mkdir -p /tmp/shd-ff && unzip -o dist/sheddit-firefox.zip -d /tmp/shd-ff
+npx web-ext lint -s /tmp/shd-ff       # AMO's own linter; warnings are worth reading
+```
+
+## What signing changes
+
+Until the listing exists, Firefox only accepts the zip as a *temporary* install
+(about:debugging, gone on restart) — the README says so. AMO review produces a signed
+build, which installs permanently; at that point the README's Firefox section should
+point at the AMO page and keep the zip link for people who prefer to sideload the
+reviewed source.

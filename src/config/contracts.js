@@ -112,7 +112,9 @@ SHD.C = {
     request: 'shd:load-more',       // window event, isolated world -> main world
     selKey: 'shdPartialSel',        // <html data-shd-partial-sel>   which element to call
     methodKey: 'shdPartialMethod',  // <html data-shd-partial-method> which method to call
-    resultKey: 'shdLoadMore'        // <html data-shd-load-more>      ok | no-partial | ...
+    resultKey: 'shdLoadMore',       // <html data-shd-load-more>      ok | no-partial | ...
+    navigated: 'shd:navigated'      // window event, main world -> isolated: a page-realm
+                                    // pushState/replaceState just committed — re-read location
   },
 
   /* Thumbnail resolution. Host allowlist + ancestor exclusion; see model.thumbnailFor.

@@ -7,8 +7,18 @@
   label { display: block; margin: 7px 0; }
   select { font: 12px Verdana, Arial, sans-serif; margin-left: 6px; }
   .note { color: #888; font-size: 11px; margin-top: 12px; line-height: 1.5; }
+  #host-warning { background: #fff6d5; border: 1px solid #e0c96e; padding: 8px;
+    font-size: 12px; line-height: 1.5; margin: 0 0 10px; }
+  #host-warning button { display: block; margin-top: 6px;
+    font: 12px Verdana, Arial, sans-serif; }
 </style>
 <h1>Sheddit</h1>
+
+<div id="host-warning" hidden>
+  This browser has not granted Sheddit access to reddit.com, so pages there are left
+  untouched. Access covers reddit.com only and is used to redraw its pages locally.
+  <button id="host-grant">Grant access</button>
+</div>
 
 <label>Theme
   <select data-k="theme">

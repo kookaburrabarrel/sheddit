@@ -12,6 +12,42 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased — 0.24.0
+
+### Added — Firefox
+
+Sheddit runs on Firefox 128 and newer. `dist/sheddit-firefox.zip` is the build: the same
+source byte for byte, with the manifest **derived** from Chrome's at package time — the
+gecko block (add-on id, the 128 floor that `world: "MAIN"` sets, a data-collection
+declaration of "none") is added and the Chrome-only version key dropped, in exactly one
+function, so the two stores cannot drift anywhere else. Until an addons.mozilla.org
+listing lands, Firefox accepts it as a temporary install via `about:debugging` (README
+has the steps). Firefox can also revoke a site permission at any time, and an extension
+whose content scripts never run cannot say so on any page — so the options page now
+checks and, when reddit.com access is missing, says so and offers a one-click grant.
+
+A real-Firefox test suite ships with it: `test/extension-firefox.js` installs the
+Firefox build into an actual Firefox through geckodriver and asserts the things only
+Gecko can answer — the main-world bridge across Firefox's stricter realm boundary, the
+theme cascade tie under its injection order, the storage round trip, and SPA routing
+both with and without the `navigation` API (present in current release, absent in ESR;
+the suite runs one session each way). It skips cleanly on machines without a Firefox,
+like the Chromium suites.
+
+### Fixed — client-side navigation on browsers without the `navigation` API (**never worked**)
+
+The fallback for browsers lacking the `navigation` API patched `history.pushState` in
+the content script's own realm — a copy of `history` that Reddit's router never calls,
+since the router lives in the page realm. Chrome never took that branch (it has the
+API), and every one-realm test environment passed it, because there the patched copy IS
+the page's; on Firefox ESR, which has no `navigation` API, every sort click and SPA
+navigation would have gone unseen, with only back/forward working. The bridge — already
+the main-world half of pagination — now patches the page realm's
+`pushState`/`replaceState` and relays each commit as a bare event that route.js listens
+for; a static test refuses any same-realm history patch coming back, because it would
+mask a dead relay in every one-realm environment while shipping broken. Engineering log
+bug 82.
+
 ## Unreleased — 0.23.0
 
 ### Removed — the post's dead `award-count` mapping, caught by its own tripwire

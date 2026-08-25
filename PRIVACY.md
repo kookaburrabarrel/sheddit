@@ -1,7 +1,9 @@
 # Privacy Policy — Sheddit
 
-**Last updated:** 22 August 2026
-**Applies to:** the Sheddit browser extension, all versions.
+**Last updated:** 25 August 2026
+**Applies to:** the Sheddit browser extension, all versions, Chrome and Firefox alike.
+The Firefox build also declares this in its manifest, in the form Mozilla surfaces on
+the listing: data collection **none**.
 
 ## The short version
 
@@ -18,15 +20,17 @@ One object, in `chrome.storage.sync`, holding your display preferences:
 | `theme` | which of the five colour themes you picked |
 | `listing`, `comments`, `chrome`, `profiles` | which kinds of page Sheddit should re-render |
 | `compactRows`, `showThumbnails`, `showNsfwThumbnails`, `autoPaginate` | layout and paging toggles |
+| `inlineVideo`, `inlineImages` | whether video and pictures render inside the layout |
 
 That is the complete list. There is no identifier in it, nothing derived from your
 browsing, and nothing about you.
 
-`chrome.storage.sync` is Chrome's own settings-sync mechanism: if you have Chrome sync
-turned on, these preferences travel between your own signed-in Chrome installations via
-Google, under Google's handling of your profile data. They never reach the authors of
-Sheddit. Turn Chrome sync off and they stay on the one machine. Uninstalling the
-extension removes them.
+`chrome.storage.sync` is the browser's own settings-sync mechanism — Firefox exposes the
+same API. With browser sync turned on, these preferences travel between your own
+signed-in installations of that browser, via its vendor (Google for Chrome, Mozilla for
+Firefox) and under that vendor's handling of your profile data. They never reach the
+authors of Sheddit. Turn browser sync off and they stay on the one machine. Uninstalling
+the extension removes them.
 
 ## What Sheddit does not do
 

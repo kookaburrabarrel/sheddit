@@ -27,6 +27,7 @@ or why you never log in — this is the safe way to keep reading.
 
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
+[![Firefox 128+](https://img.shields.io/badge/firefox-128+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
 <br>
@@ -111,7 +112,7 @@ notice when it does. That is what the rest of this page is about.
 It runs on every Reddit page you open, and for now you install it by hand rather than from
 a store. Here is the testing behind it.
 
-**Five suites**, each catching what the cheaper one below it cannot:
+**Six suites**, each catching what the cheaper one below it cannot:
 
 | Suite | Runs on | Catches |
 |---|---|---|
@@ -119,6 +120,7 @@ a store. Here is the testing behind it.
 | `run` | the bundle in jsdom | structure, routing, idempotency, delegation |
 | `geometry` | **real layout** in headless Chromium | overlap, wrapping, floats, every theme at two widths |
 | `extension` | the **packed extension** in Chromium | manifest wiring, script worlds, CSS delivery order |
+| `extension-firefox` | the **Firefox build** in a real Firefox | Gecko's stricter realm boundary, the derived manifest, SPA routing with no `navigation` API |
 | `media-sync` | real media playback in Chromium | the video player's audio pairing — jsdom has no media pipeline at all |
 
 **Mutation testing.** A passing test proves nothing until you have watched it fail.
@@ -146,10 +148,11 @@ than Reddit's — which is why those thumbnails fall back to old Reddit's placeh
 
 ## Install
 
-A Chrome Web Store listing is in review. Until it lands, the zip below is the easiest way
-in — same extension, nothing to build.
+Chrome and Firefox, same extension either way. A Chrome Web Store listing is in review,
+with an addons.mozilla.org submission behind it; until those land, the zips below are the
+easiest way in — nothing to build.
 
-### The zip
+### Chrome
 
 **[⬇ Download sheddit.zip](https://github.com/kookaburrabarrel/sheddit/raw/main/dist/sheddit.zip)**
 
@@ -186,9 +189,25 @@ cloned folder. There is no build step to run first.
 > `dist/preview.listing.html` and `dist/preview.comments.html` — the actual renderer's
 > output, openable in any browser.
 
-Requires Chrome 111+ or any Chromium browser (Edge, Brave, Vivaldi, Opera). Firefox is not
-supported — Sheddit needs a `"world": "MAIN"` content script, and porting it is
-[not yet done](CONTRIBUTING.md).
+Requires Chrome 111+ or any Chromium browser (Edge, Brave, Vivaldi, Opera), or
+Firefox 128+ — see below.
+
+### Firefox
+
+**[⬇ Download sheddit-firefox.zip](https://github.com/kookaburrabarrel/sheddit/raw/main/dist/sheddit-firefox.zip)**
+
+Same extension, same source; only the manifest differs, and it is generated from
+Chrome's rather than maintained separately. An addons.mozilla.org listing is the durable
+way in once it lands; until then Firefox only accepts an unsigned extension as a
+*temporary* install, which lasts until the browser closes:
+
+1. Open `about:debugging#/runtime/this-firefox`.
+2. **Load Temporary Add-on…** and pick the downloaded zip (no need to unzip).
+
+Two Firefox notes. Firefox can revoke a site permission at any time — if reddit.com ever
+loads without the layout, open the extension's options page: it will say so and offer a
+button to grant access back. And Firefox needs to be version 128 or newer, which is the
+oldest ESR.
 
 ## What it does
 
@@ -200,7 +219,7 @@ supported — Sheddit needs a `"world": "MAIN"` content script, and porting it i
 | **Scrolling that ends** | Drives Reddit's own pagination and stops when the feed is spent, instead of spinning to keep the session open |
 | **Five themes, no reload** | Switched from a button in the header; the choice follows you to every other tab |
 | **Tells you when it breaks** | If Reddit ships markup Sheddit can't read, you get a screen saying so, with a button to hand the page back |
-| **Nothing leaves your browser** | No API calls and no telemetry; your settings are kept by Chrome and go nowhere else |
+| **Nothing leaves your browser** | No API calls and no telemetry; your settings are kept in your browser's own storage and go nowhere else |
 
 ## Themes
 
@@ -328,11 +347,11 @@ If Reddit ships a redesign and Sheddit breaks, the fix is almost always in
 
 ```bash
 npm install
-npm test           # all five suites
+npm test           # all six suites
 npm run test:fast  # css-lint + jsdom only, no browser
 npm run preview    # writes openable dist/preview.*.html
 npm run build      # dist/sheddit.dev.js — paste into DevTools on any Reddit page
-npm run package    # rebuilds dist/sheddit.zip, the download this README links
+npm run package    # rebuilds both download zips this README links
 ```
 
 ## Documentation
