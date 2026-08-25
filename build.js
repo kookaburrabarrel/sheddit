@@ -28,9 +28,12 @@ const JS = [
   // dev harness has only one world, so it simply registers its listener alongside
   // everything else. Either way it must load before paginator.js dispatches to it.
   'src/core/bridge.js',
+  // route.js sits at document_start in the manifest (before gate.js): the gate's
+  // not-started branch asks classify() whether the URL is one the pipeline will take,
+  // and on a streamed page that question is asked before route.js would load at idle.
+  'src/core/route.js',
   'src/core/gate.js',
   'src/core/dom.js',
-  'src/core/route.js',
   'src/core/model.js',
   'src/core/media.js',
   'src/core/paginator.js',

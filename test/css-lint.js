@@ -70,6 +70,22 @@ check('no unmapped floats (add new floats to FLOAT_CONTAINERS)',
   floated.every(f => FLOAT_CONTAINERS[f]),
   floated.filter(f => !FLOAT_CONTAINERS[f]).join(', '));
 
+/* The hidden-attribute trap: ANY author `display` declaration beats the UA sheet's
+   `[hidden] { display: none }`, so an element the code toggles with the hidden attribute
+   stops being hideable the moment its class gains a display rule — in every real
+   browser, and invisibly to jsdom, which checks the attribute rather than layout. The
+   expando shipped exactly this: [-] silently did nothing (reported from a real machine).
+   Every selector listed is one the source toggles via `hidden`; whenever it declares
+   display at all, it must re-assert display:none for its [hidden] state. */
+const HIDDEN_TOGGLED = ['.expando'];
+for (const sel of HIDDEN_TOGGLED) {
+  if (!has(sel, 'display')) continue;
+  check(`${sel} is hidden-toggled, so its display rule needs a [hidden] counterpart`,
+    /(^|;|\s)display\s*:\s*none/.test(declFor(`${sel}[hidden]`)),
+    `${sel} declares display, which beats the UA's [hidden]{display:none} — add ` +
+    `${sel}[hidden] { display: none; }`);
+}
+
 for (const [child, container] of Object.entries(FLOAT_CONTAINERS)) {
   const body = declFor(container);
   check(`${container} contains its float (${child})`,

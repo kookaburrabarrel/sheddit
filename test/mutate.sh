@@ -585,13 +585,16 @@ mutate "route.js reads the old URL and latches it (sort desync)" run \
 
 # The deadline asked "did we render?" before anything had tried: the pipeline boots at
 # document_idle and then awaits chrome.storage.sync, so at 1500ms "sources present, nothing
-# rendered" can simply mean nobody has looked yet.
+# rendered" can simply mean nobody has looked yet. (The block's body moved when the
+# not-started unblank learned to consult route.classify — the anchor empties the guard,
+# which falls through to the same premature accusation the original removal did.)
 mutate "the deadline accuses a pipeline that has not started" run \
-  src/core/gate.js "      if (!engaged) {
-        unblank('not-started');
+  src/core/gate.js "        const mode = SHD.route?.classify?.(location.pathname);
+        if (!mode || mode === SHD.route.OTHER) unblank('not-started');
         if (waited < MAX_WAIT_MS) return scheduleCheck();
         return fail('pipeline-stalled', { sources, waited });
-      }" ""
+      }" \
+                   "      }"
 
 # engage() is the pipeline telling the gate "this route is mine". Without the call, the
 # upsell surgery never arms and Reddit's login wall stands on pages we render.
@@ -1398,6 +1401,42 @@ mutate "the host-permission warning can never appear" run \
 mutate "the banner asks about origins the manifest does not grant" run \
   options/options.js "const HOSTS = { origins: ['*://*.reddit.com/*'] };" \
                      "const HOSTS = { origins: ['*://www.reddit.com/*'] };"
+
+# ------------------------------------------- 0.25.0: two field reports from real machines ---
+# The flash: real Reddit streams, document_idle waits for DOMContentLoaded, and the gate's
+# 1500ms tick used to unblank a page the pipeline was about to take — native feed shown,
+# then snatched away. The hold and its counterweight get separate rows because either
+# alone leaves the other looking covered: unconditional unblank flashes handled pages,
+# never unblanking blanks pages we are about to disown.
+mutate "the not-started unblank flashes handled pages again" extension \
+  src/core/gate.js "        const mode = SHD.route?.classify?.(location.pathname);
+        if (!mode || mode === SHD.route.OTHER) unblank('not-started');" \
+                   "        unblank('not-started');"
+
+mutate "the hold blanks routes nobody will ever take" extension \
+  src/core/gate.js "        if (!mode || mode === SHD.route.OTHER) unblank('not-started');" \
+                   "        ;"
+
+# The question the hold asks only has an answer if route.js is THERE at the 1500ms tick —
+# delivered at idle it answers undefined, which silently reverts to unblank-and-flash.
+mutate "route.js slips back to document_idle" run \
+  manifest.json "        \"src/config/contracts.js\",
+        \"src/config/themes.js\",
+        \"src/core/route.js\",
+        \"src/core/gate.js\"" \
+                "        \"src/config/contracts.js\",
+        \"src/config/themes.js\",
+        \"src/core/gate.js\""
+
+# The expando's [-]: any author display declaration beats the UA's [hidden]{display:none},
+# so without the counterpart rule a collapsed box keeps its layout in every real browser.
+# Two suites, two rows, on purpose: css-lint sees the missing rule statically everywhere,
+# geometry is the only suite that can see the picture actually stay on screen.
+mutate "the expando's [hidden] counterpart vanishes (static)" css-lint \
+  src/styles/old-reddit.css ".expando[hidden] { display: none; }" ""
+
+mutate "the expando's [hidden] counterpart vanishes (layout)" geometry \
+  src/styles/old-reddit.css ".expando[hidden] { display: none; }" ""
 
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous

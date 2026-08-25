@@ -11,11 +11,11 @@ summary over this table when they disagree, and update the table when they do.)
 
 | # | Command | Needs | Assertions |
 |---|---|---|---|
-| 1 | `node test/css-lint.js` | nothing | 38 |
-| 2 | `node test/run.js` | jsdom | 502 |
-| 3 | `node test/geometry.js` | Chromium | 184 |
-| 4 | `node test/extension.js` | Chromium | 130 |
-| 5 | `node test/extension-firefox.js` | Firefox + geckodriver | 31 |
+| 1 | `node test/css-lint.js` | nothing | 39 |
+| 2 | `node test/run.js` | jsdom | 503 |
+| 3 | `node test/geometry.js` | Chromium | 187 |
+| 4 | `node test/extension.js` | Chromium | 135 |
+| 5 | `node test/extension-firefox.js` | Firefox + geckodriver | 40 |
 | 6 | `node test/media-sync.js` | Chromium | 8 |
 | 7 | `npm run verify:live` | real network | manual |
 
@@ -242,9 +242,14 @@ at open, the run prints the geckodriver log — Firefox's own stderr — and "un
 closed with status 0" usually just means a running Firefox should be quit first; session
 creation already retries once for first-launch housekeeping.
 
-What it cannot see: document_start CSS **timing**. WebDriver returns after load, so a
-flash of native Reddit before suppress.css lands would be over before anything could
-measure it — that one is assessed by eye on a real machine.
+Two things a plain WebDriver read is blind to are covered by fixtures instead, in this
+suite and the Chromium one alike: `/r/paintprobe/` embeds a script at the body's first
+byte, sampling whether the blackout was computed before anything could paint
+(document_start CSS timing — measured fine in Gecko, kept as the sentinel), and
+`/r/slowstream/` serves a listing the way real Reddit does — streamed, with
+DOMContentLoaded held past the gate's first tick — while a page-world recorder logs
+every `<html>` class transition, which is what caught the gate's own unblank showing
+the native feed on heavy pages (engineering log bug 83).
 
 ## 6. Media sync (headless Chromium)
 

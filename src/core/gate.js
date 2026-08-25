@@ -229,7 +229,17 @@ SHD.gate = (() => {
       // worth an honest error screen rather than silence — silence is the "looks exactly
       // like an uninstalled extension" failure this module was written to end.
       if (!engaged) {
-        unblank('not-started');
+        /* Unblanking here IS a flash on any page the pipeline is about to take: real
+           Reddit streams its document, document_idle waits for DOMContentLoaded, and on
+           a heavy page this tick lands first — so dropping the blackout shows the native
+           feed until the render arrives, then snatches it away. Reported from a real
+           machine and reproduced on the streamed fixture (engineering log bug 83).
+           route.js is delivered at document_start precisely so this branch can ask;
+           classify() is pure regex over the path. A route nobody will take still
+           unblanks NOW — holding the blackout there blanks a page standDown() is about
+           to disown, which is bug 36's flash-of-error-screen one mechanism over. */
+        const mode = SHD.route?.classify?.(location.pathname);
+        if (!mode || mode === SHD.route.OTHER) unblank('not-started');
         if (waited < MAX_WAIT_MS) return scheduleCheck();
         return fail('pipeline-stalled', { sources, waited });
       }
