@@ -377,9 +377,7 @@ function postHtml(p) {
       author="${p.author}"
       subreddit-name="${p.sub}"
       subreddit-prefixed-name="r/${p.sub}"
-      ${p.nsfw === true ? 'nsfw=""' : p.nsfw === 'false' ? 'nsfw="false"' : ''}
-
-      award-count="0">
+      ${p.nsfw === true ? 'nsfw=""' : p.nsfw === 'false' ? 'nsfw="false"' : ''}>
       ${avatar}${flair}${imgs}
       ${p.videoJson ? `<shreddit-player id="${p.id}-aspect-ratio" packaged-media-json="${esc(JSON.stringify(p.videoJson))}"></shreddit-player>` : ''}
       <!-- Reddit's own rendered copy, in the light DOM. Present because suppression has to

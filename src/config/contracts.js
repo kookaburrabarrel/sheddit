@@ -155,12 +155,12 @@ SHD.C = {
     author: 'author',
     subreddit: 'subreddit-name',
     subredditPrefixed: 'subreddit-prefixed-name',
-    icon: 'icon',
-    /* Captured into the model but never rendered — old reddit showed award icons and this
-       is the hook for that. By the same test that removed award-icon-url above it is dead
-       weight; kept only because `award-count` IS still present live, so it is a usable
-       hook rather than a stale mapping. Render it or remove it; do not leave it ambiguous. */
-    awards: 'award-count',
+    icon: 'icon',                          // optional live: 27/28 carried it, 2026-08-24
+    /* `award-count` was here until 2026-08-24, kept as "still present live, a usable
+       hook". A live listing then carried it on 0/28 posts — while comments still carry
+       it — so the post mapping failed bug 24's own test twice over: unconsumed AND
+       absent. Removed from POST_ATTR and the post model; COMMENT_ATTR keeps its copy,
+       which the same day's thread run measured present 25/25. */
     index: 'feedindex'
   },
 
