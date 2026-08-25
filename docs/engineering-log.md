@@ -1088,6 +1088,43 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     line lacks it. On release Firefox the API path runs and the relay is a net; on ESR
     the relay is everything, and only the pref'd-off session pins it alone.
 
+83. **A streamed page flashed the native feed before the layout.** Reported from a real
+    machine on Firefox and reproduced in-suite on both engines: the blackout dropped at
+    ~1560ms with nothing of ours on screen, then the render snatched the native feed
+    away again. Two suspects, and the measured one was not the obvious one. Gecko's
+    document_start CSS timing — the known unknown recorded when the Firefox port
+    shipped — was CLEARED by a parse-time probe: a script at the body's first byte found
+    the blackout already computed, so the manifest's CSS beats first paint in Gecko
+    after all. The probe stays in both packed suites as the regression sentinel. The
+    real mechanism was the gate's own not-started unblank (bug 36's honest answer to
+    "nobody has tried yet"): real Reddit STREAMS its document, document_idle waits for
+    DOMContentLoaded, so on a heavy page the 1500ms tick fires while the pipeline has
+    not booted — and unblanking there shows the native feed until the render lands. No
+    all-at-once fixture could see it, which is the fixture law about DELIVERY again:
+    `/r/slowstream/` now serves the feed up front and holds the closing tags past the
+    tick, with a page-world recorder logging every `<html>` class transition, because
+    the failure is a transient no post-load read can see. The fix asks the question the
+    branch previously could not: route.js moved to document_start (classify() is pure
+    regex over the path), and the tick now holds the blackout when the URL is one the
+    pipeline WILL take. The counterweight is bug 36's protection and keeps its own
+    mutation row: a route nobody will take still unblanks at the first tick, or the
+    hold blanks a page standDown() is about to disown.
+
+84. **The expando's [-] did nothing, in every real browser.** Reported from a real
+    machine as a Firefox bug; it was neither Firefox's nor the toggle's. Collapse sets
+    the `hidden` attribute, `.expando` declares `display: flow-root`, and ANY author
+    display declaration beats the UA sheet's `[hidden] { display: none }` — so the
+    collapsed box kept its layout everywhere, and the [-] read as a control that
+    ignores a click (bug 62's sin, delivered by the cascade). jsdom checks the
+    attribute and does no layout, so run.js passed; geometry asserted the row GROWS on
+    open and never that it shrinks back — the half-test that let it ship. The
+    counterpart rule (`.expando[hidden] { display: none }`) is one line; the protection
+    is the rest: geometry now closes what it opens and asserts the picture leaves the
+    layout with the row back at its measured height, css-lint statically requires a
+    `[hidden]` counterpart from any hidden-toggled selector that declares display at
+    all, and the real-Firefox suite re-verifies the click pair on the engine the
+    report came from.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

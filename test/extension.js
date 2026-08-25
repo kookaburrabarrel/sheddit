@@ -116,6 +116,59 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
   check('no page errors on the listing route', pageErrors.length === 0, pageErrors.join(' | '));
 
   /* ================================================================== *
+   * THE BLACKOUT BEATS FIRST PAINT — the Chromium control
+   * ================================================================== */
+  console.log('\n\x1b[1mPACKED EXTENSION — THE BLACKOUT BEATS FIRST PAINT\x1b[0m');
+  // The probe samples computed state at the instant body content starts existing — the
+  // earliest anything could paint. Chromium's control half of the sentinel that guards
+  // document_start CSS timing on both engines; see test/extension-firefox.js for why it
+  // exists.
+  {
+    const pageP = await browser.newPage();
+    await pageP.goto(origin + PATHS.paintProbe, { waitUntil: 'domcontentloaded' });
+    await until(pageP, () => !!document.querySelector('#shd-root .thing.link'));
+    const paint = await pageP.evaluate(() => window.__shdPaint);
+    check('the parse-time probe ran', !!paint, 'no __shdPaint — the fixture injection is broken');
+    check('the blackout was computed before body content existed',
+      paint && paint.gateClass === true && paint.bodyVisibility === 'hidden',
+      JSON.stringify(paint));
+    await pageP.close();
+  }
+
+  /* ================================================================== *
+   * A STREAMED PAGE MUST NOT FLASH THE NATIVE FEED
+   * ================================================================== */
+  console.log('\n\x1b[1mPACKED EXTENSION — A STREAMED PAGE NEVER FLASHES THE NATIVE FEED\x1b[0m');
+  // The engine-independent half of a flash reported from a real machine (see the same
+  // section in test/extension-firefox.js): real Reddit streams, document_idle waits for
+  // DOMContentLoaded, and the gate's not-started unblank at 1500ms used to show the
+  // native feed on a page the pipeline was about to take. Chromium's timing makes it
+  // rarer here, not impossible — the mechanism is identical.
+  {
+    const pageF = await browser.newPage();
+    await pageF.goto(origin + PATHS.slowStream, { waitUntil: 'domcontentloaded' });
+    await until(pageF, () => !!document.querySelector('#shd-root .thing.link'));
+    const gateTrace = (await pageF.evaluate(() => window.__shdGateTrace)) || [];
+    const flashes = gateTrace.filter(e => !e.gate && !e.active);
+    const revealAt = (gateTrace.find(e => e.active) || {}).t;
+    check('control: the stream really held the pipeline past the first tick',
+      typeof revealAt === 'number' && revealAt > 1500,
+      `reveal at ${revealAt}ms — if this fails, the no-flash check below proves nothing`);
+    check('the blackout held from first paint to reveal — no native-feed flash',
+      flashes.length === 0, `blackout dropped at ${JSON.stringify(flashes.map(e => e.t))}ms`);
+    await pageF.close();
+
+    const pageO = await browser.newPage();
+    await pageO.goto(origin + PATHS.slowStreamOther, { waitUntil: 'domcontentloaded' });
+    const otherTrace = (await pageO.evaluate(() => window.__shdGateTrace)) || [];
+    const drop = otherTrace.find(e => !e.gate);
+    check('an unhandled route still unblanks at the first tick, not at stream end',
+      !!drop && drop.t > 1300 && drop.t < 2400,
+      `gate dropped at ${drop && drop.t}ms — bug 36's protection must survive the hold`);
+    await pageO.close();
+  }
+
+  /* ================================================================== *
    * THEMES — the one thing the dev harness structurally cannot check
    *
    * The bundle concatenates every stylesheet into a single <style> with themes.css last,

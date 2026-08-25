@@ -846,6 +846,31 @@ const overlaps = (a, b) =>
       after.imgRight !== null && after.imgRight <= after.rowRight + 1, JSON.stringify(after));
     check('...and still no sideways scroll',
       after.scrollW <= after.clientW + 1, JSON.stringify(after));
+
+    // The [-]: reported from a real machine as doing nothing, and it was CSS, not the
+    // toggle — `.expando` declares `display`, and any author display declaration beats
+    // the UA's `[hidden] { display: none }`, so the collapsed box kept its layout in
+    // every real browser. jsdom checks the attribute and cannot see this; asserting the
+    // GROWTH above without asserting the shrink is exactly the half-test that let it
+    // ship. Computed display is checked alongside the height so a future rhythm change
+    // cannot turn the height comparison vacuous.
+    await listing.page.click(`${sel} .expando-button`);
+    const closed = await listing.page.evaluate((s) => {
+      const row = document.querySelector(s);
+      return {
+        rowH: row.getBoundingClientRect().height,
+        boxDisplay: getComputedStyle(row.querySelector('.expando')).display,
+        stillHasImg: !!row.querySelector('.expando img')
+      };
+    }, sel);
+    check('collapsing the expando actually removes the picture from layout',
+      closed.boxDisplay === 'none', `computed display=${closed.boxDisplay} — [hidden] is losing ` +
+      `to .expando's own display declaration`);
+    check('...and the row returns to its original height',
+      Math.abs(closed.rowH - before) < 1, `${Math.round(before)} -> ${Math.round(closed.rowH)}`);
+    check('...while the fetched picture stays cached in the box for the next open',
+      closed.stillHasImg === true);
+
     check('no page errors from the expando', listing.pageErrors.length === 0,
       listing.pageErrors.join(' | '));
     await listing.page.close();

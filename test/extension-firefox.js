@@ -292,12 +292,94 @@ async function until(expr, { timeout = 15000, step = 120 } = {}) {
         'the relay is the only route signal'})`);
 
     /* ============================================================== *
+     * THE EXPANDO CLOSES — the reported [-] that did nothing
+     * ============================================================== */
+    console.log('\n\x1b[1mFIREFOX EXTENSION — THE EXPANDO CLOSES\x1b[0m');
+    // Reported from a real machine, on Firefox: [+] opened the picture, [-] left it up.
+    // The cause was engine-independent CSS (.expando's display declaration beating the
+    // UA's [hidden] rule — see css-lint), but this is the engine the report came from,
+    // so this is the engine that re-verifies it.
+    const exp = await run(`
+      const btn = document.querySelector('#shd-root .thing.link .expando-button');
+      if (!btn) return null;
+      const box = btn.closest('.thing').querySelector('.expando');
+      btn.click();
+      const openDisplay = getComputedStyle(box).display;
+      btn.click();
+      return { openDisplay, closedDisplay: getComputedStyle(box).display,
+               imgKept: !!box.querySelector('img') };`);
+    check('a listing row offers the expando', exp !== null, 'no .expando-button in the listing');
+    check('[+] opens the picture', exp && exp.openDisplay !== 'none', JSON.stringify(exp));
+    check('[-] actually closes it', exp && exp.closedDisplay === 'none', JSON.stringify(exp));
+
+    /* ============================================================== *
+     * THE BLACKOUT MUST BEAT THE BODY'S FIRST CONTENT
+     * ============================================================== */
+    console.log('\n\x1b[1mFIREFOX EXTENSION — THE BLACKOUT BEATS FIRST PAINT\x1b[0m');
+    // The suspect that measurement CLEARED: Gecko was thought not to guarantee manifest
+    // CSS before first paint, which would flash native Reddit no matter what the gate
+    // did. The probe samples computed state at the instant body content starts existing
+    // — the earliest anything could paint — and Gecko had the blackout computed by then.
+    // Kept as the regression sentinel: if this ever goes red, Gecko's injection timing
+    // moved, and the flash comes back through CSS rather than through the gate.
+    await goto(origin + PATHS.paintProbe);
+    await until(`document.querySelector('#shd-root .thing.link')`);
+    const paint = await run(`return window.__shdPaint;`);
+    check('the parse-time probe ran', !!paint, 'no __shdPaint — the fixture injection is broken');
+    check('gate.js had engaged before body content existed (document_start JS held)',
+      paint && paint.gateClass === true, JSON.stringify(paint));
+    check('the blackout was computed before body content existed (document_start CSS held)',
+      paint && paint.bodyVisibility === 'hidden',
+      `visibility=${paint && paint.bodyVisibility} — Gecko delivered the manifest CSS after ` +
+      `parsing began; the pre-paint flash is back and it is a CSS-timing problem this time`);
+
+    /* ============================================================== *
+     * A STREAMED PAGE MUST NOT FLASH THE NATIVE FEED
+     * ============================================================== */
+    console.log('\n\x1b[1mFIREFOX EXTENSION — A STREAMED PAGE NEVER FLASHES THE NATIVE FEED\x1b[0m');
+    // Reported from a real machine: a quick flash of the native feed before the layout.
+    // Not the CSS-timing gap the probe above rules out — the mechanism is the gate's own
+    // not-started unblank: real Reddit STREAMS its document, document_idle waits for
+    // DOMContentLoaded, so on a heavy page the 1500ms tick lands while the pipeline has
+    // not booted, and unblanking there shows the native feed until the render arrives.
+    // The recorder logs every <html> class transition because the failure is a transient
+    // no post-load read can see.
+    await goto(origin + PATHS.slowStream);
+    await until(`document.querySelector('#shd-root .thing.link')`);
+    const gateTrace = (await run(`return window.__shdGateTrace;`)) || [];
+    const flashes = gateTrace.filter(e => !e.gate && !e.active);
+    const revealAt = (gateTrace.find(e => e.active) || {}).t;
+    check('control: the stream really held the pipeline past the first tick',
+      typeof revealAt === 'number' && revealAt > 1500,
+      `reveal at ${revealAt}ms — if this fails, the no-flash check below proves nothing`);
+    check('the blackout held from first paint to reveal — no native-feed flash',
+      flashes.length === 0,
+      `blackout dropped at ${JSON.stringify(flashes.map(e => e.t))}ms with nothing of ours up ` +
+      `— the reported flash: the not-started unblank firing on a page we were about to take`);
+
+    // The counterweight — the protection the unblank exists for: a route nobody will
+    // take must STILL unblank at the first tick, or the hold blanks pages we are about
+    // to disown (an unhandled route carrying shreddit-post elements, like a thread on a
+    // profile post).
+    await goto(origin + PATHS.slowStreamOther);
+    const otherTrace = (await run(`return window.__shdGateTrace;`)) || [];
+    const drop = otherTrace.find(e => !e.gate);
+    check('an unhandled route still unblanks at the first tick, not at stream end',
+      !!drop && drop.t > 1300 && drop.t < 2400,
+      `gate dropped at ${drop && drop.t}ms — later than the 2600ms stream end means the ` +
+      `hold is blanking pages it will never render`);
+
+    /* ============================================================== *
      * THE THEME TIE, UNDER GECKO'S CASCADE
      * ============================================================== */
     console.log('\n\x1b[1mFIREFOX EXTENSION — THEMES\x1b[0m');
     // Same trap as Chromium: themes.css arrives at document_start, old-reddit.css at
     // document_idle, so the palette rides entirely on selector specificity. Gecko owns
     // its own cascade order for injected sheets — asserted, not assumed.
+    // (Back to the listing first: the section above ends on an unhandled route, where
+    // there is no header to click.)
+    await goto(origin + PATHS.listing);
+    await until(`document.querySelector('.shd-theme-btn[data-theme="night"]')`);
     await run(`document.querySelector('.shd-theme-btn[data-theme="night"]').click();`);
     const themed = await run(`
       return {

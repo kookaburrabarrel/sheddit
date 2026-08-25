@@ -484,6 +484,12 @@ html.shd-active body {
   margin: 5px 0 0;
   max-width: var(--shd-video-max);
 }
+/* Load-bearing, not belt-and-braces: the rule above declares `display`, and ANY author
+   display declaration beats the UA sheet's `[hidden] { display: none }` — so without
+   this, collapsing the expando removes nothing and the [-] silently does not work, in
+   every real browser. jsdom cannot see it (it checks the attribute, not layout), which
+   is how it shipped. Reported from a real machine; css-lint now demands this pair. */
+.expando[hidden] { display: none; }
 .shd-expando-img { display: block; width: auto; max-width: 100%; height: auto; }
 
 .shd-selfpost .shd-video { margin: 5px 0; max-width: var(--shd-video-max); }

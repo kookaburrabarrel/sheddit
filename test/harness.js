@@ -21,6 +21,9 @@ const { listingPage, commentsPage } = require('./fixtures');
 /** How many comments /r/…/pager/ delivers up front, before anything is lazy-loaded. */
 const COMMENT_SLICE = 8;
 
+/** How long /slowstream/ holds its closing tags — past the gate's 1500ms tick, with margin. */
+const SLOW_STREAM_HOLD_MS = 2600;
+
 /**
  * Where a browser might already be, in the order we prefer them. Ordering rationale:
  * an explicit override always wins; then the CI/sandbox-provisioned builds, so automated
@@ -177,6 +180,21 @@ function serveFixtures() {
         : wantsImage ? { imagePost: true }
           : wantsPager ? { deliver: COMMENT_SLICE, pager: true } : {})
       : listingPage({ pager: wantsPager });
+    // /r/paintprobe/ samples the page's computed state at the EARLIEST moment body
+    // content exists — a parser-inserted script right after <body> opens, which runs
+    // before anything after it could possibly paint. If the pre-render blackout is not
+    // already computed at that instant, the native feed that follows can flash before
+    // the extension's CSS lands. This is the only way to put eyes on document_start CSS
+    // timing from inside a suite: the flash itself is over before WebDriver returns.
+    if (/\/r\/paintprobe\//.test(pathname)) {
+      body = body.replace('<body>', `<body><script>
+        window.__shdPaint = {
+          gateClass: document.documentElement.classList.contains('shd-gate'),
+          bodyVisibility: getComputedStyle(document.body).visibility,
+          htmlBg: getComputedStyle(document.documentElement).backgroundColor
+        };
+      </script>`);
+    }
     // /r/spa/ is a listing whose page-world script does what Reddit's router does: it
     // intercepts sort-tab navigations via the real Navigation API — reporting
     // sameDocument:false and then calling intercept(), exactly the combination measured
@@ -425,6 +443,40 @@ function serveFixtures() {
         ${emptyFeed}
         </main></div></div></div></shreddit-app></body></html>`;
     }
+    // Any path containing /slowstream/ is served the way real Reddit serves everything —
+    // STREAMED. The document through the feed markup arrives at once; the closing tags
+    // are held back SLOW_STREAM_HOLD_MS, so DOMContentLoaded (and with it document_idle,
+    // where the pipeline boots) cannot happen until the hold expires. That puts the
+    // gate's 1500ms tick BEFORE the pipeline exists, which is the shape every heavy real
+    // page has and no all-at-once fixture can reproduce — the fixture law about delivery,
+    // applied to the gate. A page-world recorder logs every <html> class transition,
+    // because the failure being hunted is a TRANSIENT: the blackout dropping while
+    // neither it nor the layout is up is a flash no post-load read can see.
+    if (/\/slowstream\//.test(pathname)) {
+      body = body.replace('<body>', `<body><script>
+        window.__shdGateTrace = [];
+        (function () {
+          const t0 = performance.now();
+          const log = () => {
+            const c = document.documentElement.classList;
+            window.__shdGateTrace.push({
+              t: Math.round(performance.now() - t0),
+              gate: c.contains('shd-gate'),
+              active: c.contains('shd-active')
+            });
+          };
+          new MutationObserver(log).observe(document.documentElement,
+            { attributes: true, attributeFilter: ['class'] });
+          log();
+        })();
+      </script>`);
+      const cut = body.lastIndexOf('</body>');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.write(body.slice(0, cut));
+      setTimeout(() => { try { res.end(body.slice(cut)); } catch { /* client gone */ } },
+        SLOW_STREAM_HOLD_MS);
+      return;
+    }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(body);
   });
@@ -445,6 +497,9 @@ const PATHS = {
   broken: '/r/broken/',         // posts missing a required attribute -> real render failure
   pager: '/r/pager/',           // faceplate-partial with a working loadContent()
   spa: '/r/spa/',               // page-world router intercepts sort navs like live Reddit
+  paintProbe: '/r/paintprobe/', // records whether the blackout beat the body's first content
+  slowStream: '/r/slowstream/', // a LISTING delivered the way real Reddit delivers: streamed
+  slowStreamOther: '/search/slowstream/',  // the same delivery on a route nobody takes
   commentPager: '/r/programming/comments/link1/pager/',   // a thread that lazy-loads
   commentBranches: '/r/programming/comments/link1/branches/',  // per-branch surviving partials
   gated: '/r/gated/',           // age gate: a real page with no feed at all
@@ -459,4 +514,4 @@ const PATHS = {
 };
 
 module.exports = { resolveChrome, requireChrome, noChromeMessage, makeChecker,
-                   serveFixtures, PATHS, COMMENT_SLICE, LAUNCH_ARGS };
+                   serveFixtures, PATHS, COMMENT_SLICE, SLOW_STREAM_HOLD_MS, LAUNCH_ARGS };

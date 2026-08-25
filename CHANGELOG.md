@@ -12,6 +12,37 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased — 0.25.0
+
+### Fixed — heavy pages no longer flash the native feed before the layout
+
+Reported from live use the day the Firefox build shipped, and reproduced in-suite on
+both engines. Real Reddit streams its document, the renderer cannot start until
+DOMContentLoaded, and the watchdog's first look lands at 1500ms — where, finding
+sources on the page and no renderer yet, it used to stop hiding the page. On a heavy
+page that showed the native feed for a moment and then snatched it away when the render
+arrived. The watchdog now asks whether the URL is one the renderer will take (the route
+classifier moved to document_start so the answer exists that early) and holds the
+curtain when it is; a page that will never be rendered still un-hides at the first
+look, exactly as before. Measured first: the suspected cause — Firefox delivering the
+extension's CSS after first paint — was cleared by a parse-time probe that both
+browser suites now keep as a regression sentinel, and a new streamed fixture (feed up
+front, closing tags held past the watchdog's tick) is what reproduced the real
+mechanism and pins the fix.
+
+### Fixed — the image expando's [-] collapses again (**never worked**)
+
+Clicking [+] on a listing row opened the picture; clicking [-] left it exactly where it
+was, in every real browser, since the expando shipped. The toggle was correct — the
+stylesheet was not: `.expando` declares its own `display`, and any author display
+declaration overrides the browser's built-in `[hidden] { display: none }`, so the
+collapsed box kept its layout. One counterpart rule fixes it; the tests are the real
+change. The layout suite now closes what it opens and asserts the picture actually
+leaves the page with the row back at its measured height (it only ever asserted the
+opening half, which is how this shipped), the CSS lint statically rejects any
+hidden-toggled selector that declares display without a `[hidden]` counterpart, and the
+Firefox suite re-verifies the click pair on the engine the report came from.
+
 ## Unreleased — 0.24.0
 
 ### Added — Firefox

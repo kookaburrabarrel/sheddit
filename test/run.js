@@ -1107,13 +1107,18 @@ async function boot(html, url, setup) {
         runtime: { getManifest: () => ({ version: 'test' }) }
       };
     });
-    // boot() returns once data-shd-waiting appears — the first deadline tick.
     check('the deadline does not accuse a pipeline that has not started',
       !doc.documentElement.hasAttribute('data-shd-fail') && !doc.querySelector('#shd-error'),
       doc.documentElement.getAttribute('data-shd-fail'));
-    check('it un-blanks and says why it is waiting',
-      doc.documentElement.getAttribute('data-shd-waiting') === 'not-started',
-      doc.documentElement.getAttribute('data-shd-waiting'));
+    // ...and it does not un-blank either, THIS being a route the pipeline will take:
+    // dropping the blackout here is the native-feed flash (bug 83) — real Reddit
+    // streams, so the tick routinely beats document_idle. The unhandled-route block
+    // below is the half that still un-blanks, and the pair is what pins the split.
+    check('it HOLDS the blackout on a route the pipeline will take',
+      doc.documentElement.classList.contains('shd-gate') &&
+      !doc.documentElement.hasAttribute('data-shd-waiting'),
+      `gate=${doc.documentElement.classList.contains('shd-gate')} ` +
+      `waiting=${doc.documentElement.getAttribute('data-shd-waiting')}`);
 
     releaseStorage();
     await waitFor(() => doc.querySelectorAll('#shd-root .thing.link').length === POSTS.length);
@@ -2148,6 +2153,14 @@ async function boot(html, url, setup) {
     const idleScripts = isolated.filter(cs => cs.run_at === 'document_idle').flatMap(cs => cs.js || []);
     check('gate.js runs at document_start (or native Reddit flashes first)',
       startScripts.includes('src/core/gate.js'), JSON.stringify(startScripts));
+    // The gate's not-started branch asks route.classify() whether the URL is one the
+    // pipeline will take, and on a streamed page that tick fires BEFORE document_idle —
+    // route.js delivered at idle answers undefined there, which silently reverts to
+    // unblank-and-flash (bug 83). Position, not just presence, is the contract.
+    check('route.js is delivered at document_start, before gate.js consults it',
+      startScripts.includes('src/core/route.js') &&
+      startScripts.indexOf('src/core/route.js') < startScripts.indexOf('src/core/gate.js'),
+      JSON.stringify(startScripts));
     // Same reasoning, one flash further on: the blackout paints before we render anything,
     // so a dark theme that is only applied at document_idle shows a white page first. Both
     // halves have to arrive at document_start — the palette (--shd-blank, in themes.css)

@@ -177,11 +177,15 @@ sheddit/
 document_start
    └─ suppress.css injected   → native layout hidden immediately (no flash of new reddit)
    └─ bridge.js registers in the PAGE's main world (the only code that runs there)
+   └─ route.js loads (pure URL classifier — no DOM, no events yet)
    └─ gate.js arms a CONTENT-AWARE deadline (§7c) — not a plain timer
         └─ also un-blanks early off `load` if the page has no feed at all
+        └─ and holds the blackout at its first tick when route.classify() says the URL
+           is one the pipeline will take — real Reddit streams, document_idle waits for
+           DOMContentLoaded, and unblanking there flashed the native feed (log bug 83)
 
 document_idle
-   └─ route.js classifies location → LISTING | COMMENTS | OTHER
+   └─ pipeline.js classifies location via route.js → LISTING | COMMENTS | OTHER
    └─ pipeline.js attaches MutationObserver(document.body, {childList, subtree})
         │
         ├─ node added
