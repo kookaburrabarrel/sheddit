@@ -23,3 +23,24 @@ controls.forEach(c => c.addEventListener('change', async () => {
   next[c.dataset.k] = read(c);
   await chrome.storage.sync.set({ settings: next });
 }));
+
+/* Firefox treats MV3 host permissions as revocable — and as declined, on versions before
+   its install-time prompt — while Chrome grants them at install. A content script that
+   never runs cannot say so on any page, so the missing grant is indistinguishable from
+   the extension not being installed, and this page is the one surface left that can
+   surface it. Must match manifest.json's host_permissions — asserted by test/run.js. */
+const HOSTS = { origins: ['*://*.reddit.com/*'] };
+const hostWarning = document.querySelector('#host-warning');
+
+async function syncHostWarning() {
+  try {
+    hostWarning.hidden = await chrome.permissions.contains(HOSTS);
+  } catch { /* no permissions API (granted at install, or the dev harness) — stay hidden */ }
+}
+
+document.querySelector('#host-grant').addEventListener('click', async () => {
+  try { await chrome.permissions.request(HOSTS); } catch { /* declined — warning stands */ }
+  syncHostWarning();
+});
+
+syncHostWarning();

@@ -1061,6 +1061,33 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     subtree and 0 on the post element — the 0/4 was the probe reading the wrong element,
     not the migration completing. The attribute is alive, where the capture said it was.
 
+82. **The SPA fallback patched a `history` nothing ever calls.** route.js's
+    no-navigation-API branch wrapped `history.pushState` in its own realm — a content
+    script's realm, while Reddit's router calls the PAGE realm's copy. Chromium kept the
+    bug invisible by never taking that branch (its navigation API exists, so only the API
+    path ran), and every one-world test environment — jsdom, the dev bundle, DevTools —
+    kept it green, because with one realm the patched copy IS the page's. The Firefox
+    port is what exposed it: Firefox ESR 128, the extension's Firefox floor, has no
+    navigation API, so the fallback is the only route signal there — and under Gecko's
+    realm separation the patch never fires. Every sort click and SPA navigation would
+    have gone unseen, with only back/forward (popstate) working: the pagination bug's
+    shape (bug 15), one module over. The fix crosses at the sanctioned place: bridge.js —
+    already the MAIN-world half of pagination — patches the page realm's
+    pushState/replaceState and relays each commit as a bare event (`BRIDGE.navigated`,
+    primitive-only like the rest of the protocol); route.js listens and re-reads
+    `location`, which is already updated by dispatch time, and the dispatch is
+    synchronous inside Reddit's own pushState call, so teardown still precedes the feed
+    swap. The listener registers even where the navigation API exists — emit() is
+    idempotent per path, so on Chrome it is one more post-commit safety net. Three
+    guards, because the wrong fix is so tempting: a static check refuses any same-realm
+    history patch in route.js (it would mask a dead relay in every one-world environment
+    while shipping broken), the protocol literals are asserted equal across the worlds
+    like the load-more protocol's, and a real-Firefox suite drives the relay with the
+    navigation API pref'd off — necessary because a measurement made during the port
+    moved the ground: current Firefox release (154) HAS the navigation API; only the ESR
+    line lacks it. On release Firefox the API path runs and the relay is a net; on ESR
+    the relay is everything, and only the pref'd-off session pins it alone.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

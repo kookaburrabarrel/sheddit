@@ -37,6 +37,7 @@
   const SEL_KEY = 'shdPartialSel';
   const METHOD_KEY = 'shdPartialMethod';
   const RESULT_KEY = 'shdLoadMore';
+  const NAVIGATED = 'shd:navigated';
 
   addEventListener(REQUEST, () => {
     const root = document.documentElement;
@@ -55,4 +56,27 @@
     // Dispatch is synchronous, so the caller reads this the moment dispatchEvent returns.
     root.dataset[RESULT_KEY] = result;
   });
+
+  /* SPA navigation relay — the second thing that only works from this world.
+   *
+   * Reddit's router calls THIS realm's history.pushState. A content script that patches
+   * its own `history` wraps a copy the page never calls — each world holds its own
+   * binding, and under Firefox's realm separation the two are strictly distinct — so a
+   * history patch is only worth installing here. Browsers without the `navigation` API
+   * (Firefox) have no other way to see a client-side route change; route.js listens for
+   * this event and re-reads location, which orig.apply() has already updated by the time
+   * the event dispatches. The dispatch is synchronous, inside Reddit's own pushState
+   * call, so the isolated side's teardown still runs before the router swaps the feed.
+   *
+   * Registered after the load-more listener on purpose: if patching history ever throws,
+   * pagination must survive it.
+   */
+  for (const m of ['pushState', 'replaceState']) {
+    const orig = history[m];
+    history[m] = function (...args) {
+      const r = orig.apply(this, args);
+      dispatchEvent(new Event(NAVIGATED));
+      return r;
+    };
+  }
 })();

@@ -41,10 +41,11 @@ ln -s "$SRC/node_modules" "$WORK/node_modules"
 cd "$WORK"
 
 BK=$(mktemp -d)
-cp -r src test options package.json manifest.json "$BK/"
+cp -r src test options package.json manifest.json package-extension.js "$BK/"
 restore() {
-  rm -rf src test options package.json manifest.json
-  cp -r "$BK/src" "$BK/test" "$BK/options" "$BK/package.json" "$BK/manifest.json" .
+  rm -rf src test options package.json manifest.json package-extension.js
+  cp -r "$BK/src" "$BK/test" "$BK/options" "$BK/package.json" "$BK/manifest.json" \
+        "$BK/package-extension.js" .
 }
 
 apply() {
@@ -409,9 +410,10 @@ mutate "the feed stalls on a stale observer verdict" run \
 # packed extension because only real layout can tell in-range from out-of-range at all.
 mutate "geometry stops gating, so the feed pulls pages for ever" extension \
   src/core/paginator.js "  function inRange() {
-    if (!sentinel || !sentinel.isConnected) return false;" \
+    const m = measure();" \
                         "  function inRange() {
     if (true) return true;
+    const m = measure();
     if (!sentinel || !sentinel.isConnected) return false;"
 
 # An interstitial that ships <shreddit-feed></shreddit-feed>. Treating "feed container
@@ -991,13 +993,13 @@ mutate "the rendition rank stops understanding live filenames" run \
       };" "      const fileRank = (u) => Number((u.match(/DASH_(\d+)/i) || [])[1] || 0);"
 
 # ------------------------------------------------------- 2026-08-22 report -------
-# The title stops being the mp4 (project decision, open question 9): Reddit's packaged
-# renditions die asset by asset, so a title that resolves to one intermittently lands on
-# Chrome's "source fetch error". The title goes where the v.redd.it bounce was going to
-# land anyway; the mp4 gets its own link.
-mutate "the video title carries the mp4 again" run \
-  src/core/model.js "      href: (isSelf || type === 'video') ? permalink : (contentHref || permalink)," \
-                    "      href: isSelf ? permalink : (videoUrl || contentHref || permalink),"
+# The title stops routing to the comments page (project decision, open question 9): a
+# video title that leaves the layout lands on the v.redd.it bounce — a 302 straight back
+# to the comments page we were already rendering. The title goes there directly; the
+# watch link is the deliberate exit.
+mutate "the video title leaves the layout again" run \
+  src/core/model.js "      href: (isSelf || type === 'video') ? permalink" \
+                    "      href: isSelf ? permalink"
 
 # ...and the watch link stays off the comments page, where it would point at the page you
 # are already on.
@@ -1257,10 +1259,26 @@ mutate "an image submission loses its picture again" run \
 
 # The responsive set lists 320, 1080, 640. Taking the first is the same mistake the video
 # rendition rank made: it scores every candidate zero and the stable sort hands back
-# whichever Reddit happened to list first, which is the SMALLEST.
+# whichever Reddit happened to list first, which is the SMALLEST. The anchor carries
+# imageOf()'s whole loop because the comparison line alone also matches imagesOf() —
+# a duplicated anchor silently tests whichever call site comes first (bug 48).
 mutate "the largest rendition stops winning, and the first one does" run \
-  src/core/model.js "        if (c.w > bestW) { bestW = c.w; best = c.url; }" \
-                    "        if (bestW < 0) { bestW = c.w; best = c.url; }"
+  src/core/model.js "    let best = null, bestW = -1;
+    for (const img of el.querySelectorAll('img')) {
+      if (img.closest(C.POST) !== el) continue;
+      if (img.closest(C.THUMB_EXCLUDE)) continue;
+      for (const c of imageCandidates(img)) {
+        const host = (c.url || '').split('/')[2] || '';
+        if (!C.THUMB_HOSTS.test(host)) continue;
+        if (c.w > bestW) { bestW = c.w; best = c.url; }" \
+                    "    let best = null, bestW = -1;
+    for (const img of el.querySelectorAll('img')) {
+      if (img.closest(C.POST) !== el) continue;
+      if (img.closest(C.THUMB_EXCLUDE)) continue;
+      for (const c of imageCandidates(img)) {
+        const host = (c.url || '').split('/')[2] || '';
+        if (!C.THUMB_HOSTS.test(host)) continue;
+        if (bestW < 0) { bestW = c.w; best = c.url; }"
 
 mutate "an image title points at the viewer-bound image URL again" run \
   src/core/model.js "        : (type === 'image' && imageUrl && viewerBound(contentHref)) ? permalink" \
@@ -1323,6 +1341,63 @@ mutate "a gallery collapses to one picture" run \
 mutate "gallery frames stop being ranked per element" run \
   src/core/model.js "      if (best && !out.includes(best)) out.push(best);" \
                     "      if (best && !out.length) out.push(best);"
+
+# ----------------------------------------------------------- 0.24.0: the Firefox port ---
+# The relay (bug 82). Reddit's router calls the PAGE realm's pushState; a content-script
+# patch wraps a copy nothing ever calls, and passes every one-world test environment while
+# shipping broken — the pagination bug's shape, one module over. Dispatch and listener get
+# separate rows: the SPA tests traverse the whole chain, and either half's removal has to
+# be caught on its own.
+mutate "the relay never dispatches — SPA navigation goes unseen" run \
+  src/core/bridge.js "      dispatchEvent(new Event(NAVIGATED));" "      ;"
+
+mutate "route.js stops listening for the relay" run \
+  src/core/route.js "    addEventListener(SHD.C.BRIDGE.navigated, () => emit(location.pathname));" \
+                    "    ;"
+
+# The two halves of the protocol are literals in different worlds; a drift disables SPA
+# routing silently, exactly like the load-more protocol it copies.
+mutate "the relay protocol drifts between bridge and contracts" run \
+  src/core/bridge.js "  const NAVIGATED = 'shd:navigated';" \
+                     "  const NAVIGATED = 'shd:navigate';"
+
+# The tempting wrong fix: patch history in route.js's own realm "as well". It masks a
+# dead relay in every one-world environment while Firefox ESR ships broken — the static
+# check is what refuses it.
+mutate "a same-realm history patch sneaks back into route.js" run \
+  src/core/route.js "    addEventListener('popstate', () => emit(location.pathname));" \
+                    "    addEventListener('popstate', () => emit(location.pathname));
+    for (const m of ['pushState', 'replaceState']) {
+      const orig = history[m];
+      history[m] = function (...args) { const r = orig.apply(this, args); emit(location.pathname); return r; };
+    }"
+
+# The Firefox manifest is DERIVED, and each transform property has one guard in run.js;
+# these prove the guards are not vacuous. The fork row models the realistic bad edit:
+# "fixing" a Firefox issue by dropping the MAIN-world script from the Firefox build only.
+mutate "the Firefox floor drops below what world:MAIN needs" run \
+  package-extension.js "      strict_min_version: '128.0'," \
+                       "      strict_min_version: '109.0',"
+
+mutate "the transform forks the layout per store" run \
+  package-extension.js "  out.browser_specific_settings = {" \
+                       "  out.content_scripts = (out.content_scripts || []).filter(cs => cs.world !== 'MAIN');
+  out.browser_specific_settings = {"
+
+mutate "the data-collection declaration vanishes from the Firefox build" run \
+  package-extension.js "      data_collection_permissions: { required: ['none'] }" \
+                       "      data_collection_permissions: undefined"
+
+# The host-permission banner: Firefox can revoke reddit.com access, and a content script
+# that never runs cannot report it anywhere. Hidden is the banner's default state, so a
+# gutted check is a banner that can never appear — invisible everywhere but under test.
+mutate "the host-permission warning can never appear" run \
+  options/options.js "    hostWarning.hidden = await chrome.permissions.contains(HOSTS);" \
+                     "    hostWarning.hidden = true;"
+
+mutate "the banner asks about origins the manifest does not grant" run \
+  options/options.js "const HOSTS = { origins: ['*://*.reddit.com/*'] };" \
+                     "const HOSTS = { origins: ['*://www.reddit.com/*'] };"
 
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous

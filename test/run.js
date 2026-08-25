@@ -778,9 +778,16 @@ async function boot(html, url, setup) {
 
   console.log('\n\x1b[1mSPA ROUTE CHANGES\x1b[0m');
   {
-    // jsdom has no `navigation` API, so this exercises route.js's history-patch fallback.
-    // test/extension.js covers the navigation-API path in a real Chrome.
+    // jsdom has no `navigation` API, so this exercises the no-navigation-API fallback —
+    // which is bridge.js's history relay: the page realm's pushState dispatches
+    // BRIDGE.navigated, and route.js re-reads location on the event. The bundle runs
+    // bridge and route in jsdom's one world, so the pushState below goes through the
+    // real patched method and the real event. Firefox ESR ships this path (release
+    // Firefox has the API now); test/extension.js covers the navigation-API path in a
+    // real Chrome and test/extension-firefox.js pins both against a real Firefox.
     const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/r/aww/');
+    let relayed = 0;
+    window.addEventListener(window.SHD.C.BRIDGE.navigated, () => relayed++);
 
     check('header names the starting subreddit',
       [...doc.querySelectorAll('#shd-header .tabmenu li.selected a')]
@@ -791,6 +798,10 @@ async function boot(html, url, setup) {
     // stands in for a fresh batch of markup arriving.
     doc.querySelectorAll('[data-shd]').forEach(el => el.removeAttribute('data-shd'));
     window.history.pushState({}, '', '/r/programming/');
+    check('the page-realm pushState was relayed as the bridge event', relayed === 1, String(relayed));
+    window.history.replaceState({}, '', '/r/programming/');
+    check('...and replaceState relays too (same-path emits dedupe downstream)',
+      relayed === 2, String(relayed));
     await waitFor(() => [...doc.querySelectorAll('#shd-header .tabmenu li.selected a')]
       .some(a => a.textContent === 'r/programming'));
 
@@ -890,8 +901,8 @@ async function boot(html, url, setup) {
   console.log('\n\x1b[1mPRE-COMMIT NAVIGATION — the navigation API path\x1b[0m');
   {
     /**
-     * The SPA tests above exercise route.js's history-patch fallback, which was always
-     * correct. The path that shipped broken is this one: the real Navigation API's
+     * The SPA tests above exercise the bridge relay — the no-navigation-API fallback.
+     * The path that shipped broken first is this one: the real Navigation API's
      * `navigate` event is PRE-COMMIT — location.* still holds the OLD URL while it
      * dispatches, and a queued microtask drains before the URL updates. The first version
      * read location inside that microtask and latched the stale path as "seen", so every
@@ -2104,7 +2115,8 @@ async function boot(html, url, setup) {
 
     for (const [bridgeName, contractName] of
          [['REQUEST', 'request'], ['SEL_KEY', 'selKey'],
-          ['METHOD_KEY', 'methodKey'], ['RESULT_KEY', 'resultKey']]) {
+          ['METHOD_KEY', 'methodKey'], ['RESULT_KEY', 'resultKey'],
+          ['NAVIGATED', 'navigated']]) {
       const a = literal(bridgeSrc, bridgeName), b = literal(contractsSrc, contractName);
       check(`bridge ${bridgeName} matches contracts BRIDGE.${contractName}`,
         !!a && a === b, `bridge="${a}" contracts="${b}"`);
@@ -2161,6 +2173,46 @@ async function boot(html, url, setup) {
     check('nothing outside the bridge calls the partial load method',
       !/\[C\.PARTIAL_LOAD_METHOD\]\s*\(/.test(
         fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'paginator.js'), 'utf8')));
+    // And history is a page-realm object: a patch in OUR realm wraps a copy Reddit's
+    // router never calls (Firefox's realm separation makes the two strictly distinct),
+    // while passing every one-world test environment — jsdom, the dev bundle, DevTools.
+    // Only bridge.js may patch it. A same-realm patch here would also MASK a dead relay:
+    // the SPA tests below traverse bridge -> event -> route, and a local patch would keep
+    // them green with the relay broken in the shipped extension.
+    const routeSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'route.js'), 'utf8');
+    check('route.js does not patch its own realm\'s history (the page never calls it)',
+      !/history\s*\[\s*m\s*\]\s*=|history\.(pushState|replaceState)\s*=/.test(routeSrc));
+    check('bridge.js patches BOTH history methods (replaceState navigations exist too)',
+      /'pushState'\s*,\s*'replaceState'/.test(bridgeSrc) && /history\s*\[\s*m\s*\]\s*=/.test(bridgeSrc));
+  }
+
+  console.log('\n\x1b[1mTHE FIREFOX MANIFEST\x1b[0m');
+  {
+    // dist/sheddit-firefox.zip carries a DERIVED manifest — firefoxManifest() in
+    // package-extension.js is the only place the two stores may differ. These pin the
+    // transform's load-bearing properties; package-extension.js --check pins that the
+    // committed zip actually contains the transform's output.
+    const { firefoxManifest } = require('../package-extension.js');
+    const m = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'));
+    const ff = firefoxManifest(m);
+    const gecko = ff.browser_specific_settings?.gecko;
+
+    check('the transform never touches the content scripts — one layout, two stores',
+      JSON.stringify(ff.content_scripts) === JSON.stringify(m.content_scripts));
+    check('the version is the shared build identity, so it survives the transform',
+      ff.version === m.version, `${ff.version} vs ${m.version}`);
+    check('a stable gecko id, in AMO\'s email-like format',
+      typeof gecko?.id === 'string' && /^[a-z0-9.-]+@[a-z0-9.-]+$/.test(gecko.id),
+      String(gecko?.id));
+    check('strict_min_version covers content_scripts "world" — the MAIN-world bridge needs 128',
+      parseFloat(gecko?.strict_min_version) >= 128, String(gecko?.strict_min_version));
+    check('data collection is declared, and declared as none',
+      JSON.stringify(gecko?.data_collection_permissions?.required) === '["none"]',
+      JSON.stringify(gecko?.data_collection_permissions));
+    check('the Chrome-only version floor does not leak into the Firefox manifest',
+      !('minimum_chrome_version' in ff), String(ff.minimum_chrome_version));
+    check('the canonical manifest stays Chrome\'s — no gecko block in the tree',
+      !('browser_specific_settings' in m));
   }
 
   console.log('\n\x1b[1mPAGINATION\x1b[0m');
@@ -3691,6 +3743,44 @@ async function boot(html, url, setup) {
     await waitFor(() => writes.length > 1);
     check('picking a theme writes the id, not a boolean', writes[1]?.settings.theme === 'night',
       JSON.stringify(writes[1]?.settings.theme));
+
+    // --- the host-permission warning ---
+    // Firefox treats MV3 host permissions as revocable (and, before its install-time
+    // prompt, as declined by default), and a content script that never runs cannot say
+    // so on any page — the missing grant reads exactly like the extension not being
+    // installed. The options page is the one surface left that can surface it.
+    check('without a permissions API the warning stays hidden (granted at install)',
+      doc.querySelector('#host-warning').hidden === true);
+    const manifestHosts = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8')).host_permissions;
+    const askedOrigins = (optionsJs.match(/origins:\s*(\[[^\]]*\])/) || [])[1];
+    check('the origins the page asks about are the manifest\'s host_permissions',
+      !!askedOrigins &&
+      JSON.stringify(JSON.parse(askedOrigins.replace(/'/g, '"'))) === JSON.stringify(manifestHosts),
+      `options.js: ${askedOrigins} vs manifest: ${JSON.stringify(manifestHosts)}`);
+
+    {
+      const dom2 = new JSDOM(optionsHtml, { runScripts: 'outside-only',
+        virtualConsole: new VirtualConsole() });
+      const w2 = dom2.window, d2 = w2.document;
+      let granted = false; const requests = [];
+      w2.chrome = {
+        storage: { sync: { get: async () => ({}), set: async () => {} } },
+        permissions: {
+          contains: async () => granted,
+          request: async (arg) => { requests.push(arg); granted = true; return true; }
+        }
+      };
+      w2.eval(optionsJs);
+      const shown = await waitFor(() => d2.querySelector('#host-warning').hidden === false);
+      check('a revoked host permission surfaces the warning', shown === true);
+      d2.querySelector('#host-grant').dispatchEvent(new w2.Event('click'));
+      const cleared = await waitFor(() => d2.querySelector('#host-warning').hidden === true);
+      check('the grant button requests the manifest origins and clears the warning',
+        cleared === true && requests.length === 1 &&
+        JSON.stringify(requests[0].origins) === JSON.stringify(manifestHosts),
+        JSON.stringify(requests));
+    }
   }
 
   console.log(`\n\x1b[1m${passed} passed, ${failed} failed\x1b[0m`);

@@ -52,12 +52,12 @@ your issue and the diagnosis is usually immediate.
 
 ```bash
 npm install
-npm test           # all five suites
+npm test           # all six suites
 npm run test:fast  # css-lint + jsdom only, no browser — use this while iterating
 npm run preview    # writes openable dist/preview.*.html
 npm run build      # dist/sheddit.dev.js — paste into DevTools on a Reddit page
-npm run package    # rebuilds dist/sheddit.zip, the download the README links
-npm run package:check   # fails if that zip no longer matches the source
+npm run package    # rebuilds both download zips the README links (Chrome + Firefox)
+npm run package:check   # fails if either zip no longer matches the source
 ```
 
 To run the extension itself: `chrome://extensions` → Developer mode → Load unpacked → this
@@ -65,7 +65,7 @@ folder. **A pushed commit is not a loaded extension** — Chrome keeps running t
 read at load time, so hit the ↻ on the extension card before testing anything. The failure
 screen prints the version so you can check which build you are actually looking at.
 
-### The five suites, and why each exists
+### The six suites, and why each exists
 
 | Suite | Runs on | Exists because |
 |---|---|---|
@@ -73,10 +73,12 @@ screen prints the version so you can check which build you are actually looking 
 | `test/run.js` | the bundle in jsdom | structure, routing, idempotency, delegation |
 | `test/geometry.js` | headless Chromium | **jsdom does no layout** — the suite once passed 39/39 while the page rendered visibly wrong |
 | `test/extension.js` | the **packed extension** | content scripts don't share Reddit's JS realm; pagination was broken in every installed copy while the dev harness worked fine |
+| `test/extension-firefox.js` | the **Firefox build** in a real Firefox | Gecko polices that realm boundary harder still, and its ESR has no `navigation` API — SPA routing rides the bridge's relay there |
 | `test/media-sync.js` | headless Chromium | **jsdom has no media pipeline** — `play()` resolves nothing, so the player's audio pairing was invisible to every other suite |
 
-Browser suites skip cleanly when no Chromium is found, so `npm test` works on a machine
-without one. CI sets `SHEDDIT_REQUIRE_BROWSER=1` to turn that skip into a failure.
+Browser suites skip cleanly when no matching browser is found, so `npm test` works on a
+machine without one. A fork's CI can set `SHEDDIT_REQUIRE_BROWSER=1` (and
+`SHEDDIT_REQUIRE_FIREFOX=1`) to turn those skips into failures.
 
 ### Mutation testing
 
@@ -118,19 +120,18 @@ trust a green sweep, know the three ways a row can look like proof while proving
   *completely* untouched — deleting an element counts as touching it
 - Anything that makes a network request of its own. There are none, and that is a feature
 
-## Porting to Firefox
+## Firefox
 
-Wanted, and not started. The blocker is `src/core/bridge.js`, the `"world": "MAIN"` content
-script that lets Sheddit call `faceplate-partial.loadContent()` — a method Reddit's own code
-defines, which a content script in the isolated world cannot see. Firefox supports MV3 but
-handles main-world injection differently, so the bridge needs a second implementation and
-`manifest.json` needs a browser-specific block.
-
-Everything above the bridge is portable: no Chrome-only APIs are used beyond
-`chrome.storage.sync`, which has a direct `browser.storage.sync` equivalent. If you take
-this on, open an issue first so the manifest strategy can be agreed before you write code —
-the packed-extension suite (`test/extension.js`) will need a Firefox counterpart or the port
-ships untested, which is the one outcome worse than no port.
+Done, and tested. Firefox 128 (the current ESR) accepted `"world": "MAIN"` content
+scripts, so `src/core/bridge.js` runs unchanged; the Firefox build is
+`dist/sheddit-firefox.zip`, whose manifest is **derived** at package time
+(`firefoxManifest()` in `package-extension.js` — the one place the two stores may
+differ), and `test/extension-firefox.js` installs it into a real Firefox and drives it.
+Two things the port surfaced, both worth knowing before touching route or bridge code:
+Firefox's realm separation meant the old same-realm history patch never saw a Reddit
+navigation (engineering log bug 82 — the fix is the bridge's history relay, and a static
+check refuses the patch coming back), and Firefox treats MV3 host permissions as
+revocable, which is what the options page's access warning exists for.
 
 ## Scope
 

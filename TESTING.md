@@ -2,23 +2,25 @@
 
 ```bash
 npm install
-npm test        # everything, ~175s
+npm test        # everything, ~3 min
 ```
 
-Six ways to exercise this, cheapest first. The first five are automated; `npm test`
+Seven ways to exercise this, cheapest first. The first six are automated; `npm test`
 runs all of them. (Assertion counts move with every release — trust `npm test`'s own
 summary over this table when they disagree, and update the table when they do.)
 
 | # | Command | Needs | Assertions |
 |---|---|---|---|
 | 1 | `node test/css-lint.js` | nothing | 38 |
-| 2 | `node test/run.js` | jsdom | 486 |
+| 2 | `node test/run.js` | jsdom | 502 |
 | 3 | `node test/geometry.js` | Chromium | 184 |
 | 4 | `node test/extension.js` | Chromium | 130 |
-| 5 | `node test/media-sync.js` | Chromium | 8 |
-| 6 | `npm run verify:live` | real network | manual |
+| 5 | `node test/extension-firefox.js` | Firefox + geckodriver | 31 |
+| 6 | `node test/media-sync.js` | Chromium | 8 |
+| 7 | `npm run verify:live` | real network | manual |
 
-`npm run test:fast` is 1+2 only (no browser) for a tight edit loop.
+`npm run test:fast` is 1+2 only (no browser) for a tight edit loop;
+`npm run test:firefox` is the build plus suite 5 alone.
 
 ---
 
@@ -148,11 +150,13 @@ packaging-sensitive belongs here, not in jsdom.
 
 ### Browser suites skip cleanly
 
-If no Chromium is found, suites 3 and 4 print `SKIP` and exit 0, so `npm test` still works
-without one. A browser is located automatically — Playwright's dir, puppeteer's own
-download, then `/Applications/Google Chrome.app` and the usual Linux paths — so no setup
-is normally needed. `SHEDDIT_CHROME=/path/to/chrome` overrides that choice;
-`SHEDDIT_REQUIRE_BROWSER=1` turns the skip into a failure (use this in CI).
+If no Chromium is found, the Chromium-backed suites print `SKIP` and exit 0, so `npm test`
+still works without one. A browser is located automatically — Playwright's dir, puppeteer's
+own download, then `/Applications/Google Chrome.app` and the usual Linux paths — so no
+setup is normally needed. `SHEDDIT_CHROME=/path/to/chrome` overrides that choice;
+`SHEDDIT_REQUIRE_BROWSER=1` turns the skip into a failure (use this in CI). The Firefox
+suite follows the same convention with its own pair — `SHEDDIT_FIREFOX` / `GECKODRIVER`
+to point at binaries, `SHEDDIT_REQUIRE_FIREFOX=1` to make its skip fail.
 
 ---
 
@@ -215,7 +219,34 @@ produces.
 
 ---
 
-## 5. Media sync (headless Chromium)
+## 5. The Firefox build, in a real Firefox
+
+`test/extension-firefox.js` temporary-installs a freshly staged `sheddit-firefox.zip`
+(the derived manifest — see `package-extension.js`) into a real Firefox through
+geckodriver, and asserts the things only Gecko can answer: content scripts run behind
+Xray wrappers, so the main-world bridge, attribute reads and body clones all re-earn
+their keep; the theme cascade tie is re-fought under Gecko's injection order; the
+`chrome.*` promise calls ride Firefox's compatibility surface; and — the reason the
+suite exists — the bridge's **history relay** is the only SPA route signal on Firefox
+ESR 128, the build floor, which has no `navigation` API. Current Firefox release ships
+that API (measured on 154), so the suite runs two sessions: one with defaults, testing
+whichever branch this Firefox takes — including the real `navigate`-event sort-click
+fixture when the API is present — and one with the API pref'd off, which is the ESR
+model and the only session that pins the relay alone. The driver is spoken to directly
+over the WebDriver protocol (a page of `fetch` calls, no client dependency); the
+reddit.com origin comes from the `network.dns.localDomains` pref, Gecko's equivalent of
+Chromium's `--host-resolver-rules`. Needs a Firefox and a geckodriver
+(`brew install geckodriver`, or `npm i --no-save geckodriver`); skips cleanly without
+them. It has passed against release Firefox on Linux and macOS both. If a session dies
+at open, the run prints the geckodriver log — Firefox's own stderr — and "unexpectedly
+closed with status 0" usually just means a running Firefox should be quit first; session
+creation already retries once for first-launch housekeeping.
+
+What it cannot see: document_start CSS **timing**. WebDriver returns after load, so a
+flash of native Reddit before suppress.css lands would be over before anything could
+measure it — that one is assessed by eye on a real machine.
+
+## 6. Media sync (headless Chromium)
 
 `test/media-sync.js` exists because jsdom implements no media pipeline at all: `play()`
 resolves nothing, `currentTime` never advances, `timeupdate` never fires — so the video
@@ -225,7 +256,7 @@ binary, no network), then asserts the paired audio starts, holds sync, recovers 
 deliberate shove, follows seeks, mirrors volume and mute, and stops with the picture.
 Skips loudly without a browser, like the other Chromium suites.
 
-## 6. Live on reddit.com
+## 7. Live on reddit.com
 
 ### Option A — dev harness (fastest iteration, no install)
 
