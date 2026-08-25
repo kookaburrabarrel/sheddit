@@ -57,16 +57,16 @@ SHD.C = {
      "70 more replies", "28 more replies" — counts vary, the phrase does not. English-only,
      like the age-gate matcher; a miss fails safe (no extra control is rendered). */
   MORE_REPLIES_TEXT: /more repl/i,
-  /* The comment-sort values Reddit's own page accepts in `?sort=`, with old reddit's
-     labels for them. Requested twice from live use ("no comment-sort dropdown").
+  /* The comment-sort values Reddit's page accepts in `?sort=`, with old reddit's labels
+     for them. Requested twice from live use ("no comment-sort dropdown").
 
-     The VALUES are a contract and they are UNVERIFIED LIVE — chosen from the classic
-     API's names (`confidence` is what old reddit called "best"), because a container
-     cannot reach real Reddit to confirm what shreddit's own dropdown emits. The failure
-     is soft by construction: a value Reddit does not recognise falls back to the default
-     order and the page still loads — a link that mis-sorts, never a link that breaks.
-     verify:live's COMMENT SORT section is what settles them; if it reports the order
-     unchanged under ?sort=new, THESE names are the first suspect. */
+     VERIFIED LIVE 2026-08-24: the classic API's names are accepted. The check is
+     verify:live's COMMENT SORT VALUES section — comment ids are base36-sequential over
+     time, and ?sort=new delivered a strictly newer median id than ?sort=old on a
+     454-comment thread, which an ignored parameter cannot produce (both loads would be
+     the identical default slice). The failure stays soft by construction: a value Reddit
+     stops recognising falls back to the default order — a link that mis-sorts, never a
+     link that breaks — and a future break shows up in that same section as tied medians. */
   COMMENT_SORTS: [
     { id: 'confidence', label: 'best' },
     { id: 'top', label: 'top' },

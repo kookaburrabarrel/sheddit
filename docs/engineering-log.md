@@ -1057,6 +1057,9 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     since 0.16.0, and the attribute is known to hydrate late and to be dying with the
     CMAF migration. Whether that 0/4 was probe error or the migration completing, the
     next run reads directly.
+    **Settled by the next run, same day:** 1/1 video post carried the attribute in the
+    subtree and 0 on the post element — the 0/4 was the probe reading the wrong element,
+    not the migration completing. The attribute is alive, where the capture said it was.
 
 ## The popup policy — supersedes bugs 30, 33 and 38
 
