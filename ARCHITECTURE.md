@@ -164,7 +164,6 @@ sheddit/
 │   ├── media-sync.js           real media playback in Chromium — the audio pairing
 │   ├── live-contracts.js       re-verify contracts.js against real reddit.com
 │   └── mutate.sh               reintroduce shipped bugs, prove the suites catch them
-├── .github/workflows/          full suite and mutation sweep, dispatched by hand
 ├── CHANGELOG.md                what changed, and which bugs never worked at all
 └── options/                    per-feature toggles
 ```
