@@ -293,16 +293,19 @@ even reachable before you go looking for it by hand.
 
 ## Continuous integration
 
-`.github/workflows/test.yml` runs the full suite with `SHEDDIT_REQUIRE_BROWSER=1`, so a
-missing Chromium fails the build instead of silently skipping half the assertions.
-`.github/workflows/mutate.yml` runs the sweep — `test/mutate.sh` reports per row and
-always exits 0, so the workflow greps for `SURVIVED` and turns that into the failure
-itself.
+There is none, as a standing decision: this repository carries no GitHub Actions
+workflows and nothing runs on a push, a schedule, or a pull request. Testing happens
+where a person is — `npm test` locally before a push, `npm run test:mutate` on some
+cadence, `npm run verify:live` from an ordinary connection when a contract needs
+settling. Everything is written so a fork can wire its own CI in minutes if it wants
+one: the suites exit non-zero on failure, `SHEDDIT_REQUIRE_BROWSER=1` turns a missing
+Chromium from a skip into a failure, and `test/mutate.sh` prints `SURVIVED` rows to
+grep for.
 
-Both are dispatched by hand from the Actions tab rather than firing on a push or a
-schedule. Running the sweep on some cadence is the point rather than a nicety: the failure
-it guards against is a suite that has quietly stopped protecting something, which looks
-exactly like a passing build until you go and check.
+The mutation sweep still wants a cadence — the failure it guards against is a suite
+that has quietly stopped protecting something, which looks exactly like a passing build
+until you go and check. Without automation, that cadence is a habit: run it after any
+change that touches the tests themselves.
 
 ## Closed gaps
 
