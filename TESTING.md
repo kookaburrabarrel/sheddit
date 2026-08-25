@@ -5,16 +5,18 @@ npm install
 npm test        # everything, ~175s
 ```
 
-Five ways to exercise this, cheapest first. The first four are automated; `npm test`
-runs all of them.
+Six ways to exercise this, cheapest first. The first five are automated; `npm test`
+runs all of them. (Assertion counts move with every release — trust `npm test`'s own
+summary over this table when they disagree, and update the table when they do.)
 
 | # | Command | Needs | Assertions |
 |---|---|---|---|
-| 1 | `node test/css-lint.js` | nothing | 31 |
-| 2 | `node test/run.js` | jsdom | 243 |
-| 3 | `node test/geometry.js` | Chromium | 73 |
-| 4 | `node test/extension.js` | Chromium | 116 |
-| 5 | `npm run verify:live` | real network | manual |
+| 1 | `node test/css-lint.js` | nothing | 38 |
+| 2 | `node test/run.js` | jsdom | 486 |
+| 3 | `node test/geometry.js` | Chromium | 184 |
+| 4 | `node test/extension.js` | Chromium | 130 |
+| 5 | `node test/media-sync.js` | Chromium | 8 |
+| 6 | `npm run verify:live` | real network | manual |
 
 `npm run test:fast` is 1+2 only (no browser) for a tight edit loop.
 
@@ -177,7 +179,8 @@ rows remove *all* of them, or all the fast ones, and state that in the row name.
 mutation that survives because a sibling covers it is not a hole; a mutation that survives
 because nothing asserts the behaviour is. Tell them apart before writing the test.
 
-It keeps earning its keep. Four mutations have survived a first run so far, and every one
+It keeps earning its keep. A number of mutations have survived their first run over the
+project's life, and every one
 was a real gap:
 
 - an in-flight flush after a failure was covered only by a timing-dependent test that
@@ -212,7 +215,17 @@ produces.
 
 ---
 
-## 5. Live on reddit.com
+## 5. Media sync (headless Chromium)
+
+`test/media-sync.js` exists because jsdom implements no media pipeline at all: `play()`
+resolves nothing, `currentTime` never advances, `timeupdate` never fires — so the video
+player's audio pairing was the one shipped feature `run.js` structurally could not see.
+The suite generates its own VP8/Opus media in the page with `MediaRecorder` (no fixture
+binary, no network), then asserts the paired audio starts, holds sync, recovers from a
+deliberate shove, follows seeks, mirrors volume and mute, and stops with the picture.
+Skips loudly without a browser, like the other Chromium suites.
+
+## 6. Live on reddit.com
 
 ### Option A — dev harness (fastest iteration, no install)
 
@@ -352,11 +365,12 @@ connection does not). Findings, roughly most to least important:
   that shape, and the fix (stamp what has been driven) is correct under both mechanisms — see
   bug 27 in `docs/engineering-log.md`.
 
-  What is still unmeasured is which mechanism it actually is. The **WHAT DRIVES A COMMENT
-  TREE** section of `test/live-contracts.js` settles it: it inventories every partial in the
-  tree, drives the exact element the paginator would drive, five times, and reports whether
-  each call advances, whether a driven partial survives, and whether the arrivals are a
-  branch's replies or new top-level comments. It needs a real network — see below.
+  MEASURED 2026-08-24, live: the mechanism is **subthread expansion**. The **WHAT DRIVES A
+  COMMENT TREE** section of `test/live-contracts.js` drove the exact element the paginator
+  would drive, five times, on two different threads — every driven partial removed itself
+  (5/5 both runs), every drive delivered comments under its own branch, and progress never
+  stalled. The stamp-and-exclude design is correct under the mechanism it actually runs
+  under, not just under both candidates.
 
 Re-run this after any suspected Reddit redesign. See the caveats below for what is still
 unchecked.

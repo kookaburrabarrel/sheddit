@@ -52,7 +52,7 @@ your issue and the diagnosis is usually immediate.
 
 ```bash
 npm install
-npm test           # all four suites
+npm test           # all five suites
 npm run test:fast  # css-lint + jsdom only, no browser — use this while iterating
 npm run preview    # writes openable dist/preview.*.html
 npm run build      # dist/sheddit.dev.js — paste into DevTools on a Reddit page
@@ -62,11 +62,10 @@ npm run package:check   # fails if that zip no longer matches the source
 
 To run the extension itself: `chrome://extensions` → Developer mode → Load unpacked → this
 folder. **A pushed commit is not a loaded extension** — Chrome keeps running the code it
-read at load time, so hit the ↻ on the extension card before testing anything. This has cost
-two full test rounds; the failure screen prints the version so you can check which build you
-are actually looking at.
+read at load time, so hit the ↻ on the extension card before testing anything. The failure
+screen prints the version so you can check which build you are actually looking at.
 
-### The four suites, and why each exists
+### The five suites, and why each exists
 
 | Suite | Runs on | Exists because |
 |---|---|---|
@@ -74,6 +73,7 @@ are actually looking at.
 | `test/run.js` | the bundle in jsdom | structure, routing, idempotency, delegation |
 | `test/geometry.js` | headless Chromium | **jsdom does no layout** — the suite once passed 39/39 while the page rendered visibly wrong |
 | `test/extension.js` | the **packed extension** | content scripts don't share Reddit's JS realm; pagination was broken in every installed copy while the dev harness worked fine |
+| `test/media-sync.js` | headless Chromium | **jsdom has no media pipeline** — `play()` resolves nothing, so the player's audio pairing was invisible to every other suite |
 
 Browser suites skip cleanly when no Chromium is found, so `npm test` works on a machine
 without one. CI sets `SHEDDIT_REQUIRE_BROWSER=1` to turn that skip into a failure.

@@ -111,7 +111,7 @@ notice when it does. That is what the rest of this page is about.
 It runs on every Reddit page you open, and for now you install it by hand rather than from
 a store. Here is the testing behind it.
 
-**Four suites**, each catching what the cheaper one below it cannot:
+**Five suites**, each catching what the cheaper one below it cannot:
 
 | Suite | Runs on | Catches |
 |---|---|---|
@@ -119,6 +119,7 @@ a store. Here is the testing behind it.
 | `run` | the bundle in jsdom | structure, routing, idempotency, delegation |
 | `geometry` | **real layout** in headless Chromium | overlap, wrapping, floats, every theme at two widths |
 | `extension` | the **packed extension** in Chromium | manifest wiring, script worlds, CSS delivery order |
+| `media-sync` | real media playback in Chromium | the video player's audio pairing — jsdom has no media pipeline at all |
 
 **Mutation testing.** A passing test proves nothing until you have watched it fail.
 `npm run test:mutate` reintroduces every bug this project has shipped, one at a time, and
@@ -194,7 +195,8 @@ supported — Sheddit needs a `"world": "MAIN"` content script, and porting it i
 |  |  |
 |---|---|
 | **The whole list at once** | 72px rows with rank, score, thumbnail, subreddit and tagline — around nine posts in a 1280×800 window, growing a line where a title needs one |
-| **Threading that reads like a conversation** | Depth-indented comment trees with guide lines and `[–]` collapse toggles, rebuilt from Reddit's own depth data |
+| **Threading that reads like a conversation** | Depth-indented comment trees with guide lines and `[–]` collapse toggles, rebuilt from Reddit's own depth data — with old reddit's sort menu and `all N comments` link above them |
+| **Media without leaving the layout** | Video plays on the comments page, sound included; images and gallery frames render full size there too, and listing rows get old reddit's `[+]` expando |
 | **Scrolling that ends** | Drives Reddit's own pagination and stops when the feed is spent, instead of spinning to keep the session open |
 | **Five themes, no reload** | Switched from a button in the header; the choice follows you to every other tab |
 | **Tells you when it breaks** | If Reddit ships markup Sheddit can't read, you get a screen saying so, with a button to hand the page back |
@@ -326,7 +328,7 @@ If Reddit ships a redesign and Sheddit breaks, the fix is almost always in
 
 ```bash
 npm install
-npm test           # all four suites
+npm test           # all five suites
 npm run test:fast  # css-lint + jsdom only, no browser
 npm run preview    # writes openable dist/preview.*.html
 npm run build      # dist/sheddit.dev.js — paste into DevTools on any Reddit page
