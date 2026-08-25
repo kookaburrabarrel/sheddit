@@ -208,7 +208,6 @@ SHD.model = (() => {
       author: attr(el, A.author) || '[deleted]',
       subreddit: attr(el, A.subreddit) || '',
       subredditPrefixed: attr(el, A.subredditPrefixed) || '',
-      awards: num(el, A.awards) ?? 0,
       index: num(el, A.index),
       nsfw: nsfwOf(el),
       thumbnail: thumbnailFor(el, type),

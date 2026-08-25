@@ -622,6 +622,15 @@ produce — and `packaged-media-json` is alive on the nested player (1/1 in the 
 0 on the post element), confirming the earlier 0/4 as probe error rather than the CMAF
 migration completing.
 
+**A third run the same day (an age-gated subreddit, 28 posts) found real drift:**
+`award-count` on 0/28 posts — dead on posts while comments still carry it 25/25 — so the
+post mapping is retired by the same test that removed `award-icon-url`. `icon` was on
+27/28, which is what an optional attribute looks like, not a break; the probe now
+distinguishes required (universal), dead (0 carriers), and partial (FYI). The same run
+measured `packaged-media-json` on 16/28 video posts' players, consistent with late
+hydration, and the gate answered itself en route — which navigated the page and exposed
+a probe crash, fixed alongside.
+
 **Unchanged:** the upvote control is still unreachable logged out (20 open shadow roots
 searched, nothing), which is the documented scope state rather than a failure — the
 verify script now reports it as a note instead of failing an otherwise-clean run over a

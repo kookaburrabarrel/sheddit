@@ -196,8 +196,29 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   }, C);
 
   check(`posts found on the page (${listing.count})`, listing.count > 0);
-  check('every POST_ATTR in contracts.js is present on every post',
-    Object.keys(listing.missing).length === 0, JSON.stringify(listing.missing));
+  /* Required and optional attributes fail differently, and one check treated them the
+     same — a live listing with `icon` on 27/28 posts read as the same failure as a
+     renamed `post-title`. The model's required triad must be universal; everything else
+     is optional by design (model.js renders around its absence), so partial coverage is
+     an FYI and only 0/N — a dead mapping, bug 24's category — earns a failure. That
+     exact shape found `award-count` dead on posts (0/28, 2026-08-24) and retired it. */
+  {
+    const required = ['id', 'title', 'permalink'];
+    const requiredMissing = Object.fromEntries(
+      Object.entries(listing.missing).filter(([k]) => required.includes(k)));
+    const dead = Object.entries(listing.missing)
+      .filter(([, v]) => / 0\/\d+$/.test(v));
+    const partial = Object.entries(listing.missing)
+      .filter(([k, v]) => !required.includes(k) && !/ 0\/\d+$/.test(v));
+    check('the required triad (id, title, permalink) is on every post',
+      Object.keys(requiredMissing).length === 0, JSON.stringify(requiredMissing));
+    check('no optional POST_ATTR mapping is DEAD (0 carriers = retire it, bug 24)',
+      dead.length === 0, JSON.stringify(Object.fromEntries(dead)));
+    if (partial.length) {
+      console.log('  \x1b[2moptional attrs on some posts only (fine — the model treats ' +
+        'them as optional): ' + partial.map(([, v]) => v).join(', ') + '\x1b[0m');
+    }
+  }
   check('shreddit-feed still exists', listing.feed);
   check('#main-content still exists', listing.main);
   check('the programmatic pagination partial is present', listing.partial);
@@ -413,8 +434,21 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
 
   /* ---------------- vote reachability: the question that matters ---------------- */
   console.log('\n\x1b[1mLIVE CONTRACTS — VOTE DELEGATION\x1b[0m');
+  /* The bundle is not merely a library here: booting it runs the real pipeline, and on an
+     age-gated subreddit answerAgeGate() clicks Reddit's own affirmative button — which
+     can NAVIGATE the page. A navigation destroys the JS context, and the next evaluate
+     then finds no SHD and threw, killing every section after this one (a whole live run
+     lost its thread, sort and profile sections that way). So: evaluate, wait, and if the
+     context turned over in between, inject again into the new page before reading. */
   await page.evaluate(BUNDLE);                       // gives the page SHD.dom.deepQuery
   await new Promise(r => setTimeout(r, 2500));       // let the action bar hydrate
+  if (await page.evaluate(() => typeof SHD === 'undefined').catch(() => true)) {
+    console.log('  \x1b[2mpage navigated after the bundle booted (an answered age gate ' +
+      'does that) — re-injecting into the new document\x1b[0m');
+    await page.waitForSelector(C.POST, { timeout: 20000 }).catch(() => null);
+    await page.evaluate(BUNDLE);
+    await new Promise(r => setTimeout(r, 1500));
+  }
 
   const vote = await page.evaluate((C) => {
     const post = document.querySelector(C.POST);
@@ -1005,4 +1039,12 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   }
   await browser.close();
   report();
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  /* A crash mid-run must not eat the sections that already ran: print the error, then
+     still print the tally, so a partial run reports its partial findings. The one live
+     crash so far lost the thread, sort and profile sections to an error the summary
+     could have survived. */
+  console.error('\n  \x1b[31mrun aborted:\x1b[0m', e);
+  try { report(); } catch { /* report exits non-zero on failures; the error above stands */ }
+  process.exit(1);
+});

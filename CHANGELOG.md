@@ -12,6 +12,26 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased — 0.23.0
+
+### Removed — the post's dead `award-count` mapping, caught by its own tripwire
+
+A live listing carried `award-count` on 0/28 posts — while the same day's comment run
+measured it present 25/25 — so the POST mapping failed the test that removed
+`award-icon-url` before it, twice over: consumed by nothing, and now absent. The comment
+mapping stays. The listing probe also learned the distinction this finding needed:
+the required triad must be universal, a dead optional mapping (0 carriers) fails as a
+retirement prompt, and partial coverage (`icon` on 27/28) is an FYI, because the model
+treats everything outside the triad as optional by design.
+
+### Fixed — one gated subreddit could crash the live-verification run
+
+Booting the bundle inside the probe runs the real pipeline, and on an age-gated
+subreddit the answered gate can navigate the page — destroying the JS context between
+the bundle's injection and the read that used it. One live run lost its thread, sort and
+profile sections to exactly that. The probe now detects the turnover and re-injects, and
+a crash anywhere mid-run still prints the tally of the sections that finished.
+
 ## Unreleased — 0.22.0
 
 ### Fixed — clicking an image post no longer dumps you into Reddit's viewer
