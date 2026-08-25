@@ -36,20 +36,20 @@ SHD.C = {
      first delivered slice of a thread was unreachable. Scoped to the comment tree so a
      stray partial elsewhere on the page cannot be mistaken for more comments.
 
-     THIS MATCHED NOTHING LIVE, AND IT SELECTS NOTHING THE FALLBACK DOES NOT.
-     verify:live 2026-08-14 found ten partials inside one comment tree and zero with
-     loading="programmatic", so comment pagination has only ever worked through paginator.js's
-     broader `COMMENT_TREE LAZY_LOADER` clause. And it cannot ever do more than that clause
-     does: this is a strict SUBSET of it, and `querySelector('a, b')` returns the first match
-     in DOCUMENT order, not the first clause with a match — so listing it first buys no
-     preference. FEED_PARTIAL above sits in the same relationship to its own fallback.
+     IT SELECTS NOTHING THE FALLBACK DOES NOT — and what it matches has moved twice.
+     verify:live 2026-08-14 found ZERO in-tree partials with loading="programmatic";
+     2026-08-24 found TWO (beside ~19 per-branch loading="action" expanders), so the
+     selector matches real elements again. Either way it cannot do more than the broader
+     `COMMENT_TREE LAZY_LOADER` clause: it is a strict SUBSET of it, and
+     `querySelector('a, b')` returns the first match in DOCUMENT order, not the first
+     clause with a match — so listing it first buys no preference. FEED_PARTIAL above
+     sits in the same relationship to its own fallback.
 
      Both are kept anyway, deliberately, for one reason: verify:live asserts on them, and
      "the feed's partial is programmatic" is the fact that explains why pagination does not
-     self-trigger at all. They are documentation with a test attached, not selectors doing
-     work. Do not read their presence as evidence that comment continuation is understood —
-     see the WHAT DRIVES A COMMENT TREE section of test/live-contracts.js, which is the thing
-     that will settle it. */
+     self-trigger at all. Comment continuation itself IS settled now — the WHAT DRIVES A
+     COMMENT TREE section measured it live 2026-08-24: subthread expansion, with every
+     driven partial removing itself (5/5) and repeated drives making progress. */
   COMMENT_PARTIAL: 'shreddit-comment-tree faceplate-partial[loading="programmatic"]',
   /* The label on Reddit's per-branch reply expander, for the delegated control in
      comments.js. A TEXT test, exceptionally: the control is a plain button/anchor with no

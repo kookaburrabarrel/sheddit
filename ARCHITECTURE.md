@@ -144,6 +144,7 @@ sheddit/
 │   │   ├── pipeline.js         MutationObserver → rAF-batched work queue
 │   │   ├── paginator.js        drives faceplate-partial.loadContent() off its own sentinel
 │   │   ├── model.js            shreddit-* element → plain JS model object
+│   │   ├── media.js            DASH-manifest resolution + video/audio pairing (0.16–0.17)
 │   │   └── dom.js              tiny h() builder, escaping, number/time formatting
 │   ├── modules/
 │   │   ├── listing.js          feed & subreddit → old-reddit link rows
@@ -160,6 +161,7 @@ sheddit/
 │   ├── run.js                  the bundle in jsdom
 │   ├── geometry.js             the bundle in Chromium — REAL layout boxes
 │   ├── extension.js            the PACKED extension in Chromium — manifest wiring
+│   ├── media-sync.js           real media playback in Chromium — the audio pairing
 │   ├── live-contracts.js       re-verify contracts.js against real reddit.com
 │   └── mutate.sh               reintroduce shipped bugs, prove the suites catch them
 ├── .github/workflows/          full suite and mutation sweep, dispatched by hand
@@ -430,8 +432,9 @@ was committed to the skin.
 ### Incidental findings
 - `shreddit-ad-post` does **not** contain a `shreddit-post`, so querying `POST` excludes
   ads for free — no filtering needed.
-- Observed `post-type` values: `text`, `link`, `image`, `gallery`, `video`, `multi_media`.
-  `multi_media` resolves no thumbnail and falls back to the placeholder.
+- Observed `post-type` values: `text`, `link`, `image`, `gallery`, `video`, `multi_media`,
+  `crosspost` (added 2026-08-14). `multi_media` resolves no thumbnail and falls back to
+  the placeholder.
 - `/r/all/` redirects to `/` for logged-out users; `route.js` classifies both as LISTING.
 
 ---

@@ -54,6 +54,11 @@ extension removes them.
 
   **To switch it off:** untick *"Play video on the comments page"* on the options page.
   Video posts then go back to being a link and a thumbnail.
+- **Pictures are ordinary page images.** Thumbnails, full-size images on a comments page,
+  and pictures opened with the `[+]` expando are fetched by your browser from Reddit's
+  image servers the same way any page loads its images — Sheddit only writes the `<img>`
+  tag, and listing pictures are not fetched at all until you open them. Untick *"Show
+  images inline"* to turn the full-size ones off.
 - **No remote code.** Everything that runs ships inside the extension. Nothing is
   downloaded, evaluated, or updated out of band. (Manifest V3 forbids it; Sheddit would
   not do it regardless.)

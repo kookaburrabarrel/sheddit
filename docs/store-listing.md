@@ -134,8 +134,9 @@ answered.
 ```
 Stores the user's display preferences: which colour theme they chose, which page types
 Sheddit should re-render (listings, comments, profiles), and layout toggles such as
-compact rows, thumbnails and auto-paging. Nine boolean-or-string values in one object.
-No identifiers, no browsing data, nothing derived from what the user reads.
+compact rows, thumbnails, auto-paging and inline media. Eleven boolean-or-string values
+in one object. No identifiers, no browsing data, nothing derived from what the user
+reads.
 ```
 
 **Host permission `*://*.reddit.com/*`**
