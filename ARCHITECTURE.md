@@ -615,6 +615,13 @@ logged-out click can reach that shows the bare picture, which re-diagnoses the r
 `i.redd.it` URL all along (16/16 on this run), and the CDN itself does the bouncing.
 Image titles route to the comments page as a result; see the engineering log.
 
+**Settled by a follow-up run the same day, with the corrected probes:** the comment-sort
+values are **accepted** — `?sort=new` delivered a strictly newer median comment id than
+`?sort=old` (ids are base36-sequential over time), which an ignored parameter cannot
+produce — and `packaged-media-json` is alive on the nested player (1/1 in the subtree,
+0 on the post element), confirming the earlier 0/4 as probe error rather than the CMAF
+migration completing.
+
 **Unchanged:** the upvote control is still unreachable logged out (20 open shadow roots
 searched, nothing), which is the documented scope state rather than a failure — the
 verify script now reports it as a note instead of failing an otherwise-clean run over a
