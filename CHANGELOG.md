@@ -1,9 +1,10 @@
 # Changelog
 
-Sheddit has not been released yet — everything below is pre-1.0 development on `main`. The
-version in `manifest.json`/`package.json` moves on every push, because it is the only build
-identity available while testing: the failure screen prints it, so a report can always be
-matched to the build it came from. Dates are commit dates.
+Sheddit is in **beta**: 0.25.0 is the current build, open to anyone who wants to install
+it by hand while the store listings are in review. Everything below is pre-1.0 development
+on `main`. The version in `manifest.json`/`package.json`/`README.md` moves on every push,
+because it is the only build identity available while testing: the failure screen prints
+it, so a report can always be matched to the build it came from. Dates are commit dates.
 
 Entries lead with what changed for a *user* where there is such a thing, and note the
 underlying cause where that is the more useful fact. Several entries describe bugs that

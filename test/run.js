@@ -2199,6 +2199,38 @@ async function boot(html, url, setup) {
       /'pushState'\s*,\s*'replaceState'/.test(bridgeSrc) && /history\s*\[\s*m\s*\]\s*=/.test(bridgeSrc));
   }
 
+  console.log('\n\x1b[1mTHE VERSION IS STATED IN FOUR PLACES\x1b[0m');
+  {
+    // The version is the only build identity available while testing — the failure card
+    // prints it and a report can only be matched to a build if it moved with the build.
+    // It now appears in the README as well (a badge, a header line and the install
+    // block), and a version a reader is told to expect is worse than none if it is stale.
+    // Hand-maintained agreement across files is this project's oldest drift trap (bug
+    // 43's token list), so the agreement is asserted rather than remembered.
+    const manifestV = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8')).version;
+    const packageV = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version;
+    check('manifest.json and package.json agree', manifestV === packageV,
+      `manifest ${manifestV} vs package ${packageV}`);
+
+    const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+    // Every x.y.z in the README that is presented AS the current version. Deliberately
+    // not every version-shaped string: the changelog link and prose may name old ones.
+    const stated = [
+      ...readme.matchAll(/badge\/version-(\d+\.\d+\.\d+)/g),
+      ...readme.matchAll(/[Cc]urrent version:?\*{0,2}:?\s*\*{0,2}(\d+\.\d+\.\d+)/g),
+      // The release announcement names it too, and an announcement for a build nobody
+      // can download is the worst of the three to leave stale.
+      ...readme.matchAll(/[Bb]eta\s+v?(\d+\.\d+\.\d+)/g)
+    ].map(m => m[1]);
+    check('the README states the version somewhere prominent', stated.length >= 2,
+      `found ${stated.length} statements — the badge and the install block are the two`);
+    check('every version the README states is the shipped one',
+      stated.every(v => v === manifestV),
+      `README says ${[...new Set(stated)].join(', ')}; manifest says ${manifestV}`);
+  }
+
   console.log('\n\x1b[1mTHE FIREFOX MANIFEST\x1b[0m');
   {
     // dist/sheddit-firefox.zip carries a DERIVED manifest — firefoxManifest() in
