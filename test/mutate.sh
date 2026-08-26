@@ -1438,6 +1438,13 @@ mutate "the expando's [hidden] counterpart vanishes (static)" css-lint \
 mutate "the expando's [hidden] counterpart vanishes (layout)" geometry \
   src/styles/old-reddit.css ".expando[hidden] { display: none; }" ""
 
+# The README now TELLS a reader which version the downloads are, in three places. A
+# stated version that has gone stale is worse than none — it is the one fact a reader
+# uses to decide whether their copy is current. Mutating the manifest models the real
+# mistake: bumping the version and forgetting the README.
+mutate "the README's stated version drifts from the manifest" run \
+  manifest.json "\"version\": \"0.25.0\"," "\"version\": \"0.26.0\","
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it
