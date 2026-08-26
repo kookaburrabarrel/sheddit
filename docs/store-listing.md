@@ -224,9 +224,11 @@ well as the front page answers more of what a visitor is deciding about.
 
 # Submission checklist
 
-1. Bump `version` in **both** `manifest.json` and `package.json`, by hand — nothing
-   enforces that they agree, and the store refuses an upload whose version is not higher
-   than the published one.
+1. Bump `version` in `manifest.json`, `package.json` **and the README** (badge, header
+   line, install block), by hand — the store refuses an upload whose version is not
+   higher than the published one, and a README that still names the previous version
+   tells every reader their current copy is the new one. `npm test` asserts the four
+   agree, so run it before uploading rather than trusting the edit.
 2. `npm run package` — runs the full suite first and stops on a red test, then writes
    `dist/sheddit.zip`.
 3. Load that zip unpacked and click through a listing, a comment page and the options

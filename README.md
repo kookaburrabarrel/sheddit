@@ -6,29 +6,31 @@
   <img src="docs/assets/banner-light.png" alt="Sheddit — modern Reddit, rewritten into the old.reddit.com layout, live, on every page. No account, no redirect, no API calls. Alongside, a Reddit front page rendered in the old.reddit layout." width="900">
 </picture>
 
-### Shed the casino. Keep the conversation.
+### Shed the feed. Keep the conversation.
 
 **Read Reddit without being read back.**
 
-The modern feed is a harvesting rig with sentiment manipulation built on top: it measures
-what you pause on and what provokes you, compiles that into the profile advertisers buy,
-then tunes what you see next to work on you. Sheddit is the opt-out — **logged out,
-unprofiled, un-nudged**: no account to pin a profile to, zero API calls, zero telemetry,
-and a front page ranked by votes rather than by what an engagement model predicts will
-keep you scrolling, or seething. If the harvesting and the manipulation are why you left —
-or why you never log in — this is the safe way to keep reading.
+Stay logged out, unprofiled, un-manipulated.
 
 [![account: none](https://img.shields.io/badge/account-none-success?style=flat-square)](#why)
-[![profile: starved](https://img.shields.io/badge/profile-starved-success?style=flat-square)](#why)
+[![profile: none](https://img.shields.io/badge/profile-none-success?style=flat-square)](#why)
 [![API calls: zero](https://img.shields.io/badge/API_calls-zero-success?style=flat-square)](#privacy)
 [![tracking: none](https://img.shields.io/badge/tracking-none-success?style=flat-square)](#privacy)
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
-[![feed: ranked by votes, not you](https://img.shields.io/badge/feed-ranked_by_votes,_not_you-success?style=flat-square)](#why)
+[![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
 
+[![version 0.25.0](https://img.shields.io/badge/version-0.25.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![Firefox 128+](https://img.shields.io/badge/firefox-128+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
+
+### Beta 0.25.0 is out — everyone is welcome to try it
+
+Both browsers, [installed by hand](#install) in about a minute.
+**[Bug reports](https://github.com/kookaburrabarrel/sheddit/issues/new/choose) are
+genuinely wanted** — Reddit can rename its markup without notice, so a report from a page
+that broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 <br>
 
@@ -42,20 +44,20 @@ or why you never log in — this is the safe way to keep reading.
 
 ## Why
 
-Reddit is what Facebook is: **a data-harvesting operation with sentiment manipulation
-built on top.** The feed is not "curated" for you — it is engineered to work on you.
-Every pause, expansion, return visit and comment is harvested into a profile; the profile
-is what advertisers buy; and the feed is tuned against that profile to provoke the
-reactions that fatten it — outrage, habit, one more scroll. A session that ends is a
-session that stops producing.
+Modern Reddit is **built like a casino**: the feed
+is not so much curated for you as tuned around you. Every pause, expansion, return visit
+and comment is harvested into a profile; the profile is what advertisers buy; and the feed is ranked
+against that profile to keep the session going — habit, one more scroll. A session that
+ends is a session that stops producing.
 
-The harvest needs you logged in. Identity is what ties every scroll and hesitation to one
-durable profile that follows you across devices and years; logged out, the data scatters
-and the profile starves. That is why logged-out reading is being squeezed on purpose: a
-login wall that raises itself half a minute into reading, with no close button and no way
-to dismiss it; `old.reddit.com` vanishing behind account requirements for days at a
-stretch, with no announcement; the anonymous JSON API gated off entirely. None of that is
-about features. It is about making the untracked reader extinct.
+The harvest needs you logged in. Identity is what ties every scroll and
+hesitation to one durable profile that follows you across devices and years; logged out,
+the data scatters and the profile thins. Which may be why logged-out reading keeps
+getting harder: a login wall that raises itself half a minute into reading, with no close
+button and no way to dismiss it; `old.reddit.com` vanishing behind account requirements
+for days at a stretch, with no announcement; the anonymous JSON API gated off entirely.
+Whatever the intent, the effect is the same: reading without an account keeps getting
+narrower.
 
 **Sheddit is the opt-out.** It takes the page Reddit already sent your browser and
 re-renders it locally into old reddit's layout — no account, no credentials, and zero API
@@ -148,9 +150,22 @@ than Reddit's — which is why those thumbnails fall back to old Reddit's placeh
 
 ## Install
 
-Chrome and Firefox, same extension either way. A Chrome Web Store listing is in review,
-with an addons.mozilla.org submission behind it; until those land, the zips below are the
-easiest way in — nothing to build.
+> ### Current version: **0.25.0** — beta, open to everyone
+> Both downloads below are this version. It is a beta in the honest sense: it works, it
+> is tested on both browsers — Chrome the more thoroughly of the two — and Reddit can
+> still change something tomorrow that breaks it. If that happens,
+> [tell me](https://github.com/kookaburrabarrel/sheddit/issues/new/choose) — bug reports
+> are appreciated and acted on.
+>
+> After installing, the extension's own failure screen prints the version it is running —
+> the way to tell whether a reload actually took. [What changed](CHANGELOG.md).
+
+Chrome and Firefox run the same source. **The Chrome build is the further along of the
+two** — it is what most of the development and live testing has run against, and its
+store listing is already in review. Firefox support arrived in 0.24.0: it passes its own
+suite against a real Firefox and works in normal use, but it has far less mileage on real
+pages, so that is where a rough edge is likeliest to turn up. Until the listings land,
+the zips below are the easiest way in — nothing to build.
 
 ### Chrome
 
@@ -197,9 +212,12 @@ Firefox 128+ — see below.
 **[⬇ Download sheddit-firefox.zip](https://github.com/kookaburrabarrel/sheddit/raw/main/dist/sheddit-firefox.zip)**
 
 Same extension, same source; only the manifest differs, and it is generated from
-Chrome's rather than maintained separately. An addons.mozilla.org listing is the durable
-way in once it lands; until then Firefox only accepts an unsigned extension as a
-*temporary* install, which lasts until the browser closes:
+Chrome's rather than maintained separately. It is the **younger** of the two builds —
+shipped in 0.24.0, with its own test suite driving a real Firefox, but without the
+months of live use behind the Chrome one, so bug reports from here are especially
+useful. An addons.mozilla.org listing is the durable way in once it lands; until then
+Firefox only accepts an unsigned extension as a *temporary* install, which lasts until
+the browser closes:
 
 1. Open `about:debugging#/runtime/this-firefox`.
 2. **Load Temporary Add-on…** and pick the downloaded zip (no need to unzip).

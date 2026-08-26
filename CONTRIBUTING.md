@@ -104,8 +104,9 @@ trust a green sweep, know the three ways a row can look like proof while proving
 - **Branch from `main`.** Keep the change focused on one thing.
 - **Run `npm test` and say so in the PR.** If a browser suite skipped, say that too.
 - **Add a mutation row** for any new assertion, and confirm it catches.
-- **Bump the version** in both `manifest.json` and `package.json` if a tester might load your
-  build. It is the only build identity anyone has.
+- **Bump the version** in `manifest.json`, `package.json` and the README (badge, header
+  line, install block) if a tester might load your build. It is the only build identity
+  anyone has, and `npm test` fails if the four disagree.
 - **Write the commit message long-form**, explaining *what the wrong behaviour looked like*
   rather than only what changed. The engineering log is assembled from these, and a
   description you can match against a symptom is worth far more than "fixed pagination".
