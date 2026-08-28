@@ -2446,6 +2446,7 @@ async function boot(html, url, setup) {
     const m = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'));
     const ff = firefoxManifest(m);
     const gecko = ff.browser_specific_settings?.gecko;
+    const androidMin = ff.browser_specific_settings?.gecko_android?.strict_min_version;
 
     check('the transform never touches the content scripts — one layout, two stores',
       JSON.stringify(ff.content_scripts) === JSON.stringify(m.content_scripts));
@@ -2454,8 +2455,17 @@ async function boot(html, url, setup) {
     check('a stable gecko id, in AMO\'s email-like format',
       typeof gecko?.id === 'string' && /^[a-z0-9.-]+@[a-z0-9.-]+$/.test(gecko.id),
       String(gecko?.id));
-    check('strict_min_version covers content_scripts "world" — the MAIN-world bridge needs 128',
-      parseFloat(gecko?.strict_min_version) >= 128, String(gecko?.strict_min_version));
+    // Two manifest keys set a floor and the HIGHER one is the floor: `world: "MAIN"` is a
+    // Firefox 128 capability, and data_collection_permissions is a Firefox 140 one. A key
+    // declared below the version that reads it is what AMO warns about, so the floor has to
+    // cover the newest key in the block, not just the oldest requirement.
+    check('strict_min_version covers the newest key in the manifest — data collection needs 140',
+      parseFloat(gecko?.strict_min_version) >= 140, String(gecko?.strict_min_version));
+    // An absent gecko_android does not mean "no Android floor" — it means the Android floor
+    // silently inherits gecko's — a 140 floor on an application that only reads the key
+    // from 142. Declaring the block is the only way to say the later number.
+    check('the Android floor is declared, not inherited — data collection lands there at 142',
+      parseFloat(androidMin) >= 142, String(androidMin));
     check('data collection is declared, and declared as none',
       JSON.stringify(gecko?.data_collection_permissions?.required) === '["none"]',
       JSON.stringify(gecko?.data_collection_permissions));

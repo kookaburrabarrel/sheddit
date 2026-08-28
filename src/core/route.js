@@ -3,8 +3,9 @@
  *
  * Reddit is a client-side-routed app and the `navigation` API is available on the page
  * in Chrome (verified). We prefer it, and fall back to the bridge's history relay where
- * it does not exist — Firefox's ESR line has no navigation API (measured: absent in ESR
- * 128, present in release 154), so the relay is the only route signal there.
+ * it does not exist — Firefox's ESR line has no navigation API (it landed in Firefox 147,
+ * later than the 140 ESR; measured absent in ESR 128, present in release 154), so the relay
+ * is the only route signal there.
  *
  * THE TRAP IN THE NAVIGATION API — read before touching start().
  *
@@ -149,8 +150,8 @@ SHD.route = (() => {
 
   function start() {
     /* The bridge's history relay — the only route-change signal a browser without the
-     * `navigation` API gets (Firefox ESR 128, the Firefox build floor, has none;
-     * current Firefox release does). Patching history OURSELVES
+     * `navigation` API gets (Firefox ESR 140, the Firefox build floor, has none — the
+     * API landed in 147; current Firefox release does). Patching history OURSELVES
      * here was the old fallback, and it is the classic realm mistake: a content
      * script's `history` binding is its own world's, Reddit's router calls the page
      * realm's, and under Firefox's realm separation the patch never fires — every SPA

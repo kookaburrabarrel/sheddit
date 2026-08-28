@@ -261,8 +261,13 @@ made once in code rather than in a form:
 - **Add-on id**: `sheddit@kookaburrabarrel.github.io`, an identifier in AMO's email-like
   format, not a mailbox. It is permanent — changing it after the first submission
   orphans every installed copy.
-- **Minimum version**: Firefox 128.0. The `world: "MAIN"` content script (the bridge) is
-  a Firefox 128 capability, and 128 is the current ESR, so the floor costs no real users.
+- **Minimum version**: Firefox 140.0, and Firefox for Android 142.0 in a `gecko_android`
+  block. The floor is the newest key in the manifest, not the oldest requirement: the
+  `world: "MAIN"` content script (the bridge) needs 128, but the data-collection
+  declaration below is only read from 140 (142 on Android), and AMO warns about a key
+  declared beneath the version that reads it. 140 is the current ESR, so the floor costs
+  no supported user. The `gecko_android` block is also what lists the add-on as
+  Android-compatible — the layout is desktop old-reddit and untested on a phone.
 - **Data collection**: declared in the manifest itself
   (`data_collection_permissions: { required: ["none"] }`), which AMO requires of new
   submissions and surfaces on the listing. "None" is the truthful answer and doubles as

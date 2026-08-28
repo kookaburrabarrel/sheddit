@@ -15,6 +15,26 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ## Unreleased — 0.26.0
 
+### Changed — the Firefox floor is 140, and Android has a floor of its own
+
+AMO's validator returned two warnings on the 0.26.0 upload, one per application: the
+manifest declares `data_collection_permissions`, a key Firefox reads from 140 and
+Firefox for Android from 142, under a `strict_min_version` of 128. A key declared
+beneath the version that reads it is a declaration nobody reads — on a 128 Firefox the
+"collects nothing" statement is simply absent, which is the opposite of what declaring
+it is for. The floor is now the newest key in the block rather than the oldest
+requirement: `world: "MAIN"` still needs 128, `data_collection_permissions` needs 140,
+and 140 wins. It costs no supported user — ESR 128 went end of life in September 2025
+and 140 is the current ESR line.
+
+The second warning was the same key on Android, and it is the quieter of the two: an
+absent `gecko_android` block does not mean "no Android floor", it means the Android
+floor silently inherits gecko's. The transform now declares `gecko_android` with
+`strict_min_version: "142.0"`, which is both the honest number and the key that lists
+the add-on as Android-compatible at all. Both floors are guarded in `run.js` and each
+has a mutation row; the deleted-block mutation is the one worth having, because deleting
+it is invisible.
+
 ### Fixed — deep comment branches are readable to the end again
 
 Found by a QA round, measured three for three on two live threads: clicking "N more

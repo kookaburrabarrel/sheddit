@@ -123,8 +123,9 @@ trust a green sweep, know the three ways a row can look like proof while proving
 
 ## Firefox
 
-Done, and tested. Firefox 128 (the current ESR) accepted `"world": "MAIN"` content
-scripts, so `src/core/bridge.js` runs unchanged; the Firefox build is
+Done, and tested. Firefox has accepted `"world": "MAIN"` content scripts since 128, so
+`src/core/bridge.js` runs unchanged; the build floor is 140 (the current ESR), which is
+where the manifest's data-collection declaration is read. The Firefox build is
 `dist/sheddit-firefox.zip`, whose manifest is **derived** at package time
 (`firefoxManifest()` in `package-extension.js` — the one place the two stores may
 differ), and `test/extension-firefox.js` installs it into a real Firefox and drives it.
