@@ -68,6 +68,36 @@ SHD.dom = (() => {
   function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
 
   /* ------------------------------------------------------------------ *
+   * Cloned-body repair
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Swap a cloned body's <shreddit-player gif> for a plain <img> — bug 88.
+   *
+   * Cloned comment and selftext bodies keep their custom elements, and custom-element
+   * upgrade is DOCUMENT-global — so the clone in our layout comes alive as Reddit's own
+   * player and inherits its defect wholesale: the gif variant feeds a raw `.gif` URL to
+   * a <video> (which cannot decode GIF — readyState 0 on 8 of 8 captured live) and,
+   * carrying no poster, paints a solid black box where the picture should be. The
+   * picture is sitting in the player's light-DOM <source> the whole time, and the
+   * comment GIFs that already rendered fine on the same page were plain <img>s from the
+   * same host — so degrade to that. A player with no resolvable source is left alone:
+   * a black box beats silently deleting content someone wrote a comment around.
+   *
+   * SHD.C is read at CALL time, not load time — dom.js stays dependency-free at load,
+   * and nothing calls this before boot.
+   */
+  function inlineGifs(root) {
+    if (!root || !SHD.C || typeof root.querySelectorAll !== 'function') return root;
+    root.querySelectorAll(SHD.C.GIF_PLAYER).forEach(p => {
+      const src = p.querySelector('source')?.getAttribute('src') || p.getAttribute('src');
+      if (!src) return;
+      p.replaceWith(h('img.shd-comment-gif', { src, alt: '', loading: 'lazy' }));
+    });
+    return root;
+  }
+
+  /* ------------------------------------------------------------------ *
    * Shadow-piercing lookup
    * ------------------------------------------------------------------ */
 
@@ -157,6 +187,6 @@ SHD.dom = (() => {
     document.documentElement.classList.remove('shd-passthrough-active');
   }
 
-  return { h, score, ago, domain, plural,
+  return { h, score, ago, domain, plural, inlineGifs,
            deepQuery, shadowRoots, passthrough, passthroughClear };
 })();

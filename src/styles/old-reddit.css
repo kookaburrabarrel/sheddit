@@ -712,6 +712,14 @@ html.shd-active body {
   font-weight: normal;
 }
 
+/* A comment or selftext GIF degraded from Reddit's broken-in-clone player (bug 88):
+   a plain <img>, capped like the inline video box so it can never widen the row. */
+.usertext-body .shd-comment-gif {
+  display: block;
+  max-width: min(100%, var(--shd-video-max));
+  height: auto;
+}
+
 /* ---------- the between-pages placeholder ----------
  *
  * Mounted by gate.resetForRoute() when an SPA navigation tears down a rendered page and

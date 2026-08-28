@@ -600,6 +600,45 @@ async function boot(html, url, setup) {
       junk.querySelector('.shd-commentarea-head .menuarea .selected')?.textContent === 'best');
   }
 
+  /* Reported live 2026-08-27 (bug 88): 8 of 11 comment GIFs on one thread rendered as
+     solid black boxes. The anatomy, captured: <shreddit-player gif> whose only light-DOM
+     <source> is the raw .gif (no type, no poster), wrapped in an anchor to the /media
+     viewer. A <video> cannot decode GIF (readyState 0 on every one), no poster means
+     black — and OUR CLONE paints the same box, because custom-element upgrade is
+     document-global and the copy in #shd-root comes alive as the same broken player. */
+  console.log('\n\x1b[1mCOMMENT GIFS ARE PICTURES, NOT BLACK BOXES\x1b[0m');
+  {
+    const PLAYER =
+      '<a href="https://www.reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fv3.gif">' +
+      '<shreddit-player gif>' +
+      '<source src="https://preview.redd.it/v3cm625e5zlh1.gif?width=189&amp;format=gif">' +
+      '</shreddit-player></a>';
+    // A player carrying nothing to show, in the next comment over: it must be LEFT
+    // ALONE — a black box beats silently deleting content someone wrote a comment around.
+    const EMPTY_PLAYER = '<shreddit-player gif></shreddit-player>';
+    const page = commentsPage()
+      .replace('<p>Comment body number 0 at depth 0.</p>', '<p>look at this:</p>' + PLAYER)
+      .replace('<p>Comment body number 1 at depth 0.</p>', '<p>hm:</p>' + EMPTY_PLAYER);
+    const { doc } = await boot(page, 'https://www.reddit.com/r/programming/comments/link1/nasa/');
+
+    const row0 = doc.querySelector('#shd-root .thing.comment[data-fullname="t1_c0"]');
+    const img = row0?.querySelector('.usertext-body img.shd-comment-gif');
+    check('the cloned gif player is degraded to a plain <img>', !!img,
+      'no img — the clone upgrades into the same black box the report shows');
+    check('...sourcing the picture the player was starving',
+      /preview\.redd\.it\/.+\.gif/.test(img?.getAttribute('src') || ''),
+      img?.getAttribute('src'));
+    check('...and the player itself is gone from that row',
+      !row0?.querySelector('shreddit-player'));
+    check('the rest of the comment body survives around it',
+      /look at this:/.test(row0?.textContent || ''));
+    check('a player with no resolvable source is left alone, never deleted',
+      !!doc.querySelector(
+        '#shd-root .thing.comment[data-fullname="t1_c1"] shreddit-player[gif]'));
+    check('the SOURCE body is untouched — the swap happens on the clone alone',
+      !!doc.querySelector('shreddit-comment[thingid="t1_c0"] shreddit-player[gif]'));
+  }
+
   /* QA round 2026-08-27, measured live on a real thread: clicking `new` in our own sort
      strip moved the URL to `?sort=new`, the visible thread did not move, the bold stayed
      on `best` — and Reddit's replacement tree was then consumed UNDER the stale render,

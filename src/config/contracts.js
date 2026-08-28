@@ -92,6 +92,16 @@ SHD.C = {
      The URLs carry a signature and an `e` expiry ~12h out — long enough that a link
      resolved during a session stays good, short enough that we must never cache one. */
   POST_VIDEO_JSON: 'packaged-media-json',
+  /* A GIF in a comment or selftext body, as Reddit ships it: a <shreddit-player gif>
+     whose only light-DOM <source> is the raw .gif on preview.redd.it — no `type`, no
+     `poster` — wrapped in an anchor to the /media viewer. Captured live 2026-08-27
+     (bug 88): 8 of 11 players on one thread, every one readyState 0, because a <video>
+     cannot decode GIF; with no poster the element paints a solid black box. Our clone
+     paints the same box — custom-element upgrade is document-global, so the copy in
+     #shd-root comes alive as the same broken player. dom.inlineGifs swaps the clone for
+     a plain <img>, which is exactly how the comment GIFs that already worked on the same
+     page were delivered. */
+  GIF_PLAYER: 'shreddit-player[gif]',
   /* The asset id inside a video post's `content-href`, and the manifest that lists what
      Reddit will actually serve for it. Added 0.16.0, when the packaged renditions above
      stopped being enough: on a repackaged asset every `DASH_*`/`m2-res_*` file 403s and

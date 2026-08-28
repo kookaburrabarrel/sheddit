@@ -1255,6 +1255,14 @@ mutate "a query-only sort change is swallowed and the sorts interleave again" ru
 mutate "the re-sorted thread loses its post row and sort strip" run \
   src/core/pipeline.js "    if (sortSwap) {" "    if (false) {"
 
+# Bug 88: cloned comment bodies bring <shreddit-player gif> across, the clone UPGRADES
+# (custom elements are document-global), and the upgraded player paints the same solid
+# black box it paints natively — a <video> fed a raw .gif, with no poster. The repair
+# swaps the clone for a plain <img>; neutralising the lookup puts the black boxes back.
+mutate "comment gifs go back to being black boxes" run \
+  src/core/dom.js "    root.querySelectorAll(SHD.C.GIF_PLAYER).forEach(p => {" \
+                  "    [].forEach(p => {"
+
 # Live testing: the README claimed 72px rows and the geometry suite had never measured one.
 mutate "long titles are clipped instead of growing the row" geometry \
   src/styles/old-reddit.css ".thing.link {
