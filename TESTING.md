@@ -12,7 +12,7 @@ summary over this table when they disagree, and update the table when they do.)
 | # | Command | Needs | Assertions |
 |---|---|---|---|
 | 1 | `node test/css-lint.js` | nothing | 39 |
-| 2 | `node test/run.js` | jsdom | 503 |
+| 2 | `node test/run.js` | jsdom | 538 |
 | 3 | `node test/geometry.js` | Chromium | 187 |
 | 4 | `node test/extension.js` | Chromium | 135 |
 | 5 | `node test/extension-firefox.js` | Firefox + geckodriver | 40 |
@@ -228,8 +228,8 @@ Xray wrappers, so the main-world bridge, attribute reads and body clones all re-
 their keep; the theme cascade tie is re-fought under Gecko's injection order; the
 `chrome.*` promise calls ride Firefox's compatibility surface; and — the reason the
 suite exists — the bridge's **history relay** is the only SPA route signal on Firefox
-ESR 128, the build floor, which has no `navigation` API. Current Firefox release ships
-that API (measured on 154), so the suite runs two sessions: one with defaults, testing
+ESR 140, the build floor, which has no `navigation` API (it landed in Firefox 147).
+Current Firefox release ships that API (measured on 154), so the suite runs two sessions: one with defaults, testing
 whichever branch this Firefox takes — including the real `navigate`-event sort-click
 fixture when the API is present — and one with the API pref'd off, which is the ESR
 model and the only session that pins the relay alone. The driver is spoken to directly

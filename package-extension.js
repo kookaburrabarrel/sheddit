@@ -10,8 +10,19 @@
 // cannot drift anywhere else. What the transform changes and why:
 //
 //   - browser_specific_settings.gecko.id             AMO requires a stable add-on id
-//   - strict_min_version 128.0                       content_scripts "world" (the MAIN-world
-//                                                    bridge) needs Firefox 128, the current ESR
+//   - strict_min_version 140.0                       two keys set a floor and the higher wins:
+//                                                    content_scripts "world" (the MAIN-world
+//                                                    bridge) needs 128, and the data-collection
+//                                                    declaration below is a Firefox 140 key.
+//                                                    140 is the current ESR, so the higher
+//                                                    floor costs no supported user
+//   - gecko_android strict_min_version 142.0         the same declaration landed later on
+//                                                    Android. Without this key the Android
+//                                                    floor INHERITS gecko's, which is a key
+//                                                    declared below the version that reads it
+//                                                    — AMO warns about exactly that, once per
+//                                                    application. It is also the key that
+//                                                    lists the add-on as Android-compatible
 //   - data_collection_permissions required:["none"]  AMO requires the declaration; the
 //                                                    extension collects nothing, so it is
 //                                                    the one-word truthful answer
@@ -43,9 +54,10 @@ function firefoxManifest(m) {
   out.browser_specific_settings = {
     gecko: {
       id: GECKO_ID,
-      strict_min_version: '128.0',
+      strict_min_version: '140.0',
       data_collection_permissions: { required: ['none'] }
-    }
+    },
+    gecko_android: { strict_min_version: '142.0' }
   };
   return out;
 }

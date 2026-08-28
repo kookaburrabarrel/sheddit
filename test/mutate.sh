@@ -1446,9 +1446,16 @@ mutate "a same-realm history patch sneaks back into route.js" run \
 # The Firefox manifest is DERIVED, and each transform property has one guard in run.js;
 # these prove the guards are not vacuous. The fork row models the realistic bad edit:
 # "fixing" a Firefox issue by dropping the MAIN-world script from the Firefox build only.
-mutate "the Firefox floor drops below what world:MAIN needs" run \
-  package-extension.js "      strict_min_version: '128.0'," \
+mutate "the Firefox floor drops below what the manifest's own keys need" run \
+  package-extension.js "      strict_min_version: '140.0'," \
                        "      strict_min_version: '109.0',"
+
+# The Android floor is the silent one: delete the key and nothing is missing, the floor
+# just inherits the desktop number on an application that reads the key later. That is
+# the shape AMO warned about, and an absence is what a guard has to notice.
+mutate "the Android floor goes back to inheriting the desktop one" run \
+  package-extension.js "    gecko_android: { strict_min_version: '142.0' }" \
+                       "    gecko_android: undefined"
 
 mutate "the transform forks the layout per store" run \
   package-extension.js "  out.browser_specific_settings = {" \

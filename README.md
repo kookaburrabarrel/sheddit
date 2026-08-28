@@ -22,7 +22,7 @@ Stay logged out, unprofiled, un-manipulated.
 [![version 0.26.0](https://img.shields.io/badge/version-0.26.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
-[![Firefox 128+](https://img.shields.io/badge/firefox-128+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
+[![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
 ### Beta 0.26.0 is out — everyone is welcome to try it
@@ -205,7 +205,7 @@ cloned folder. There is no build step to run first.
 > output, openable in any browser.
 
 Requires Chrome 111+ or any Chromium browser (Edge, Brave, Vivaldi, Opera), or
-Firefox 128+ — see below.
+Firefox 140+ — see below.
 
 ### Firefox
 
@@ -224,8 +224,8 @@ the browser closes:
 
 Two Firefox notes. Firefox can revoke a site permission at any time — if reddit.com ever
 loads without the layout, open the extension's options page: it will say so and offer a
-button to grant access back. And Firefox needs to be version 128 or newer, which is the
-oldest ESR.
+button to grant access back. And Firefox needs to be version 140 or newer — the current
+ESR, and the version that reads the manifest's data-collection declaration.
 
 ## What it does
 

@@ -9,11 +9,11 @@
  *   - Content scripts see the page through Xray wrappers, a stricter realm separation
  *     than Chromium's isolated worlds. Everything that crosses the boundary — attribute
  *     reads, deepQuery, cloned bodies, the main-world bridge — re-earns its keep here.
- *   - On Firefox ESR 128 — the strict_min_version floor — there is no `navigation` API,
- *     so bridge.js's history relay is the ONLY signal route.js gets for a client-side
- *     navigation. Current Firefox release HAS the API (measured here: 154 ships it), so
- *     one session runs with defaults to test whatever this Firefox is, and a second
- *     prefs the API off to model the ESR floor and isolate the relay.
+ *   - On Firefox ESR 140 — the strict_min_version floor — there is no `navigation` API
+ *     (it landed in Firefox 147), so bridge.js's history relay is the ONLY signal route.js
+ *     gets for a client-side navigation. Current Firefox release HAS the API (measured
+ *     here: 154 ships it), so one session runs with defaults to test whatever this Firefox
+ *     is, and a second prefs the API off to model the ESR floor and isolate the relay.
  *   - The manifest is the FIREFOX manifest — the derived one with the gecko block — and
  *     content_scripts `world: "MAIN"` is a Firefox 128 capability this suite proves the
  *     shipping zip actually gets.
@@ -283,9 +283,10 @@ async function until(expr, { timeout = 15000, step = 120 } = {}) {
       `font-size ${listing.titleFontSize}, color ${listing.titleColor}`);
     check('suppress.css is delivered and hides the native tree',
       listing.nativeVisibility === 'hidden', String(listing.nativeVisibility));
-    // Informative, not asserted: ESR 128 answers 'undefined', release 154+ 'object', and
-    // the suite must pass on both. Which branch routes in THIS session follows from it;
-    // the relay-in-isolation session at the end is version-independent.
+    // Informative, not asserted: an ESR through 140 answers 'undefined', release 147+
+    // 'object' (measured on 154), and the suite must pass on both. Which branch routes in
+    // THIS session follows from it; the relay-in-isolation session at the end is
+    // version-independent.
     const hasNavApi = listing.navigationApi !== 'undefined';
     console.log(`  navigation API in this Firefox: ${hasNavApi ? 'present' : 'absent'} ` +
       `(${hasNavApi ? 'route.js prefers it; the relay is the safety net' :
@@ -563,11 +564,11 @@ async function until(expr, { timeout = 15000, step = 120 } = {}) {
       other.nativeVisibility === 'visible' && !other.active, JSON.stringify(other));
 
     /* ============================================================== *
-     * THE RELAY IN ISOLATION — a fresh session modelling ESR 128
+     * THE RELAY IN ISOLATION — a fresh session modelling the ESR floor
      * ============================================================== */
     console.log('\n\x1b[1mFIREFOX EXTENSION — THE RELAY IN ISOLATION (ESR-era Firefox)\x1b[0m');
-    // strict_min_version is 128, and 128 has no navigation API — for that whole line the
-    // relay is the ONLY signal a sort click produces. A release Firefox routes the main
+    // strict_min_version is 140, and no ESR through 140 has the navigation API (it landed
+    // in 147) — for that whole line the relay is the ONLY signal a sort click produces. A release Firefox routes the main
     // session's navigations through the API, so nothing above pins the relay by itself;
     // this session prefs the API off and repeats the navigation. The control comes first:
     // if the pref stops existing, this session quietly becomes a duplicate of the main

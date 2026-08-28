@@ -324,19 +324,23 @@ on the event. Primitive-only, like the load-more protocol, and asserted in step 
 
 ### 5.0b Firefox
 
-The same source runs on Firefox 128+ (the current ESR): `world: "MAIN"` in manifest
-content scripts is a Firefox 128 capability, which is what sets the floor. The Firefox
-manifest is **derived** — `firefoxManifest()` in `package-extension.js` adds the gecko
-block (id, `strict_min_version: "128.0"`, a data-collection declaration of `none`) and
-drops the Chrome-only version key; nothing else may differ, and a test asserts the
-content scripts come through the transform byte-identical. Measured while porting, in a
-real Firefox 154 via `test/extension-firefox.js`, on Linux and macOS both: the Xray
-boundary passes the whole
-bridge protocol, Gecko resolves the theme tie the same way Chromium does, promise-style
-`chrome.*` calls work, and — the ground having moved under the plan — current Firefox
-release ships the `navigation` API, so only the ESR line rides the relay alone (the
-suite prefs the API off to pin that configuration). Two Firefox-only behaviours worth
-remembering: MV3 host permissions are revocable there, which the options page's access
+The same source runs on Firefox 140+ (the current ESR). Two manifest keys set a floor
+and the higher one wins: `world: "MAIN"` in content scripts is a Firefox 128 capability,
+and `data_collection_permissions` is a Firefox 140 one — declaring a key below the
+version that reads it is what AMO warns about, so the floor is the newest key's, not the
+oldest requirement's. The Firefox manifest is **derived** — `firefoxManifest()` in
+`package-extension.js` adds the gecko block (id, `strict_min_version: "140.0"`, a
+data-collection declaration of `none`), a `gecko_android` block whose
+`strict_min_version` is `"142.0"` because the same declaration landed later there (an
+absent block does not mean "no Android floor"; it means the Android floor silently
+inherits gecko's), and drops the Chrome-only version key; nothing else may differ, and a
+test asserts the content scripts come through the transform byte-identical. Measured
+while porting, in a real Firefox 154 via `test/extension-firefox.js`, on Linux and macOS
+both: the Xray boundary passes the whole bridge protocol, Gecko resolves the theme tie
+the same way Chromium does, promise-style `chrome.*` calls work, and — the ground having
+moved under the plan — current Firefox release ships the `navigation` API (it landed in
+147, after the 140 ESR), so only the ESR line rides the relay alone (the suite prefs the
+API off to pin that configuration). Two Firefox-only behaviours worth remembering: MV3 host permissions are revocable there, which the options page's access
 warning exists for; and reddit.com sits on the HSTS preload list, which is a testing
 concern only (the suite prefs it off to reach the plain-http fixture server), never a
 production one.
