@@ -1189,6 +1189,23 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     reach pre-commit — it now reads route.sortQuery, the query half of the emitPath()
     rule. Both halves carry mutation rows.
 
+88. **Comment GIFs rendered as solid black boxes — in Reddit's player and in our
+    clone of it.** Reported live with a DOM audit attached: 8 of 11 players on one
+    thread were `<shreddit-player gif>` whose only light-DOM `<source>` is the raw
+    `.gif` on preview.redd.it (no `type`, no `poster`), wrapped in an anchor to the
+    /media viewer. A `<video>` cannot decode GIF — readyState 0 on every one — and
+    with no poster the element paints solid black. The part that makes it OUR bug:
+    comment bodies are cloned into `#shd-root`, and custom-element **upgrade is
+    document-global**, so the clone comes alive as the same broken player and paints
+    the same box in our layout. (The comment GIFs that did render on that page were
+    plain `<img>`s from the same host — Reddit's own working path.) `dom.inlineGifs`
+    now swaps a cloned `[gif]` player for a plain `<img>` sourced from that `<source>`,
+    at every body-clone site (comments, selftext, profile comments); a player with no
+    resolvable source is left alone, because a black box beats silently deleting
+    content someone wrote a comment around. The source body is never touched — the
+    swap happens on the clone alone. Selector and anatomy live in `C.GIF_PLAYER`;
+    pinned in run.js with the captured shape and a mutation row.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

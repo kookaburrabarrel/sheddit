@@ -261,7 +261,9 @@ SHD.listing = (() => {
    */
   function renderProfileComment(m) {
     const body = h('div.usertext-body');
-    body.appendChild(m.bodyNode.cloneNode(true));   // required by the model; never null here
+    // required by the model, never null here; inlineGifs repairs the player the clone
+    // brings across broken (bug 88)
+    body.appendChild(SHD.dom.inlineGifs(m.bodyNode.cloneNode(true)));
     return h('div.thing.comment.shd-profile-comment', {
       dataset: { fullname: m.id }
     }, [

@@ -58,8 +58,9 @@ SHD.comments = (() => {
 
     const body = h('div.usertext-body');
     // Move the already-rendered body across: it is light DOM and keeps links,
-    // code blocks and blockquotes intact without re-parsing markdown.
-    if (m.bodyNode) body.appendChild(m.bodyNode.cloneNode(true));
+    // code blocks and blockquotes intact without re-parsing markdown. inlineGifs repairs
+    // the one element the clone brings across BROKEN — see dom.js (bug 88).
+    if (m.bodyNode) body.appendChild(SHD.dom.inlineGifs(m.bodyNode.cloneNode(true)));
 
     thing.append(
       h('div.midcol.unvoted', null, [
@@ -423,7 +424,8 @@ SHD.comments = (() => {
     // row's .entry, which is where old reddit hangs the expando.
     if (m.bodyNode) {
       row.querySelector('.entry').appendChild(
-        h('div.usertext-body.shd-selftext', null, m.bodyNode.cloneNode(true)));
+        h('div.usertext-body.shd-selftext', null,
+          SHD.dom.inlineGifs(m.bodyNode.cloneNode(true))));
     }
     r.prepend(h('div.shd-selfpost', null, row));
     ensureCommentHead(r, m);

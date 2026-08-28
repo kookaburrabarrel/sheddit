@@ -15,6 +15,15 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ## Unreleased — 0.25.1
 
+### Fixed — comment GIFs show the picture instead of a solid black box
+
+Reported with a DOM audit: most GIFs in comments arrive as Reddit's video player fed a
+raw `.gif` file — which a `<video>` cannot decode — with no poster frame, so the player
+paints solid black, and the copy cloned into Sheddit's layout upgrades into the very same
+broken player. Those players are now swapped for a plain image (the same way the comment
+GIFs that already worked were delivered), in comment bodies, selftext and profile
+comments alike. The picture shows and animates in place.
+
 ### Fixed — sorting a comments page no longer interleaves two sorts
 
 Found by a QA round on a live thread: clicking a sort in the comments page's own
