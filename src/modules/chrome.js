@@ -32,6 +32,29 @@ SHD.chrome = (() => {
   }
 
   /**
+   * The adult-thumbnail toggle, beside the theme buttons.
+   *
+   * It writes the same `showNsfwThumbnails` the options page writes, so the two surfaces
+   * cannot disagree — there is one setting and two ways to reach it. Unlike a theme, this
+   * one DOES cost a re-render: the placeholder tile and the picture are different markup,
+   * not different paint, and rendering the picture and hiding it with CSS would fetch the
+   * image we are declining to show (bug 41's whole point). pipeline.js's storage listener
+   * handles that, and preserves scroll position across it.
+   */
+  function nsfwToggle() {
+    const on = !!(SHD.settings && SHD.settings.showNsfwThumbnails);
+    return h('button.shd-nsfw-btn', {
+      type: 'button',
+      'aria-pressed': on ? 'true' : 'false',
+      class: on ? 'selected' : null,
+      title: on
+        ? 'adult thumbnails are showing — click to replace them with placeholders'
+        : 'adult thumbnails are hidden behind placeholders — click to show them',
+      onclick: () => SHD.pipeline.setSetting('showNsfwThumbnails', !on)
+    }, 'nsfw thumbnails');
+  }
+
+  /**
    * The theme switcher.
    *
    * One button per registered theme, rendered from SHD.theme.LIST so the bar cannot
@@ -56,7 +79,8 @@ SHD.chrome = (() => {
       }, [
         h('span.shd-swatch', { 'aria-hidden': 'true' }),
         t.label
-      ]))
+      ])),
+      nsfwToggle()
     ]);
   }
 
@@ -116,5 +140,5 @@ SHD.chrome = (() => {
     document.querySelector('#shd-header')?.remove();
   }
 
-  return { header, tabMenu, themeBar, sidebar, reset };
+  return { header, tabMenu, themeBar, nsfwToggle, sidebar, reset };
 })();

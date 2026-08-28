@@ -159,6 +159,29 @@ html.shd-active body {
   color: var(--shd-text);
   font-weight: bold;
 }
+/* The adult-thumbnail toggle. Shaped like a theme button so the bar reads as one strip,
+   but its ON state uses --shd-nsfw rather than the header colours: this is the one control
+   whose state changes what is on screen in a room, so "is it on" has to be answerable at a
+   glance rather than by comparing two similar shades. */
+.shd-nsfw-btn {
+  font: inherit;
+  line-height: 14px;
+  padding: 2px 6px;
+  margin-left: 6px;
+  border: 1px solid var(--shd-thumb-border);
+  border-radius: var(--shd-radius);
+  background: none;
+  color: var(--shd-meta);
+  cursor: pointer;
+}
+.shd-nsfw-btn:hover { background: var(--shd-hover-bg); }
+.shd-nsfw-btn.selected {
+  background: var(--shd-nsfw);
+  border-color: var(--shd-nsfw);
+  color: #fff;
+  font-weight: bold;
+}
+
 /* The swatch is painted per theme in themes.css, next to that theme's palette. */
 .shd-theme-btn .shd-swatch {
   display: inline-block;
