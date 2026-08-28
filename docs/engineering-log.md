@@ -1258,6 +1258,23 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     Reddit's grace. Routed deliberately now (0.22.0's image-post move, same narrow
     gate: frames resolved, link viewer-bound), so a future `/gallery/` page shape
     cannot turn gallery titles into the image-post bounce.
+92. **The dev harness's storage stub accepted writes and dropped them.** Found while
+    adding the header's adult-thumbnail toggle, and the toggle is what made it visible:
+    the control worked in jsdom (its own stub is faithful) and in the packed extension
+    (real `chrome.storage`), and did nothing at all in the dev bundle — the preview,
+    and anything pasted into DevTools. The shim was
+    `{ sync: { get: async () => ({}), set: async () => {} } }`: a `set` that resolves,
+    stores nothing, and has no `onChanged` to notify. So the write "succeeded", no
+    listener existed to re-render, and no error was reported anywhere — the exact shape
+    of a control that ignores a click (bug 62), delivered by a test double that lies.
+    Nothing before this wrote a setting from inside the page, which is why it had never
+    mattered: the options page runs in an extension context with the real API, so the
+    only consumer of the shim was code that merely READ settings at boot. The shim is a
+    real in-memory implementation now, change events included, and its mutation row runs
+    against `geometry` because that is the suite that drives the bundle. The general
+    lesson is the one this project keeps relearning about fixtures, applied to a stub: a
+    double that accepts everything and reports nothing cannot fail, so it cannot protect
+    anything either.
 
 ## The popup policy — supersedes bugs 30, 33 and 38
 
@@ -1344,14 +1361,6 @@ the way a question got settled is usually more useful than the answer.
    floor. Also unverified live: that the real gate's button text matches `C.AGE_GATE`'s
    affirm/decline split at all — the fixture encodes the captured English copy, and a
    real-machine run on a real NSFW sub is what confirms the click actually lands.
-   **Live testing (2026-08-20) observed but could not settle it**: on r/CombatFootage in a
-   profile of unknown freshness, no gate was ever in the DOM, the sub served exactly 3
-   posts — none carrying `nsfw`, with benign thumbnails — and pagination returned
-   nothing (six scrolls plus a real loadContent() click; native count froze at 3 while
-   the front page and r/pics grew 3→28 in the same session). That reads as Reddit
-   serving a TEASER variant of the gated sub rather than the gated feed itself, which
-   would mean the content-behind-the-modal fact does not extend to every delivery path.
-   A fresh profile, watched by a human, is still the experiment.
 7. **How much of Reddit's own stylesheet lands on Sheddit's comment bodies.** Sheddit clones
    Reddit's rendered body node (`[slot="comment"]`) into `div.usertext-body` rather than re-parsing
    markdown — which keeps links, code blocks and blockquotes intact, and is the right call —

@@ -79,6 +79,32 @@ purpose now sits above the licence text, which stays byte-for-byte the FSF's own
 property worth being able to check with one `diff`, and the reason the notice is placed
 above it rather than woven in.
 
+## 0.27.0
+
+### Added — an "nsfw thumbnails" toggle in the header
+
+Adult thumbnails have always been showable — the setting existed from the day the
+placeholder shipped — but it lived on the options page, which is where a setting goes to
+be forgotten. It now has a button beside the theme switcher, so it can be turned on and
+off while reading rather than in a separate window. It is the same single setting either
+way: flip it in the header and the options page agrees, and vice versa.
+
+Unlike a theme, this one genuinely re-renders the page — a placeholder tile and a
+picture are different markup, not different paint, and rendering the picture and hiding
+it with CSS would fetch the image the placeholder exists to avoid fetching. Your place
+in the feed survives that, which the layout suite now checks: everything the paginator
+had loaded comes back, and the scroll position holds.
+
+### Fixed — settings controls did nothing in the preview and dev harness (**never worked**)
+
+The development harness stubbed browser storage with something that accepted writes,
+stored nothing, and had no change notification at all. Any in-page control that saves a
+setting therefore appeared to do nothing there while working correctly once installed —
+the harness reported no error, because as far as it was concerned the write succeeded.
+It is a real in-memory implementation now, change events included, so what the harness
+shows is what the extension does. Settings still don't survive a reload there, which is
+honest: there is nowhere to put them.
+
 ## 0.26.0
 
 ### Fixed — deep comment branches are readable to the end again

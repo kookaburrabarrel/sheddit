@@ -1513,12 +1513,63 @@ mutate "the expando's [hidden] counterpart vanishes (static)" css-lint \
 mutate "the expando's [hidden] counterpart vanishes (layout)" geometry \
   src/styles/old-reddit.css ".expando[hidden] { display: none; }" ""
 
+# ------------------------------------------------ 0.26.0: the header's nsfw toggle ---
+# The control itself. Without it the setting is options-page-only again — which is where
+# it went unnoticed, and the reason the toggle exists.
+mutate "the nsfw toggle disappears from the header" run \
+  src/modules/chrome.js "      nsfwToggle()
+    ]);" "    ]);"
+
+# The toggle reading its own state. Hardcoding it renders a control that always claims to
+# be off — it still works, and it lies about what it just did.
+mutate "the toggle stops reflecting the setting" run \
+  src/modules/chrome.js "    const on = !!(SHD.settings && SHD.settings.showNsfwThumbnails);" \
+                        "    const on = false;"
+
+# Writing through storage is what re-renders (the listener does the work). Mutating the
+# in-memory object instead changes only what renders LATER — everything already on screen
+# stays stale, which looks like a toggle that half works.
+mutate "the toggle mutates settings in memory instead of writing them" run \
+  src/core/pipeline.js "      const { settings } = await chrome.storage.sync.get('settings');
+      await chrome.storage.sync.set({
+        settings: { ...C.settings, ...SHD.settings, ...(settings || {}), [key]: value }
+      });" "      SHD.settings[key] = value;"
+
+# NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an
+# oversight: there is no row for "a settings change keeps your scroll position", because
+# nothing of ours implements it. An explicit save/restore was written first and measured
+# to be dead code — the browser's scroll anchoring holds the position on its own — so it
+# was deleted. geometry still asserts the property, which would catch a future change
+# that defeats anchoring; there is simply no line of ours to reintroduce.
+
+# The dev bundle's storage shim. Reverting it to a stub that accepts writes and drops
+# them makes every in-page settings control silently do nothing in the harness and the
+# preview — which is exactly how this shipped-looking-fine bug was found.
+mutate "the dev harness storage shim swallows writes again" geometry \
+  build.js "        sync: {
+          get: async (key) => (key ? { [key]: store[key] } : { ...store }),
+          set: async (obj) => {
+            const changes = {};
+            for (const [k, newValue] of Object.entries(obj)) {
+              changes[k] = { oldValue: store[k], newValue };
+              store[k] = newValue;
+            }
+            listeners.forEach(fn => { try { fn(changes, 'sync'); } catch (e) { console.warn(e); } });
+          }
+        }," \
+           "        sync: { get: async () => ({}), set: async () => {} },"
+
 # The README now TELLS a reader which version the downloads are, in three places. A
 # stated version that has gone stale is worse than none — it is the one fact a reader
 # uses to decide whether their copy is current. Mutating the manifest models the real
 # mistake: bumping the version and forgetting the README.
+# Anchored on a key that never changes rather than on the version itself: a row carrying
+# the current version goes dead at every release, and a dead row reads as a quiet one.
+# Duplicate JSON keys resolve to the LAST occurrence, so injecting one after the real
+# version is what makes the manifest disagree with the README.
 mutate "the README's stated version drifts from the manifest" run \
-  manifest.json "\"version\": \"0.25.0\"," "\"version\": \"0.26.0\","
+  manifest.json '  "icons": {' '  "version": "9.9.9",
+  "icons": {'
 
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
