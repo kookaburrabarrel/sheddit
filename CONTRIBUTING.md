@@ -120,6 +120,11 @@ trust a green sweep, know the three ways a row can look like proof while proving
 - Touching an unhandled route. Search, modmail, chat and the post composer must be left
   *completely* untouched — deleting an element counts as touching it
 - Anything that makes a network request of its own. There are none, and that is a feature
+- A version number in a commit subject. GitHub prints that subject beside every file the
+  commit last touched, so a version there outlives its release and reads as the current
+  one — the root commit's is still printed against `LICENSE` and the icons. The body is
+  free to name a version where the number is provenance; it is the subject that is
+  published beside your files
 
 ## Firefox
 
