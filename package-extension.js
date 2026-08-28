@@ -71,10 +71,18 @@ const TARGETS = [
 
 const hash = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
+/* Documentation that lives beside what it documents — icons/README.md — belongs to the
+   repository and not to the extension: the zip carries what a browser loads, nothing else.
+   The rule is stated twice, once for each half of this file, because the builder hands the
+   directories to `zip` and the checker walks them itself. They cannot drift silently:
+   --check compares the two sets and fails on the first file only one of them has. */
+const UNPACKED = '*.md';
+const isPacked = (rel) => !rel.endsWith('.md');
+
 // Every shippable file, as repo-relative paths — the set each zip is supposed to hold.
 function walk(rel) {
   const abs = path.join(ROOT, rel);
-  if (!fs.statSync(abs).isDirectory()) return [rel];
+  if (!fs.statSync(abs).isDirectory()) return isPacked(rel) ? [rel] : [];
   return fs.readdirSync(abs).flatMap((name) => walk(path.join(rel, name)));
 }
 
@@ -130,7 +138,7 @@ function check() {
 function buildTarget({ out, transform }, { quiet = false } = {}) {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   if (fs.existsSync(out)) fs.unlinkSync(out);
-  const zipArgs = ['-r', '-X', ...(quiet ? ['-q'] : []), out, ...ENTRIES];
+  const zipArgs = ['-r', '-X', ...(quiet ? ['-q'] : []), out, ...ENTRIES, '-x', UNPACKED];
   if (!transform) {
     execFileSync('zip', zipArgs, { cwd: ROOT, stdio: 'inherit' });
   } else {
