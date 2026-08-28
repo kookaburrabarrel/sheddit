@@ -249,6 +249,17 @@ SHD.C = {
     awards: 'award-count'
   },
   COMMENT_BODY: '[slot="comment"]',
+  /* CANDIDATE, unverified live — deliberately NOT in COMMENT_ATTR, whose entries
+     verify:live requires on EVERY comment; this one is expected on none of most threads.
+     Reported 2026-08-27 (bug 89): subreddits that hide young comments' scores ship a
+     placeholder score="1" — so every comment on an active thread read "1 point" — with
+     `score_hidden: true` confirmed in the thread's own JSON. Whether the ELEMENT mirrors
+     the flag is unmeasured (the report audited the JSON, not the attributes);
+     `score-hidden` is the kebab-case mapping every other JSON field on this element
+     follows. Read as PRESENCE, and fail-safe by construction: if Reddit never renders
+     the attribute, behaviour is exactly today's — the placeholder shows — and
+     verify:live's COMMENT SCORE HIDING note is what settles the name. */
+  COMMENT_SCORE_HIDDEN: 'score-hidden',
 
   /* ---------- user profiles ---------- */
   /**

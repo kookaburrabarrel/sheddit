@@ -585,7 +585,15 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
       moreLikeButtons: [...document.querySelectorAll('button, a')]
         .map(e => (e.textContent || '').trim().toLowerCase())
         .filter(t => /more repl|more comment|continue this thread|view (more|entire)/.test(t))
-        .slice(0, 6)
+        .slice(0, 6),
+      /* COMMENT SCORE HIDING (bug 89). C.COMMENT_SCORE_HIDDEN is a CANDIDATE attribute
+         name — the report proved the hiding via the thread's JSON, not the DOM. Three
+         numbers answer whether the candidate is real: how many comments carry it, how
+         many carry the placeholder score="1", and whether the two travel together. On a
+         thread OLDER than the hiding window both being 0 is the expected (vacuous)
+         answer — the note below says which case this run measured. */
+      scoreHiddenCarriers: all.filter(c => c.hasAttribute(C.COMMENT_SCORE_HIDDEN)).length,
+      scoreOnes: all.filter(c => c.getAttribute(C.COMMENT_ATTR.score) === '1').length
     };
   }, C);
 
@@ -609,6 +617,16 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   }
   check('shreddit-comment-tree still exists', comments.tree);
   console.log(`  \x1b[2mobserved depths: ${comments.depths.join(', ')}\x1b[0m`);
+  /* Not a pass/fail — a measurement the codebase is waiting on. See C.COMMENT_SCORE_HIDDEN:
+     the attribute name is a candidate, and this line is the evidence that confirms or
+     retires it. A young thread (inside the subreddit's hide-scores window) with many
+     score="1" and ZERO carriers means the candidate name is wrong and bug 89's fix is
+     dormant; carriers > 0 means it is live and the mapping can move into COMMENT_ATTR. */
+  console.log(`  \x1b[2mscore hiding (bug 89): ${comments.scoreHiddenCarriers}/${comments.count} ` +
+              `carry ${C.COMMENT_SCORE_HIDDEN}; ${comments.scoreOnes}/${comments.count} have score="1"` +
+              (comments.scoreHiddenCarriers === 0 && comments.scoreOnes > comments.count / 2
+                ? ' — placeholder-heavy thread with no carriers: the candidate name looks WRONG'
+                : '') + '\x1b[0m');
 
   if (!comments.flat || !comments.structure.domDepthAlwaysEqualsDeclared) {
     const s = comments.structure;

@@ -73,7 +73,13 @@ SHD.comments = (() => {
           ' ',
           h('a.author', { href: `/user/${m.author}`, text: m.author }),
           ' ',
-          h('span.score', { text: m.score == null ? 'score hidden' : plural(m.score, 'point') }),
+          /* Two ways for a score to be unknowable, one label: the attribute missing
+             outright, or present-but-placeholder under Reddit's hide-new-scores window
+             (score="1" with the hidden flag set — bug 89). Old reddit's "[score hidden]"
+             convention, which this label already followed for the missing case. */
+          h('span.score', {
+            text: m.scoreHidden || m.score == null ? 'score hidden' : plural(m.score, 'point')
+          }),
           ' ',
           h('time', { title: m.created, text: ago(m.created) })
         ]),

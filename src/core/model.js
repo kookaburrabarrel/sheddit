@@ -377,6 +377,11 @@ SHD.model = (() => {
       postId: attr(el, A.postId),
       author: attr(el, A.author) || '[deleted]',
       score: num(el, A.score),
+      /* Presence-valued, like Reddit's other boolean attributes (`gif` on a player).
+         A hidden score ships WITH a placeholder score="1" (bug 89), so `score` alone
+         cannot distinguish "one point" from "not telling yet" — this flag is the only
+         thing that can, and C.COMMENT_SCORE_HIDDEN says how confident to be in it. */
+      scoreHidden: el.hasAttribute(C.COMMENT_SCORE_HIDDEN),
       created: attr(el, A.created),
       // Comments are FLAT siblings; depth is the only threading signal.
       depth: num(el, A.depth) ?? 0,

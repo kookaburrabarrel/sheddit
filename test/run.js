@@ -600,6 +600,27 @@ async function boot(html, url, setup) {
       junk.querySelector('.shd-commentarea-head .menuarea .selected')?.textContent === 'best');
   }
 
+  /* Reported live 2026-08-27 (bug 89): on any thread inside a subreddit's hide-new-scores
+     window, EVERY comment read "1 point" — thousand-vote top comments included — because
+     Reddit ships a placeholder score="1" while the score is hidden, and the placeholder
+     was rendered literally. The DOM flag is a candidate contract (C.COMMENT_SCORE_HIDDEN
+     says how confident to be); what this section pins is everything downstream of it:
+     flag present -> old reddit's "score hidden", flag absent -> the score, verbatim. */
+  console.log('\n\x1b[1mA HIDDEN COMMENT SCORE IS NOT "1 POINT"\x1b[0m');
+  {
+    // The reported pairing, verbatim: the hidden flag rides WITH a placeholder score="1".
+    const page = commentsPage()
+      .replace('thingid="t1_c0"', 'thingid="t1_c0" score-hidden=""')
+      .replace('score="100"', 'score="1"');
+    const { doc } = await boot(page, 'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    const scoreOf = (id) =>
+      doc.querySelector(`#shd-root .thing[data-fullname="${id}"] .tagline .score`)?.textContent;
+    check('a score-hidden comment says so instead of parroting the placeholder',
+      scoreOf('t1_c0') === 'score hidden', scoreOf('t1_c0'));
+    check('a comment with a visible score still renders it as points',
+      /^\d+ points?$/.test(scoreOf('t1_c1') || ''), scoreOf('t1_c1'));
+  }
+
   /* Reported live 2026-08-27 (bug 88): 8 of 11 comment GIFs on one thread rendered as
      solid black boxes. The anatomy, captured: <shreddit-player gif> whose only light-DOM
      <source> is the raw .gif (no type, no poster), wrapped in an anchor to the /media

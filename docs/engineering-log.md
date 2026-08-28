@@ -1206,6 +1206,26 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     swap happens on the clone alone. Selector and anatomy live in `C.GIF_PLAYER`;
     pinned in run.js with the captured shape and a mutation row.
 
+89. **Every comment on an active thread read "1 point".** Reported live, verified
+    against two threads' JSON: subreddits hide young comments' scores, and a hidden
+    score ships as placeholder `score: 1` with `score_hidden: true` — thirty visible
+    comments on a ~2,700-point thread all reading "1 point", sort order looking
+    nonsensical against the uniform scores. The renderer already said "score hidden"
+    for a MISSING score attribute; a present-but-placeholder one it parroted, and
+    `score` alone cannot tell "one point" from "not telling yet". The flag read is the
+    fix — with one honest caveat: the report proved the hiding in the thread's JSON,
+    not on the element, so `C.COMMENT_SCORE_HIDDEN` (`score-hidden`, the kebab-case
+    mapping every other field on this element follows) is a CANDIDATE, kept OUT of
+    COMMENT_ATTR because verify:live requires those on every comment and this one is
+    expected on none of most threads. Fail-safe by construction: if the name is wrong,
+    nothing changes and the placeholder still shows; verify:live's new score-hiding
+    note (carriers vs score="1" counts, flagged when a placeholder-heavy thread has
+    zero carriers) is what settles it — run `npm run verify:live` on a thread younger
+    than its subreddit's hiding window. The same report's minor note — "more replies"
+    labels sometimes carrying no count — is Reddit's own control text mirrored
+    verbatim by moreRepliesControl (bug 70's design: the native label is the branch
+    subtotal and self-corrects on click), so it is recorded here rather than changed.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
