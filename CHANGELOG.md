@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.26.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.28.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -16,7 +16,7 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
-## 0.26.0
+## 0.28.0
 
 ### Changed — the Firefox floor is 140, and Android has a floor of its own
 
@@ -37,6 +37,49 @@ floor silently inherits gecko's. The transform now declares `gecko_android` with
 the add-on as Android-compatible at all. Both floors are guarded in `run.js` and each
 has a mutation row; the deleted-block mutation is the one worth having, because deleting
 it is invisible.
+
+### Changed — the security policy answers for both browsers
+
+SECURITY.md was written when there was one build. It described "a single distribution
+channel" and listed a permission model Chrome has and Firefox does not. It now says the
+two builds are one source at one version — the Firefox manifest being derived from
+Chrome's at package time — so a fix reaches both in the same release; and it names the
+Firefox case that is easiest to mistake for a bug in the extension. MV3 host permissions
+are revocable there, and a revoked reddit.com permission is invisible from the page,
+because the content scripts never run to report it. The options page is where that is
+detectable, and it offers the grant back.
+
+### Changed — the repository stops presenting a stale version as the current one
+
+Every changelog section back to 0.10.1 was headed "Unreleased", including the one naming
+the current build three lines under a preamble calling it current. Every one of those
+builds shipped, by hand, from `dist/` — it is the store listings that are in review, not
+the builds — so the headings are bare version numbers now, which is what this file's own
+older half always used.
+
+Two stale numbers a reader could have acted on are gone: `refresh-zip.sh` offered
+`./refresh-zip.sh 0.16.0` as a usage example, which is not an example but an argument that
+rewrites the manifest and pushes the result, and the AMO data-collection note dated a
+request to a release when the form asks what the extension does now.
+
+The cause of all of it is recorded in CONTRIBUTING's send-back list: no version numbers in
+a commit subject. GitHub prints that subject beside every path the commit last touched, so
+a version there outlives its release — the first commit's subject was still printed against
+`LICENSE`, the icons, the code of conduct and `OLD-REDDIT.md`. Each of those four now
+carries an update it was owed: what the four icon sizes are for and why the corners are
+transparent, which spaces the code of conduct governs, and — corrected from the source,
+which is the only correction that file permits — that the comments sort bar is built and
+that flair is read but not yet rendered.
+
+### Added — a copyright holder for the licence
+
+The project has carried GPL-3.0 since its first commit without naming whose copyright it
+licenses, in the licence file or anywhere else. The notice the GPL itself supplies for the
+purpose now sits above the licence text, which stays byte-for-byte the FSF's own — a
+property worth being able to check with one `diff`, and the reason the notice is placed
+above it rather than woven in.
+
+## 0.26.0
 
 ### Fixed — deep comment branches are readable to the end again
 
