@@ -1,10 +1,13 @@
 # Changelog
 
 Sheddit is in **beta**: 0.26.0 is the current build, open to anyone who wants to install
-it by hand while the store listings are in review. Everything below is pre-1.0 development
-on `main`. The version in `manifest.json`/`package.json`/`README.md` moves on every push,
-because it is the only build identity available while testing: the failure screen prints
-it, so a report can always be matched to the build it came from. Dates are commit dates.
+it by hand while the store listings are in review. Sections are builds, newest first; the
+top one is the version `manifest.json` carries today. Every one of them shipped as a
+hand-install — it is the store listings that are still in review, not the builds.
+Everything below is pre-1.0 development on `main`. The version in
+`manifest.json`/`package.json`/`README.md` moves on every push, because it is the only
+build identity available while testing: the failure screen prints it, so a report can
+always be matched to the build it came from. Dates are commit dates.
 
 Entries lead with what changed for a *user* where there is such a thing, and note the
 underlying cause where that is the more useful fact. Several entries describe bugs that
@@ -13,11 +16,11 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
-## Unreleased — 0.26.0
+## 0.26.0
 
 ### Changed — the Firefox floor is 140, and Android has a floor of its own
 
-AMO's validator returned two warnings on the 0.26.0 upload, one per application: the
+AMO's validator returned two warnings on the Firefox upload, one per application: the
 manifest declares `data_collection_permissions`, a key Firefox reads from 140 and
 Firefox for Android from 142, under a `strict_min_version` of 128. A key declared
 beneath the version that reads it is a declaration nobody reads — on a 128 Firefox the
@@ -105,7 +108,7 @@ clicks into it silently swallowed. That window now shows a themed "loading…" l
 moment the navigation commits, replaced by the rendered page (or cleared by every other
 exit: a hand-back, a failure, the user releasing to native Reddit).
 
-## Unreleased — 0.25.0
+## 0.25.0
 
 ### Fixed — heavy pages no longer flash the native feed before the layout
 
@@ -136,7 +139,7 @@ opening half, which is how this shipped), the CSS lint statically rejects any
 hidden-toggled selector that declares display without a `[hidden]` counterpart, and the
 Firefox suite re-verifies the click pair on the engine the report came from.
 
-## Unreleased — 0.24.0
+## 0.24.0
 
 ### Added — Firefox
 
@@ -172,7 +175,7 @@ for; a static test refuses any same-realm history patch coming back, because it 
 mask a dead relay in every one-realm environment while shipping broken. Engineering log
 bug 82.
 
-## Unreleased — 0.23.0
+## 0.23.0
 
 ### Removed — the post's dead `award-count` mapping, caught by its own tripwire
 
@@ -192,7 +195,7 @@ the bundle's injection and the read that used it. One live run lost its thread, 
 profile sections to exactly that. The probe now detects the turnover and re-injects, and
 a crash anywhere mid-run still prints the tally of the sections that finished.
 
-## Unreleased — 0.22.0
+## 0.22.0
 
 ### Fixed — clicking an image post no longer dumps you into Reddit's viewer
 
@@ -221,7 +224,7 @@ recalibrated: it compared the two sorted deliveries as sets, and on any thread b
 than one page, newest-25 and oldest-25 are different comments — a set difference is what
 a working sort looks like. It now compares id recency, which survives big threads.
 
-## Unreleased — 0.21.0
+## 0.21.0
 
 ### Added — the comments page has a sort menu, and an `all N comments` escape hatch
 
@@ -268,7 +271,7 @@ field is optional, which is why nothing ever failed loudly. A row that rendered 
 timestamp now watches its source element and patches the time in when it lands, with the
 watch dropped on first success or after fifteen seconds, whichever comes first.
 
-## Unreleased — 0.20.0
+## 0.20.0
 
 ### Changed — the store summary says "no tracking"
 
@@ -282,7 +285,7 @@ logged out and unprofiled, with the layout as the visible half of that decision 
 than the headline. No code changed; the version moves because the manifest did, and two
 builds must never share a version number.
 
-## Unreleased — 0.19.0
+## 0.19.0
 
 ### Added — image posts show their image
 
@@ -319,7 +322,7 @@ resolve to the largest size the page offers, which on some posts may be the thum
 
 There is a new **Show images inline** setting, on by default, that turns both off.
 
-## Unreleased — 0.18.0
+## 0.18.0
 
 ### Fixed — opening a comments page no longer locks the tab
 
@@ -355,7 +358,7 @@ stopping point. It now fills until the page is worth scrolling and then stops, b
 attempts as well as height so that loads which deliver nothing cannot spin. The sentinel
 reads `load more` and waits, and scrolling or clicking it resumes normal infinite scroll.
 
-## Unreleased — 0.17.0
+## 0.17.0
 
 ### Fixed — the inline player has sound
 
@@ -400,7 +403,7 @@ without a browser, like the other two.
 An asset whose manifest lists no audio track at all is still genuinely silent, and still
 says so on screen.
 
-## Unreleased — 0.16.0
+## 0.16.0
 
 ### Fixed — video posts play again, inside the layout
 
@@ -473,7 +476,7 @@ suite caught: the `isConnected` check inside `mount()` also ran on the synchrono
 where the box is not attached yet, so the good URL was rejected every time and left a
 `<video>` with no `src`.
 
-## Unreleased — 0.15.0
+## 0.15.0
 
 The two 2026-08-22 lines of work meeting: the live testing below (0.12.2) and the three
 video reports (0.13.0 and 0.14.0), which were handled on a branch cut before that
@@ -510,7 +513,7 @@ the extension installed, which retires half of what open question 9(c) was waiti
 Only half: whether that node is alive enough to be revealed in place is still uncaptured,
 and it is the half the fix rests on, so 9(c) stays open and live testing's P3 still decides it.
 
-## Unreleased — 0.14.0
+## 0.14.0
 
 ### Changed — a video post's title is its comments page; the mp4 is its own link
 
@@ -539,7 +542,7 @@ Four mutation rows cover the change (the title carrying the mp4 again, the watch
 appearing on the comments page, the click-time re-resolution, and the closed loop), and
 the round-13 brief's P3 is now the capture that decides the rest.
 
-## Unreleased — 0.13.0
+## 0.13.0
 
 ### Fixed — the codec of a video link was picked by Reddit's array order, not by anyone
 
@@ -593,7 +596,7 @@ nonce handling. `bridge.js` reaches the page's main world through the manifest's
 precisely so an extension never has to inject a script tag. The same page's second
 symptom points at the reporting harness rather than at the page.
 
-## Unreleased — 0.12.2
+## 0.12.2
 
 Everything here comes from live testing on 2026-08-22, which found the
 extension working — high rendering fidelity, clean suppression, correct passthrough, zero
@@ -701,7 +704,7 @@ geometry suite now checks float containment in every theme, at three widths, inc
 grown by a long title, and finds none.
 
 
-## Unreleased — 0.12.1
+## 0.12.1
 
 ### Added — the public face of the repository
 
@@ -727,7 +730,7 @@ pagination tests failed roughly one run in six with `pages: 0` where 40 was asse
 and applied only the secondary measure (opting one section out of the auto chain), which
 treated the symptom.
 
-## Unreleased — 0.12.0
+## 0.12.0
 
 ### Fixed — profile comment bodies dragged Reddit's indent along with them
 
@@ -753,7 +756,7 @@ rendering perfectly a second earlier. The verdict is now total failure — Reddi
 comments and none of them could be read — which still catches every way the contract can
 be wrong, since those fail on all of them.
 
-## Unreleased — 0.11.0
+## 0.11.0
 
 ### Fixed — every live profile handed back, because only the tag was right
 
@@ -794,7 +797,7 @@ it was found in — between 480 and 640 — is now measured at 500. No change ma
 suppression rule: it is load-bearing for accessibility, and changing it on an attribution
 that does not reproduce is how the last accessibility bug shipped.
 
-## Unreleased — 0.10.1
+## 0.10.1
 
 ### Added — user profiles are in scope (project decision 2026-08-21)
 
