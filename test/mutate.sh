@@ -1263,6 +1263,13 @@ mutate "comment gifs go back to being black boxes" run \
   src/core/dom.js "    root.querySelectorAll(SHD.C.GIF_PLAYER).forEach(p => {" \
                   "    [].forEach(p => {"
 
+# Bug 89: a hidden comment score ships as a placeholder score="1", so every comment on an
+# active thread read "1 point". The flag read is the fix; dropping it parrots the
+# placeholder again.
+mutate "hidden comment scores go back to reading 1 point" run \
+  src/core/model.js "      scoreHidden: el.hasAttribute(C.COMMENT_SCORE_HIDDEN)," \
+                    "      scoreHidden: false,"
+
 # Live testing: the README claimed 72px rows and the geometry suite had never measured one.
 mutate "long titles are clipped instead of growing the row" geometry \
   src/styles/old-reddit.css ".thing.link {

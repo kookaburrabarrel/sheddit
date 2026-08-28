@@ -15,6 +15,17 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ## Unreleased — 0.25.1
 
+### Fixed — hidden comment scores say "score hidden" instead of "1 point"
+
+On any young thread in a subreddit that hides new comments' scores, every comment —
+thousand-vote top comments included — showed exactly "1 point": Reddit ships a
+placeholder score of 1 while the real one is hidden, and the placeholder was rendered
+literally. Comments carrying the hidden flag now say "score hidden", old reddit's
+convention. One caveat, recorded in the engineering log: the flag's attribute name on
+the page element is a best-candidate mapping (the report verified the hiding in Reddit's
+data, not on the element), so the fix is built to change nothing if that name is wrong,
+and `npm run verify:live` on a young thread now measures which case is real.
+
 ### Fixed — comment GIFs show the picture instead of a solid black box
 
 Reported with a DOM audit: most GIFs in comments arrive as Reddit's video player fed a
