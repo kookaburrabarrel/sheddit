@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.25.1 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.26.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Everything below is pre-1.0 development
 on `main`. The version in `manifest.json`/`package.json`/`README.md` moves on every push,
 because it is the only build identity available while testing: the failure screen prints
@@ -13,7 +13,7 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
-## Unreleased — 0.25.1
+## Unreleased — 0.26.0
 
 ### Fixed — deep comment branches are readable to the end again
 
