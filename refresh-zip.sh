@@ -3,7 +3,7 @@
 # Make the README's download link serve the current code.
 #
 #   ./refresh-zip.sh            pull main, rebuild dist/sheddit.zip, push if it changed
-#   ./refresh-zip.sh 0.16.0     bump manifest.json + package.json to 0.16.0 first
+#   ./refresh-zip.sh <version>  bump manifest.json + package.json to it first
 #
 # The zip is a build artifact kept in version control so the README can link a
 # download without a release. That only works if it is rebuilt whenever the source
