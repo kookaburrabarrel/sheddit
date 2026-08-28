@@ -187,6 +187,15 @@ async function boot(html, url, setup) {
       href('t3_text1') === '/r/Layoffs/comments/text1/got_laid_off/', href('t3_text1'));
     check('link post title links OUT to the article',
       href('t3_link1') === 'https://fashiontimes.co.uk/articles/nasa-gravity', href('t3_link1'));
+    /* QA 2026-08-27 F5: a gallery's content-href is reddit.com/gallery/<id>, which Reddit
+       currently SPA-canonicalises onto the comments page — so the reader stayed in the
+       layout by Reddit's grace, not by design, and a /gallery/ page shape of its own
+       would turn the title into the image-post bounce. Routed deliberately now, exactly
+       as image posts were in 0.22.0, under the same narrow gate: frames resolved,
+       link viewer-bound. */
+    check('gallery title routes to its comments page, not through /gallery/',
+      href('t3_gallery1') === '/r/interesting/comments/gallery1/bubble_boy/',
+      href('t3_gallery1'));
     check('comments button links to the permalink',
       byId('t3_link1')?.querySelector('a.comments')?.getAttribute('href') === '/r/nottheonion/comments/link1/nasa/');
     check('comment count is pluralised',
@@ -787,6 +796,62 @@ async function boot(html, url, setup) {
        reader out of the layout. */
     check('frames carry no viewer-bound link wrappers',
       imgs.every(i => !i.closest('a')));
+
+    /* Bug 91 (QA F3, measured on two live galleries): the carousel's lazy frames are
+       SRCLESS at consume time and hydrate afterwards — so live galleries rendered one
+       frame while the page carried two, and nothing ever looked again. The live shape,
+       reproduced: a srcless <img> lands in the source post, then grows its src. */
+    const srcPost = doc.querySelector('shreddit-post[id="t3_gallery1"]');
+    const lazyFrame = doc.createElement('img');
+    srcPost.appendChild(lazyFrame);                     // srcless: nothing to show yet
+    await hold(50);
+    check('a srcless frame adds nothing', doc.querySelectorAll(
+      '#shd-root .shd-selfpost .shd-image img').length === 2);
+    lazyFrame.src = 'https://preview.redd.it/bubble-late-960.jpg';
+    const grew = await waitFor(() => doc.querySelectorAll(
+      '#shd-root .shd-selfpost .shd-image img').length === 3, { timeout: 3000 });
+    check('a frame that hydrates after consume is appended to the stack', grew,
+      `${doc.querySelectorAll('#shd-root .shd-selfpost .shd-image img').length} imgs`);
+    check('...without duplicating the frames already shown',
+      new Set([...doc.querySelectorAll('#shd-root .shd-selfpost .shd-image img')]
+        .map(i => i.getAttribute('src'))).size === 3);
+  }
+
+  /* Bug 90 (QA F1, HIGH — deep branches were unreachable): one click on "20 more
+     replies" delivered comments ALREADY CARRYING the affordances for the remainder,
+     nested in the just-delivered subtree — and our side rendered zero controls for
+     them, because moreRepliesControl is consulted once, at render time, and these
+     expanders can land in a comment's light DOM AFTER that comment was consumed. The
+     page-wide control count could only ever go down; every branch was one click deep. */
+  console.log('\n\x1b[1mAN EXPANDER THAT ARRIVES LATE STILL GETS ITS CONTROL\x1b[0m');
+  {
+    const { doc } = await boot(commentsPage(),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    const row = () => doc.querySelector('#shd-root .thing[data-fullname="t1_c0"]');
+    const controls = () =>
+      row()?.querySelectorAll(':scope > .child > .sitetable > .shd-more-replies') || [];
+    check('setup: the branch rendered with no expander and no control',
+      !!row() && controls().length === 0);
+
+    // The measured shape: the affordance lands in the comment's light DOM after consume.
+    const srcComment = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    srcComment.insertAdjacentHTML('beforeend',
+      '<faceplate-partial loading="action" src="/more-replies">' +
+      '<button>16 more replies</button></faceplate-partial>');
+    const offered = await waitFor(() => controls().length === 1, { timeout: 3000 });
+    check('the late expander is offered on the already-rendered row', offered,
+      'no control — the branch is one click deep again');
+    check('...wearing the native label, which is the branch subtotal',
+      /16 more replies/.test(controls()[0]?.textContent || ''),
+      controls()[0]?.textContent);
+
+    // A second affordance in the same branch must not stack a second control.
+    srcComment.insertAdjacentHTML('beforeend',
+      '<faceplate-partial loading="action" src="/more">' +
+      '<button>9 more replies</button></faceplate-partial>');
+    await hold(120);
+    check('a second late affordance does not stack a second control',
+      controls().length === 1, String(controls().length));
   }
 
   /* The gate that exists because rendering our own <img> walks straight past the blur

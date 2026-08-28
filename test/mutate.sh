@@ -1270,6 +1270,25 @@ mutate "hidden comment scores go back to reading 1 point" run \
   src/core/model.js "      scoreHidden: el.hasAttribute(C.COMMENT_SCORE_HIDDEN)," \
                     "      scoreHidden: false,"
 
+# Bug 90 (QA F1): expansion-delivered comments carry the affordances for the branch
+# remainder, and they land in a comment's light DOM AFTER it was consumed — with no
+# watcher, deep branches are one click deep for ever.
+mutate "late-arriving expanders never get controls and branches dead-end again" run \
+  src/modules/comments.js "    watchLateExpanders();" "    ;"
+
+# Bug 91 (QA F3): gallery frames hydrate late — srcless at consume — so live galleries
+# rendered one frame while the page carried two, and nothing ever looked again.
+mutate "late-hydrating gallery frames are dropped again" run \
+  src/modules/comments.js "    try { armLateGalleryFrames(row, m); } catch { /* the frames already rendered stand */ }" \
+                          "    ;"
+
+# QA F5: a gallery title's content-href is reddit.com/gallery/<id>, which only lands on
+# the comments page today by Reddit's SPA grace. The reroute is deliberate, like 0.22.0's
+# image posts.
+mutate "gallery titles lean on Reddit's /gallery/ redirect again" run \
+  src/core/model.js "          : (type === 'gallery' && galleryImages.length && viewerBound(contentHref)) ? permalink" \
+                    "          : false ? permalink"
+
 # Live testing: the README claimed 72px rows and the geometry suite had never measured one.
 mutate "long titles are clipped instead of growing the row" geometry \
   src/styles/old-reddit.css ".thing.link {

@@ -161,6 +161,11 @@ SHD.model = (() => {
        nothing read it. It is in the light DOM, exactly like a text post's body, and it is
        resolved the same way (bug 49). */
     const imageUrl = type === 'image' ? imageOf(el) : null;
+    /* A gallery's frames as of CONSUME time — usually incomplete, because the carousel's
+       lazy <img>s are srcless until they hydrate (bug 91). The comments page re-reads
+       via model.imagesOf afterwards; this snapshot decides the href gate below and seeds
+       the first render. */
+    const galleryImages = type === 'gallery' ? imagesOf(el) : [];
 
     return {
       kind: 'post',
@@ -181,7 +186,14 @@ SHD.model = (() => {
          external (imgur, a blog) is untouched, and a miss falls back untouched. */
       href: (isSelf || type === 'video') ? permalink
         : (type === 'image' && imageUrl && viewerBound(contentHref)) ? permalink
-          : (contentHref || permalink),
+          /* A gallery's content-href is `reddit.com/gallery/<id>` — viewer-bound by
+             definition. Live today Reddit happens to SPA-canonicalise that onto the
+             comments page, so the reader stayed in the layout by Reddit's grace, not by
+             design (QA 2026-08-27, F5); if /gallery/ ever becomes its own page shape it
+             turns into the image-post bounce. Same narrow gate as images: only rerouted
+             when frames actually resolved, so the comments page has something to show. */
+          : (type === 'gallery' && galleryImages.length && viewerBound(contentHref)) ? permalink
+            : (contentHref || permalink),
       /* The watchable rendition, when Reddit has one and has hydrated it. Null is
          ordinary — the player carries the JSON late, or (increasingly) not at all — and
          listing.js re-resolves at click time for exactly that reason. */
@@ -193,7 +205,7 @@ SHD.model = (() => {
       /* A gallery's frames, each at its own best size — peers, not candidates for one
          winner. Empty is ordinary for the same reason `image` is null: a listing row
          carries only the thumbnail, and the consumer renders nothing rather than erring. */
-      images: type === 'gallery' ? imagesOf(el) : [],
+      images: galleryImages,
       /* The bare `v.redd.it/<id>` URL, kept because it is the asset IDENTIFIER even though
          it is useless as a link (it 302s a logged-out reader back to the comments page).
          media.js turns it into a manifest URL; nothing else should make it an href. */
@@ -552,5 +564,9 @@ SHD.model = (() => {
     };
   }
 
-  return { post, comment, profileComment, mp4Of, rejects, rejectSummary, clearRejects };
+  /* imagesOf is public for the same reason mp4Of is: gallery frames HYDRATE LATE — the
+     carousel's lazy <img>s are srcless at consume time and grow their src afterwards
+     (bug 91) — so the consumer re-reads the source element after render, exactly as the
+     watch link re-resolves the mp4 at click time. */
+  return { post, comment, profileComment, mp4Of, imagesOf, rejects, rejectSummary, clearRejects };
 })();

@@ -1226,6 +1226,39 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     verbatim by moreRepliesControl (bug 70's design: the native label is the branch
     subtotal and self-corrects on click), so it is recorded here rather than changed.
 
+90. **Every deep branch was one click deep.** QA round 2026-08-27, three for three on
+    two live threads: click "46 more replies", 2 comments arrive, control gone; "144
+    more replies", 1 comment, gone; "20 more replies", 9 comments, gone — the
+    page-wide control count only ever went DOWN, so the remainder of every expanded
+    branch was unreachable. The mechanism, captured with a MutationObserver on the
+    native branch: the delivered comments arrive ALREADY CARRYING the affordances for
+    the remainder (four of them after one click), nested inside the just-delivered
+    subtree — and they can land in a comment's light DOM AFTER that comment was
+    consumed. moreRepliesControl() is consulted exactly once, at render time, so those
+    expanders never got controls; meanwhile the spent host control correctly removed
+    itself (its own branch's native expander was gone). The fix is the profile
+    timestamp's watch-and-patch (bug 68) at the right scale: ONE observer on the
+    comment tree — not one per comment, because "no expander at render" is the common
+    case and a megathread would hold thousands — that resolves each inserted
+    more-replies control to its owning comment and, when that comment's row is already
+    rendered and lacks one, offers the same delegated control render() would have
+    built. A not-yet-consumed comment is skipped: render() sees its expander itself.
+
+91. **Galleries rendered one frame while the page carried two — and their titles
+    leaned on a redirect.** QA round, both live galleries checked: the native carousel
+    held 2 loaded frames (the lazy rest srcless), Sheddit rendered exactly 1.
+    imagesOf() was faithful to consume time; the carousel had not hydrated the rest,
+    and nothing ever looked again — the late-hydration family (bugs 68, 90) in its
+    third costume. armLateGalleryFrames watches the source post (childList +
+    src/srcset attributes, 15 s) and appends frames the stack does not have, creating
+    the box late if zero frames had resolved at consume; gated exactly as postImage is,
+    because the NSFW answer cannot depend on arrival time. The same round's F5: a
+    gallery title's content-href is `reddit.com/gallery/<id>`, which Reddit currently
+    SPA-canonicalises onto the comments page — the reader stayed in the layout by
+    Reddit's grace. Routed deliberately now (0.22.0's image-post move, same narrow
+    gate: frames resolved, link viewer-bound), so a future `/gallery/` page shape
+    cannot turn gallery titles into the image-post bounce.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
@@ -1460,6 +1493,21 @@ the way a question got settled is usually more useful than the answer.
    If it does, that page gets Reddit's own player behind an expando and the mp4 stops
    being load-bearing anywhere. If it does not, (b) is the end state and the `watch` link
    is the whole answer.
+
+10. **What a cloned selftext's truncation UI looks like, exactly.** QA round
+    2026-08-27, F4: on a REVISIT to a long-selftext thread, Reddit shipped the body
+    pre-collapsed, and the clone carried the collapse state wholesale — a "Read more ⌄"
+    control and a fade-out gradient band across the middle of the selftext box (the
+    fade rides the host page's `theme-dark`, so it paints BLACK over our light box —
+    bug 55's family). First visit, same thread, same session: full text. Clicking the
+    cloned "Read more" DOES expand — Reddit's document-level delegated listener catches
+    the bubbled click, which works today and is nothing we control (open question 7's
+    exposure, concrete on a control now). The right fix is probably bug 67's move —
+    strip or pre-expand the truncation wrapper in the clone, since it is presentation
+    state, not content — but the wrapper's element names and classes were NOT captured,
+    and a strip built on guessed selectors is how pages get eaten. Needs one capture:
+    the collapsed selftext's subtree skeleton (tags + classes, no text), from a thread
+    Reddit happens to serve collapsed. Until then, recorded rather than guessed at.
 
 Two settled things, so nobody reopens them: the **staircase indentation report does not
 reproduce** (measured at 10 widths), and **comments being DOM-nested was a non-event**
