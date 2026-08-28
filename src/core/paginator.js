@@ -410,13 +410,21 @@ SHD.paginator = (() => {
     sentinel = SHD.dom.h('div.shd-sentinel', { dataset: { status: status || '' } },
       SHD.dom.h('a.shd-loadmore', {
         // Whatever the current load is saying, not the idle label — see setStatus().
-        href: '#', text: status || 'load more',
-        // Asking for more IS reader intent: releases the unprompted-fill limits so the
-        // chain behaves normally from here, exactly as a scroll would.
-        onclick: (e) => { e.preventDefault(); interacted = true; loadNext('manual'); }
+        href: '#', text: status || idleLabel(),
+        onclick: (e) => {
+          e.preventDefault();
+          // Inert while the fill still owes this page content (bug 85): the label reads
+          // `loading…` and a click on it must not fire a load — nor count as intent, or
+          // the first stray click would flip the control live with rows still incoming.
+          if (settling()) return;
+          // Asking for more IS reader intent: releases the unprompted-fill limits so the
+          // chain behaves normally from here, exactly as a scroll would.
+          interacted = true; loadNext('manual');
+        }
       })
     );
     container.after(sentinel);
+    syncControl();
     // The list just changed shape and the sentinel is a brand new node; anything measured
     // against the old one describes a page that no longer exists.
     forget();
@@ -584,6 +592,39 @@ SHD.paginator = (() => {
     return m.pageHeight >= m.viewport * FILL_VIEWPORTS;
   }
 
+  /**
+   * Is the unprompted fill still expected to reshape the page without the reader asking?
+   *
+   * While it is, the sentinel must NOT offer a clickable "load more". Reported from live
+   * use (docs/engineering-log.md bug 85): a tab switch paints three posts with the button
+   * directly under them, the fill completes the listing a couple of seconds later, and the
+   * rows land ABOVE the button — so a reader who aimed at "load more" clicks whatever post
+   * slid under the cursor and is navigated to an unrelated thread. The button was bait: it
+   * invited a click at a position the chain itself was about to occupy. So until the fill
+   * comes to rest the control reads `loading…` and answers nothing, and the clickable
+   * label appears only where it will stay put.
+   *
+   * "At rest" is every stopping point the fill actually has: the page is tall enough
+   * (filled), the attempt budget is spent (unprompted), nothing has been left to drive for
+   * the sticky streak (exhausted — before that, the successor partial can still stream in
+   * late and land rows above the button, which is the trap again), or the page cap. The
+   * reader's own interaction releases it too: someone who scrolled or clicked is steering,
+   * not aiming at a parked button. `unproductive` is deliberately absent — it is a SOFT
+   * limit the heartbeat retries past, and its loads are exactly the ones whose content
+   * arrives in arrears; the attempt budget bounds that run instead.
+   *
+   * Not consulted with autoPaginate off: nothing unprompted will move the page, so the
+   * manual button is honest from the first paint.
+   */
+  function settling() {
+    return !!SHD.settings.autoPaginate &&
+      !interacted &&
+      pages < MAX_PAGES &&
+      exhausted < EXHAUSTED_STICKY &&
+      unprompted < UNPROMPTED_MAX &&
+      !filled();
+  }
+
   /* The label SURVIVES a re-attach, which is why it is module state rather than just DOM.
      attach() runs after every pipeline flush so the sentinel stays at the bottom of a list
      that is still growing — and it builds a NEW node, whose label starts at the idle
@@ -593,12 +634,49 @@ SHD.paginator = (() => {
      the LOAD, not to the node that happens to be displaying it. */
   let status = null;
 
+  /* The idle face of the control, which is no longer one string. While the unprompted
+     fill is still working the page (settling), offering `load more` is offering a target
+     the chain is about to bury — bug 85 — so the idle label is an inert `loading…` until
+     the fill is at rest. A status set by a load always wins; this only fills the gaps. */
+  const idleLabel = () => settling() ? 'loading…' : 'load more';
+
+  /**
+   * Keep the control's face in step with the chain's state.
+   *
+   * One writer, called from attach(), setStatus() and diag() — the label and the
+   * clickability must flip TOGETHER, on whichever event moves the state (a load ending, a
+   * heartbeat noticing the page is now tall enough, the attempt budget running out). The
+   * inertness is triple: the click handler refuses (the part that cannot be styled away),
+   * pointer-events is dropped via [data-shd-settling] in old-reddit.css so the cursor
+   * does not promise a click, and it leaves the tab order so a keyboard reader is not
+   * offered a control that answers nothing. Writes are guarded because this runs on every
+   * diag() tick.
+   */
+  function syncControl() {
+    if (!sentinel) return;
+    const hold = settling();
+    const holdStr = String(hold);
+    if (sentinel.dataset.shdSettling !== holdStr) sentinel.dataset.shdSettling = holdStr;
+    const a = sentinel.querySelector('.shd-loadmore');
+    if (!a) return;
+    const label = status || idleLabel();
+    if (a.textContent !== label) a.textContent = label;
+    if (hold) {
+      if (a.getAttribute('aria-disabled') !== 'true') {
+        a.setAttribute('aria-disabled', 'true');
+        a.setAttribute('tabindex', '-1');
+      }
+    } else if (a.hasAttribute('aria-disabled')) {
+      a.removeAttribute('aria-disabled');
+      a.removeAttribute('tabindex');
+    }
+  }
+
   function setStatus(text) {
     status = text || null;
     if (!sentinel) return;
     sentinel.dataset.status = text || '';
-    const a = sentinel.querySelector('.shd-loadmore');
-    if (a) a.textContent = text || 'load more';
+    syncControl();
     diag();
   }
 
@@ -621,6 +699,10 @@ SHD.paginator = (() => {
    */
   function diag() {
     if (!sentinel) return;
+    // The control's face rides on the same wake-ups as the diagnostics: every pump, tick
+    // and refusal lands here, so this is the one call site that catches settling() flipping
+    // between attaches (the page grew tall enough; the attempt budget ran out).
+    syncControl();
     const d = sentinel.dataset;
     // Both answers to "is the bottom of the list near the viewport", side by side, because
     // the live stall was the two disagreeing: shdVisible false with the sentinel on screen.

@@ -1125,6 +1125,49 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     all, and the real-Firefox suite re-verifies the click pair on the engine the
     report came from.
 
+85. **"load more" was bait: the fill slid a post under the cursor and the click opened
+    it.** Reported from live use with the exact post named: a sort-tab switch paints
+    three posts with the sentinel's clickable `load more` directly beneath them, the
+    unprompted fill completes the listing two seconds later, and the new rows land
+    ABOVE the sentinel — so a reader who aimed at the button clicks whichever post now
+    occupies its painted position and is navigated to an unrelated thread. Nothing was
+    wrong with any single piece: the fill is supposed to complete a three-post page
+    (bug 78's floor), attach() is supposed to keep the sentinel at the bottom, and the
+    label truthfully read idle between loads. The composite was the bug — a control
+    inviting a click at a position the chain itself was about to occupy. The fix is a
+    hold: `settling()` says whether the unprompted fill still owes the page content
+    (auto on, reader untouched, page not filled, attempt budget and page cap unspent,
+    exhausted streak not committed), and while it does the control is inert three ways —
+    the click handler refuses (and does NOT record the click as reader intent, which
+    would re-arm the trap off the reader's own miss), pointer-events drops it out of
+    hit-testing so the cursor never promises anything, and it leaves the tab order —
+    wearing a plain `loading…` face. The clickable label appears only at a stopping
+    point, where nothing unprompted will move it again. `unproductive` is deliberately
+    not a stopping point: it is the soft limit whose loads deliver in arrears (bug 66),
+    i.e. exactly the loads that land rows above the button after the label would have
+    gone live. jsdom pins the state machine (inert face, swallowed click, release at
+    the park), geometry drives it with a real cursor — pointer-events verified by an
+    actual click falling through — and the hold gets mutation rows for both halves,
+    predicate and handler guard.
+
+86. **Every SPA navigation was a blank viewport until the next page arrived.** The
+    same report's second symptom, and it had been true since SPA navigation shipped:
+    onRoute tears `#shd-root` down at the PRE-COMMIT emit (bug 34's fix), `.shd-active`
+    stays on so suppress.css keeps every native body child hidden, and the incoming
+    feed is however many seconds away Reddit's fetch is — live, 2-3 seconds of nothing
+    per sort-tab click, read as solid black under the reporter's forced-dark browser,
+    with clicks into the void silently swallowed. No piece was wrong here either: the
+    teardown must precede the swap (mixed sorts otherwise), and the suppression must
+    persist (flash of native feed otherwise). The window between them was simply
+    unowned. gate.resetForRoute() now mounts a themed `#shd-loading` line — only
+    mid-session (`wasRevealed`), where `.shd-active` is guaranteed and the tokens
+    resolve; a first load keeps the `--shd-blank` blackout — and every exit removes it:
+    reveal() (the normal end), unblank(), fail(), release(), standDown() (a handed-back
+    page must not wear our `loading…`). Asserted synchronously inside the emit in both
+    jsdom and the packed extension, before any flush has run, because the claim is
+    "there is no frame in which the reader faces a void", not "a placeholder eventually
+    appears".
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

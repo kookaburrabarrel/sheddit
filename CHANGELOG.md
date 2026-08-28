@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.25.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.25.1 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Everything below is pre-1.0 development
 on `main`. The version in `manifest.json`/`package.json`/`README.md` moves on every push,
 because it is the only build identity available while testing: the failure screen prints
@@ -12,6 +12,29 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## Unreleased — 0.25.1
+
+### Fixed — "load more" can no longer hijack a click into an unrelated post
+
+Reported from live use, with the stolen click's destination named: after a sort-tab
+switch the listing paints its first three posts with "load more" right beneath them, the
+automatic fill completes the listing a couple of seconds later, and the new rows land
+above the button — so a click aimed at "load more" opened whichever post had slid under
+the cursor. The control is now held inert while the fill is still working the page: it
+wears a plain "loading…" face, refuses clicks (and keyboard focus), and only becomes the
+clickable "load more" at one of the fill's real stopping points — where nothing
+unprompted will move it again. Manual mode (auto-load off) is unaffected: nothing
+unprompted moves that page, so its button is honest from first paint.
+
+### Fixed — switching sorts no longer blanks the page with no explanation
+
+The same report's second symptom, and older than it looks: every in-page navigation tore
+Sheddit's layout down before Reddit had delivered the next page, leaving a themed but
+completely empty viewport — several seconds of apparent blackout per sort-tab click, with
+clicks into it silently swallowed. That window now shows a themed "loading…" line the
+moment the navigation commits, replaced by the rendered page (or cleared by every other
+exit: a hand-back, a failure, the user releasing to native Reddit).
 
 ## Unreleased — 0.25.0
 
