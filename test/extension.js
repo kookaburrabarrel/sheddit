@@ -227,6 +227,69 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
   }
 
   /* ================================================================== *
+   * THE NSFW TOGGLE, THROUGH REAL chrome.storage
+   * ================================================================== */
+  console.log('\n\x1b[1mPACKED EXTENSION — THE NSFW TOGGLE PERSISTS\x1b[0m');
+  // jsdom drives this through a stub and the dev harness through an in-memory shim;
+  // neither can answer whether the write survives a reload, which is the half a reader
+  // notices. Same wall as the theme buttons: SHD lives in the isolated world, so the
+  // whole exercise goes through the button, exactly as a user would.
+  {
+    const pageN = await browser.newPage();
+    await pageN.setViewport({ width: 1280, height: 900 });
+    await pageN.goto(origin + PATHS.listing, { waitUntil: 'domcontentloaded' });
+    await until(pageN, () => !!document.querySelector('#shd-root .thing.link'));
+
+    const state = () => pageN.evaluate(() => {
+      const row = document.querySelector('.thing.link[data-fullname="t3_nsfw1"]');
+      const btn = document.querySelector('#shd-header .shd-nsfw-btn');
+      return {
+        pressed: btn && btn.getAttribute('aria-pressed'),
+        placeholder: !!row?.querySelector('a.thumbnail.nsfw'),
+        picture: !!row?.querySelector('.thumbnail img'),
+        stamp: !!row?.querySelector('.nsfw-stamp'),
+        rows: document.querySelectorAll('#shd-root .thing.link').length
+      };
+    });
+
+    const before = await state();
+    check('the toggle is in the packed extension\'s header, reading off',
+      before.pressed === 'false' && before.placeholder && !before.picture,
+      JSON.stringify(before));
+
+    await pageN.click('#shd-header .shd-nsfw-btn');
+    await until(pageN, () =>
+      !!document.querySelector('.thing.link[data-fullname="t3_nsfw1"] .thumbnail img'));
+    const on = await state();
+    check('clicking it reveals the adult thumbnail', on.picture && !on.placeholder,
+      JSON.stringify(on));
+    check('...without losing or duplicating rows', on.rows === before.rows,
+      `${before.rows} -> ${on.rows}`);
+    check('...and the stamp still labels the post', on.stamp);
+
+    // The half only a real extension can answer: chrome.storage.sync round trip.
+    let persisted = await (async () => {
+      for (let i = 0; i < 10; i++) {
+        await pageN.goto(origin + PATHS.listing, { waitUntil: 'domcontentloaded' });
+        await until(pageN, () => !!document.querySelector('#shd-root .thing.link'));
+        const s = await state();
+        if (s.picture) return s;
+      }
+      return state();
+    })();
+    check('the choice survives a reload', persisted.picture && persisted.pressed === 'true',
+      JSON.stringify(persisted));
+
+    // Put it back, so nothing below inherits an opted-in profile.
+    await pageN.click('#shd-header .shd-nsfw-btn');
+    await until(pageN, () =>
+      !!document.querySelector('.thing.link[data-fullname="t3_nsfw1"] a.thumbnail.nsfw'));
+    check('turning it off restores the placeholder',
+      (await state()).placeholder === true);
+    await pageN.close();
+  }
+
+  /* ================================================================== *
    * VOTE DELEGATION — the highest-risk unverified behaviour
    * ================================================================== */
   console.log('\n\x1b[1mPACKED EXTENSION — VOTE DELEGATION\x1b[0m');

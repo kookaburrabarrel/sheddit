@@ -7,6 +7,7 @@
   label { display: block; margin: 7px 0; }
   select { font: 12px Verdana, Arial, sans-serif; margin-left: 6px; }
   .note { color: #888; font-size: 11px; margin-top: 12px; line-height: 1.5; }
+  .hint { color: #888; font-size: 11px; }
   #host-warning { background: #fff6d5; border: 1px solid #e0c96e; padding: 8px;
     font-size: 12px; line-height: 1.5; margin: 0 0 10px; }
   #host-warning button { display: block; margin-top: 6px;
@@ -36,10 +37,17 @@
 <label><input type="checkbox" data-k="chrome"> Header &amp; sidebar</label>
 <label><input type="checkbox" data-k="compactRows"> Compact rows</label>
 <label><input type="checkbox" data-k="showThumbnails"> Thumbnails</label>
-<label><input type="checkbox" data-k="showNsfwThumbnails"> Show adult-content thumbnails</label>
+<label><input type="checkbox" data-k="showNsfwThumbnails"> Show adult-content pictures
+  <span class="hint">(also on the header bar)</span></label>
 <label><input type="checkbox" data-k="autoPaginate"> Auto-load more on scroll</label>
 <label><input type="checkbox" data-k="inlineVideo"> Play video on the comments page</label>
 <label><input type="checkbox" data-k="inlineImages"> Show images inline, with an expando on rows</label>
+
+<p class="note">
+  “Show adult-content pictures” covers thumbnails, the [+] expando and full-size images
+  on a comments page. It does not affect video: a post flagged adult still plays inline
+  wherever video is on, so turn video off below if you would rather it did not.
+</p>
 
 <p class="note">
   Playing video is the one feature that makes a request of its own: opening a video post's

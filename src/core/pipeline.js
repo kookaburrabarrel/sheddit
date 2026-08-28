@@ -374,7 +374,16 @@ globalThis.SHD = globalThis.SHD || {};
         // top. Anything else in the change still goes through the full path below.
         if (changed.length === 1 && changed[0] === 'theme') return;
         // Un-stamp so previously-consumed sources are eligible again; a toggle is a
-        // deliberate request to re-render, not an incremental update.
+        // deliberate request to re-render, not an incremental update. Every source Reddit
+        // delivered is still in the page, including everything the paginator pulled, so
+        // they all come back.
+        //
+        // No scroll restoration here, and that is measured rather than assumed: the
+        // browser's own scroll anchoring already holds the reader's place across the
+        // teardown, so an explicit save/restore was code no test could fail. geometry
+        // asserts the PROPERTY (a settings change does not dump you at the top) rather
+        // than any mechanism for it, which is what would catch a future change that
+        // defeats anchoring.
         document.querySelectorAll(`[${C.MARK}]`).forEach(el => el.removeAttribute(C.MARK));
         onRoute(R.classify());
       });
@@ -406,7 +415,32 @@ globalThis.SHD = globalThis.SHD || {};
      parked on a rAF that may not have fired yet. A deadline must not accuse a queue it
      has not tried to drain, so gate.js calls this first: flush() is idempotent and
      synchronous, and if there is queued work this renders it instead of failing. */
-  SHD.pipeline = { kick() { if (queue.size) flush(); } };
+  /**
+   * Write one setting, from our own UI.
+   *
+   * The options page owns the same keys through chrome.storage directly; this is the
+   * in-page equivalent for the header controls, and it deliberately routes through
+   * storage rather than mutating SHD.settings — the storage listener above is what
+   * re-renders, so a direct mutation would change behaviour for elements rendered later
+   * while leaving everything already on screen stale.
+   */
+  async function setSetting(key, value) {
+    try {
+      const { settings } = await chrome.storage.sync.get('settings');
+      await chrome.storage.sync.set({
+        settings: { ...C.settings, ...SHD.settings, ...(settings || {}), [key]: value }
+      });
+    } catch (err) {
+      /* One path only, deliberately: the write is what re-renders, via the listener
+         above. A fallback that applied the change in memory instead would be a second
+         implementation of the same behaviour, reachable only when storage is broken and
+         therefore never exercised. Say so instead — a control that silently does nothing
+         is worse than one that fails loudly (bug 62). */
+      console.warn(`[sheddit] could not save ${key}`, err);
+    }
+  }
+
+  SHD.pipeline = { kick() { if (queue.size) flush(); }, setSetting };
 
   (async function boot() {
     await loadSettings();
