@@ -700,6 +700,31 @@ html.shd-active body {
   font-weight: bold;
 }
 .shd-loadmore:hover { background: var(--shd-hover-bg); }
+/* While the unprompted fill is still reshaping the page (bug 85 — rows land ABOVE the
+   sentinel, so a button here is a target the chain is about to bury), the control is
+   inert: paginator.js refuses the click, this rule stops the cursor promising one, and
+   the plain-text face says the page is still working rather than inviting a press. */
+.shd-sentinel[data-shd-settling="true"] .shd-loadmore {
+  pointer-events: none;
+  background: none;
+  border-color: transparent;
+  color: var(--shd-meta);
+  font-weight: normal;
+}
+
+/* ---------- the between-pages placeholder ----------
+ *
+ * Mounted by gate.resetForRoute() when an SPA navigation tears down a rendered page and
+ * the next one has not arrived (bug 86 — the window used to be an unexplained blank).
+ * Scoped under .shd-active like everything here, which is guaranteed at its only mount
+ * site: it is shown only when the OUTGOING page had revealed, and reveal() removes it. */
+html.shd-active #shd-loading {
+  padding: 90px 0;
+  text-align: center;
+  color: var(--shd-meta);
+  font-size: 13px;
+}
+html.shd-active #shd-loading p { margin: 0; }
 
 /* ---------- responsive-ish fallback ---------- */
 /* Zeroing the gutter variable reclaims the space for #siteTable, .commentarea AND

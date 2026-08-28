@@ -931,10 +931,63 @@ const overlaps = (a, b) =>
     const tooShort = await open(browser, origin, PATHS.pager, '#shd-root .thing.link',
       { width: 1280, height: 2000 });
     const startTall = await rows(tooShort.page);
-    await settle(tooShort.page);
+
+    /* Bug 85, in the only suite with a real cursor. Live report: a tab switch painted
+       three posts with `load more` directly under them, the fill completed the listing a
+       couple of seconds later, and the rows landed ABOVE the button — so a click at the
+       button's painted position opened whichever post slid under the cursor. The control
+       must therefore be INERT while the fill is still working: refused in the handler,
+       pointer-events off so the cursor never promises the click, label saying `loading`.
+       Read immediately after first paint — the fill needs its attempt budget (~4 cooldown
+       cycles) to park, so this window is comfortably open. */
+    const held = await tooShort.page.evaluate(() => {
+      const s = document.querySelector('.shd-sentinel');
+      const a = document.querySelector('.shd-loadmore');
+      return s && a ? {
+        settling: s.dataset.shdSettling, label: a.textContent,
+        pointer: getComputedStyle(a).pointerEvents, aria: a.getAttribute('aria-disabled')
+      } : null;
+    });
+    check('while the fill is working, the control is inert under a real cursor',
+      !!held && held.settling === 'true' && /loading/.test(held.label) &&
+      held.pointer === 'none' && held.aria === 'true', JSON.stringify(held));
+    // A REAL click on the held control: pointer-events drops the anchor out of hit
+    // testing, so the click passes through and nothing records it as reader intent.
+    await tooShort.page.click('.shd-loadmore').catch(() => { /* not hittable is the point */ });
+    check('a real click on the held control fires nothing and is not read as intent',
+      await tooShort.page.$eval('.shd-sentinel', n => n.dataset.shdInteracted) === 'false');
+
+    const parked = await tooShort.page.waitForFunction(
+      () => document.querySelector('.shd-sentinel')?.dataset.shdSettling === 'false',
+      { timeout: 15000 }).then(() => true, () => false);
+    check('the hold ends at the park', parked,
+      'shdSettling never went false — the control would read `loading…` for ever');
     check('a page that does not fill the window loads without being asked',
       await rows(tooShort.page) > startTall,
       `${startTall} -> ${await rows(tooShort.page)} rows, untouched`);
+    /* ...and the parked control is the live button, for real: visible label, hit-testable,
+       and a genuine click loads a page. This is the moment the reader may aim at it, so it
+       is the moment it has to stay put and answer. The park can flip settling while the
+       final attempt's load is still in flight — its `loading more…` status is honest and
+       outranks the idle label — so wait for that load to finish before reading the face. */
+    await tooShort.page.waitForFunction(
+      () => /load more/.test(document.querySelector('.shd-loadmore')?.textContent || ''),
+      { timeout: 10000 }).catch(() => { /* the check below reports the stuck label */ });
+    const live = await tooShort.page.evaluate(() => {
+      const a = document.querySelector('.shd-loadmore');
+      return { label: a.textContent, pointer: getComputedStyle(a).pointerEvents };
+    });
+    check('the parked control is the honest clickable one',
+      /load more/.test(live.label) && live.pointer !== 'none', JSON.stringify(live));
+    const beforeClick = await rows(tooShort.page);
+    await tooShort.page.click('.shd-loadmore');
+    const clicked = await tooShort.page.waitForFunction(
+      (n) => document.querySelectorAll('#shd-root .thing.link').length > n,
+      { timeout: 5000 }, beforeClick).then(() => true, () => false);
+    check('a real click on the live control loads a page', clicked,
+      `${beforeClick} -> ${await rows(tooShort.page)} rows after the click`);
+    check('no page errors during the hold-and-release round',
+      tooShort.pageErrors.length === 0, tooShort.pageErrors.join(' | '));
     await tooShort.page.close();
   }
 

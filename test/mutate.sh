@@ -1217,9 +1217,31 @@ mutate "the rendered community link stops being preferred over the rewritten pat
   src/core/model.js "    const linkedSub = subredditLinkIn(el);" "    const linkedSub = null;"
 
 # Live testing: the sentinel flapped loading more… -> load more -> loading more… on /r/aww.
-# attach() runs after every flush and built a node whose label starts idle.
+# attach() runs after every flush and built a node whose label starts idle. The label now
+# has ONE writer (syncControl — bug 85 gave the idle face two states), so that is where
+# the status has to be dropped to reintroduce the flap; mutating only the build-time text
+# is repaired by the very next sync and proves nothing.
 mutate "the sentinel forgets an in-flight load on every re-attach" run \
-  src/core/paginator.js "        href: '#', text: status || 'load more'," "        href: '#', text: 'load more',"
+  src/core/paginator.js "    const label = status || idleLabel();" "    const label = idleLabel();"
+
+# Bug 85: a tab switch paints three posts with `load more` under them, the fill lands the
+# rest ABOVE the button seconds later, and a click at the painted position opens whichever
+# post slid under the cursor. The control is held inert while the fill still owes the page
+# content. Two rows, because the hold has two independent halves: the predicate that
+# decides it, and the handler guard that enforces it when styling cannot.
+mutate "the fill-settling hold never engages and the control is bait again" run \
+  src/core/paginator.js "  function settling() {
+    return !!SHD.settings.autoPaginate &&" "  function settling() {
+    return false &&"
+
+mutate "a click on the held control fires anyway" run \
+  src/core/paginator.js "          if (settling()) return;" "          if (false) return;"
+
+# Bug 86: an SPA navigation tears the render down pre-commit and the incoming feed can be
+# seconds away — without the placeholder that window is a blank viewport that swallows
+# clicks, which is exactly what was reported.
+mutate "the between-pages window goes back to being an unexplained blank" run \
+  src/core/gate.js "      showLoading();" "      ;"
 
 # Live testing: the README claimed 72px rows and the geometry suite had never measured one.
 mutate "long titles are clipped instead of growing the row" geometry \

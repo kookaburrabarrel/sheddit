@@ -261,12 +261,21 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
   const beforeNav = await page.evaluate(() => ({
     selected: [...document.querySelectorAll('#shd-header .tabmenu li.selected a')].map(a => a.textContent)
   }));
-  await page.evaluate(() => {
+  const midNav = await page.evaluate(() => {
     // Reddit swaps feed content client-side; the fixture DOM is static, so un-stamp the
     // posts to stand in for a fresh batch of markup arriving.
     document.querySelectorAll('[data-shd]').forEach(el => el.removeAttribute('data-shd'));
     history.pushState({}, '', '/r/programming/');
+    // Read SYNCHRONOUSLY, before any flush: the emit tore #shd-root down a microsecond
+    // ago and the incoming feed is nominally seconds away — live, that window was a blank
+    // viewport that swallowed clicks (bug 86). The placeholder must already be standing.
+    return {
+      placeholder: !!document.querySelector('#shd-loading'),
+      rootGone: !document.querySelector('#shd-root')
+    };
   });
+  check('the between-pages window holds the loading placeholder, not a blank viewport',
+    midNav.placeholder && midNav.rootGone, JSON.stringify(midNav));
   await until(page, () => [...document.querySelectorAll('#shd-header .tabmenu li.selected a')]
     .some(a => a.textContent === 'r/programming'));
   const afterNav = await page.evaluate(() => ({
@@ -274,6 +283,7 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     roots: document.querySelectorAll('#shd-root').length,
     headers: document.querySelectorAll('#shd-header').length,
     sidebar: !!document.querySelector('#shd-sidebar'),
+    placeholder: !!document.querySelector('#shd-loading'),
     selected: [...document.querySelectorAll('#shd-header .tabmenu li.selected a')].map(a => a.textContent),
     fail: document.documentElement.getAttribute('data-shd-fail')
   }));
@@ -287,6 +297,8 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
   check('the header follows the new subreddit',
     afterNav.selected.includes('r/programming'),
     `was ${JSON.stringify(beforeNav.selected)}, now ${JSON.stringify(afterNav.selected)}`);
+  check('the placeholder leaves with the reveal', !afterNav.placeholder,
+    'stale #shd-loading under the rendered page');
   check('still has not failed', !afterNav.fail, afterNav.fail);
 
   /* ================================================================== *
@@ -377,18 +389,26 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
   check('the cooldown between loads is respected',
     gaps.every(g => g >= 750), `gaps: [${gaps.join(', ')}]ms`);
 
-  // autoPaginate: false must fetch nothing until clicked — the "strictly zero network" mode.
+  // A deliberate click fires the moment the control is OFFERED. The unprompted fill now
+  // holds the control inert while its own rows are still landing (bug 85 — the clickable
+  // label was a target the fill was about to bury), so the click waits for the park; the
+  // manual path's cooldown exemption itself is pinned in run.js, where the timing is
+  // controllable.
   await page.goto(origin + PATHS.pager, { waitUntil: 'domcontentloaded' });
-  await until(page, () => !!document.querySelector('.shd-loadmore'));
+  await until(page, () => {
+    const s = document.querySelector('.shd-sentinel');
+    return !!s && s.dataset.shdSettling === 'false' &&
+      /load more/.test(document.querySelector('.shd-loadmore')?.textContent || '');
+  });
   const manual = await page.evaluate(async () => {
     const before = window.__shdPager.loads;
-    // Deliberately clicked immediately, inside the cooldown window: a button that silently
-    // does nothing is worse than one that fetches twice.
     document.querySelector('.shd-loadmore').click();
-    await new Promise(r => setTimeout(r, 900));
+    // Read INSIDE the 800ms cooldown that started with the click: no auto load can land
+    // in this window, so exactly one new load is the manual one, deterministically.
+    await new Promise(r => setTimeout(r, 400));
     return { before, after: window.__shdPager.loads };
   });
-  check('clicking "load more" fetches a page even inside the cooldown',
+  check('clicking "load more" fetches a page as soon as the control is offered',
     manual.after === manual.before + 1, JSON.stringify(manual));
 
   /* ================================================================== *

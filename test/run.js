@@ -799,11 +799,23 @@ async function boot(html, url, setup) {
     doc.querySelectorAll('[data-shd]').forEach(el => el.removeAttribute('data-shd'));
     window.history.pushState({}, '', '/r/programming/');
     check('the page-realm pushState was relayed as the bridge event', relayed === 1, String(relayed));
+    /* Bug 86: the emit tears #shd-root down pre-commit and the incoming feed can be
+       seconds away — live, that window was an unexplained blank viewport that swallowed
+       clicks. The placeholder is mounted SYNCHRONOUSLY inside the emit (asserted here,
+       before any flush has run), so there is no frame in which the reader faces a void. */
+    check('the between-pages window holds the loading placeholder, not a void',
+      !!doc.querySelector('#shd-loading'),
+      'no #shd-loading in the teardown window — the viewport is an unexplained blank');
     window.history.replaceState({}, '', '/r/programming/');
     check('...and replaceState relays too (same-path emits dedupe downstream)',
       relayed === 2, String(relayed));
     await waitFor(() => [...doc.querySelectorAll('#shd-header .tabmenu li.selected a')]
       .some(a => a.textContent === 'r/programming'));
+
+    /* ...and the render is what takes the placeholder down. Left behind, it would sit
+       under every rendered page for the rest of the session. */
+    check('the placeholder leaves with the reveal',
+      !doc.querySelector('#shd-loading'), 'stale #shd-loading under the new render');
 
     // Both of these regressed on the first SPA navigation: gate.reveal() latches true for
     // the life of the page, and the flush that built the chrome was gated on !revealed —
@@ -832,6 +844,11 @@ async function boot(html, url, setup) {
       !doc.querySelector('#shd-root') && !doc.querySelector('#shd-header'));
     check('unhandled route is not suppressed',
       !doc.documentElement.classList.contains('shd-gate'));
+    // The placeholder is mounted before the route is classified (resetForRoute runs
+    // first), so standDown() must sweep it out with the rest — a `loading…` line over a
+    // page we just promised to leave alone is a broken promise in eleven characters.
+    check('the placeholder does not survive onto a handed-back page',
+      !doc.querySelector('#shd-loading'));
   }
 
   /* Live testing, on a verified build: every browser back/forward landed on the error
@@ -2761,6 +2778,27 @@ async function boot(html, url, setup) {
     const loads = () => window.__fill;
     const sentinel = () => doc.querySelector('.shd-sentinel');
     const label = () => sentinel()?.querySelector('.shd-loadmore')?.textContent || '';
+    const control = () => sentinel()?.querySelector('.shd-loadmore');
+
+    /* Bug 85, the state half (geometry.js has the real-layout half): while the fill is
+       still working the page, the control must be INERT — the fill's rows land ABOVE the
+       sentinel, so a clickable `load more` here is a target the chain is about to bury,
+       and the reported click landed on whichever post slid under the cursor. jsdom reports
+       scrollHeight 0, so `filled` can never satisfy here and this window reliably spans
+       the whole unprompted run. */
+    check('while the fill is working, the control is held inert and says so',
+      sentinel()?.dataset.shdSettling === 'true' && /loading…|loading more/.test(label()),
+      `settling=${sentinel()?.dataset.shdSettling} label="${label()}"`);
+    check('...and is out of the tab order while it answers nothing',
+      control()?.getAttribute('aria-disabled') === 'true' &&
+      control()?.getAttribute('tabindex') === '-1',
+      `aria-disabled=${control()?.getAttribute('aria-disabled')}`);
+    // A click on the inert face fires nothing and is NOT recorded as reader intent —
+    // otherwise one stray click at the trap position would flip the control live with
+    // rows still incoming, which is the trap re-armed by the reader's own miss.
+    control()?.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    check('a click during the hold is swallowed, not counted as intent',
+      sentinel()?.dataset.shdInteracted === 'false', sentinel()?.dataset.shdInteracted);
 
     // It must still fill SOMETHING. A gate that stopped at zero would leave a listing on
     // the three posts Reddit ships, which is the dead end the paginator exists to fix, and
@@ -2780,6 +2818,14 @@ async function boot(html, url, setup) {
        string that flashed between real pages and had to be made sticky. */
     check('...and the label stays the honest clickable one',
       /load more/.test(label()) && !/no more pages/.test(label()), label());
+    /* Bug 85's other edge: the hold must END where the fill ends. A control that stayed
+       `loading…` past the park would be bug 62's sin with a new face — a page that looks
+       busy for ever with nothing running. The park is where the button stops being bait
+       (nothing unprompted will move it again), so this is where it comes live. */
+    const cameLive = await waitFor(() => sentinel()?.dataset.shdSettling === 'false');
+    check('the hold is released at the park — the control comes live where it will stay put',
+      cameLive && !control()?.hasAttribute('aria-disabled'),
+      `settling=${sentinel()?.dataset.shdSettling} aria-disabled=${control()?.getAttribute('aria-disabled')}`);
     // Control: it parked with work still in front of it. Without this the section passes
     // just as well on a feed that had simply run out, and proves nothing about the limit.
     check('control: an undriven partial was available the whole time',

@@ -33,6 +33,7 @@ SHD.gate = (() => {
   const ERROR_BUDGET = 8;
 
   const ERROR_ID = 'shd-error';
+  const LOADING_ID = 'shd-loading';
 
   let revealed = false;
   let failed = false;
@@ -288,6 +289,34 @@ SHD.gate = (() => {
     if (revealed || stopped()) return;
     document.documentElement.classList.remove('shd-gate');
     document.documentElement.setAttribute('data-shd-waiting', why);
+    hideLoading();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * the between-pages placeholder
+   *
+   * An SPA navigation from a page we rendered tears #shd-root down at the pre-commit
+   * emit, and the incoming feed can take seconds to arrive — during which the viewport
+   * held NOTHING: .shd-active stays on (suppress.css keeps every native body child
+   * hidden), our root is gone, and no indicator of any kind was up. Reported from live
+   * use (docs/engineering-log.md bug 86): every sort-tab click blanked the page for
+   * 2-3 seconds with no loading state, and clicks made into the void were silently
+   * swallowed. A themed `loading…` line is the honest occupant of that window — it says
+   * the click landed and the page is coming, and reveal() replaces it with the render.
+   *
+   * Only ever mounted mid-session (wasRevealed), so .shd-active is on and the styles in
+   * old-reddit.css resolve; a first load keeps the --shd-blank blackout instead.
+   * ------------------------------------------------------------------ */
+  function showLoading() {
+    if (!document.body || stopped()) return;
+    document.getElementById(LOADING_ID)?.remove();
+    document.body.appendChild(
+      el('div', { id: LOADING_ID, role: 'status' },
+        el('p', { textContent: 'loading…' })));
+  }
+
+  function hideLoading() {
+    document.getElementById(LOADING_ID)?.remove();
   }
 
   /**
@@ -329,6 +358,11 @@ SHD.gate = (() => {
       // next 1500ms tick.
       const why = document.readyState === 'complete' ? nothingToRender() : null;
       if (why) unblank(why);
+    } else {
+      // Mid-session, our root is about to go and the incoming feed may be seconds away:
+      // hold the window with the loading line instead of an empty themed void (bug 86).
+      // On a route we then hand back, standDown() removes it a moment later, same tick.
+      showLoading();
     }
     scheduleCheck();
   }
@@ -338,6 +372,7 @@ SHD.gate = (() => {
     if (revealed || stopped()) return;
     revealed = true;
     clearTimeout(timer);
+    hideLoading();
     document.documentElement.classList.remove('shd-gate');
     document.documentElement.removeAttribute('data-shd-waiting');
     document.documentElement.classList.add(SHD.C.BODY_CLASS);
@@ -525,6 +560,7 @@ SHD.gate = (() => {
     document.documentElement.classList.remove('shd-gate', SHD.C.BODY_CLASS);
     document.getElementById(SHD.C.ROOT_ID)?.remove();
     document.getElementById('shd-header')?.remove();
+    hideLoading();
 
     /* Soft engagement (see its declaration): the pipeline is stopped and our DOM is gone —
        everything above — but the page goes back to native Reddit with no card over it.
@@ -558,6 +594,7 @@ SHD.gate = (() => {
     document.getElementById(ERROR_ID)?.remove();
     document.getElementById(SHD.C.ROOT_ID)?.remove();
     document.getElementById('shd-header')?.remove();
+    hideLoading();
   }
 
   /** Called by render sites on caught exceptions. Fails the page past a budget. */
@@ -591,6 +628,7 @@ SHD.gate = (() => {
     document.documentElement.removeAttribute('data-shd-soft-fail');
     document.documentElement.removeAttribute('data-shd-waiting');
     document.getElementById(ERROR_ID)?.remove();
+    hideLoading();
   }
 
   /* ------------------------------------------------------------------ *

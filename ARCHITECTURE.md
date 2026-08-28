@@ -209,6 +209,12 @@ same element can be visited many times and will only ever be rendered once.
 reddit.com), with a `history.pushState`/`replaceState` monkey-patch + `popstate` fallback.
 On route change: reset per-page state, re-classify, re-run a full sweep.
 
+The window between the pre-commit teardown and the incoming page's first render is owned
+by a themed `#shd-loading` line (gate.resetForRoute) — before it existed that window was
+several seconds of suppressed-everything blank on every sort-tab click (engineering log
+bug 86). It is mounted only mid-session, where `.shd-active` is guaranteed on; every gate
+exit (reveal, unblank, fail, release, standDown) removes it.
+
 The header and sidebar are torn down and rebuilt on every route change, because the header
 carries the current subreddit. Rebuilding them must **not** be gated on
 `!SHD.gate.revealed` — `reveal()` latches true for the lifetime of the page, so gating
@@ -368,6 +374,12 @@ are load-bearing and were each wrong at some point:
   until the sentinel happened to leave and re-enter the viewport.
 - **The cooldown applies to automatic triggers only.** A click is a deliberate act, and a
   button that silently does nothing is worse than one that fetches twice.
+- **The manual button is withheld while the unprompted fill is still working.** The fill
+  lands rows *above* the sentinel, so a clickable "load more" during that window is a
+  target the chain is about to bury — measured live as a click that opened whichever post
+  slid under the cursor (engineering log bug 85). `settling()` holds the control as an
+  inert `loading…` until one of the fill's real stopping points; with `autoPaginate`
+  off nothing unprompted moves the page and the button is live from first paint.
 
 The extension has **zero network surface of its own**. `host_permissions` is scoped to
 `*://*.reddit.com/*` purely so content scripts can run.
