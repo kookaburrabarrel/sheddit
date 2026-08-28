@@ -2558,6 +2558,82 @@ async function boot(html, url, setup) {
       !!nsfwRow.querySelector('.nsfw-stamp'));
   }
 
+  console.log('\n\x1b[1mTHE HEADER\'S NSFW TOGGLE\x1b[0m');
+  {
+    /**
+     * The same setting the options page writes, reachable from the header — because the
+     * options page is where a setting goes to be forgotten, and this is the one people
+     * want to flip mid-feed.
+     *
+     * The storage stub is LIVE: set() records the write and fires onChanged, exactly as
+     * Chrome does, so this exercises the real path — write, listener, un-stamp, re-render
+     * — rather than poking SHD.settings and re-rendering by hand. A stub that swallowed
+     * the change would leave the whole mechanism untested while every assertion passed.
+     */
+    let stored = { listing: true, comments: true, chrome: true, showNsfwThumbnails: false };
+    const writes = [];
+    const listeners = [];
+    const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/', (win) => {
+      win.chrome = {
+        storage: {
+          sync: {
+            get: async () => ({ settings: stored }),
+            set: async (v) => {
+              const old = stored;
+              stored = v.settings;
+              writes.push(v.settings);
+              listeners.forEach(fn => fn({ settings: { newValue: stored, oldValue: old } }, 'sync'));
+            }
+          },
+          onChanged: { addListener: (fn) => listeners.push(fn) }
+        }
+      };
+    });
+
+    const btn = () => doc.querySelector('#shd-header .shd-nsfw-btn');
+    const nsfwRow = () => doc.querySelector('#shd-root .thing.link[data-fullname="t3_nsfw1"]');
+    const rows = () => doc.querySelectorAll('#shd-root .thing.link').length;
+
+    check('the header renders the toggle beside the theme buttons',
+      !!btn() && btn().closest('.shd-themebar') !== null);
+    check('it reads the setting rather than assuming a state',
+      btn().getAttribute('aria-pressed') === 'false' && !btn().classList.contains('selected'));
+    check('its label says what it governs', btn().textContent === 'nsfw thumbnails');
+
+    const before = rows();
+    check('setup: the adult row starts as a placeholder',
+      !!nsfwRow().querySelector('a.thumbnail.nsfw'));
+
+    btn().dispatchEvent(new window.Event('click'));
+    await waitFor(() => !!nsfwRow()?.querySelector('.thumbnail img'));
+
+    check('one click writes the setting to storage', writes.length === 1 &&
+      writes[0].showNsfwThumbnails === true, JSON.stringify(writes));
+    check('...and the whole settings object goes with it, not just the change',
+      Object.keys(writes[0]).length === Object.keys(stored).length &&
+      writes[0].listing === true, Object.keys(writes[0]).join(','));
+    check('the adult thumbnail is now the real picture',
+      !!nsfwRow().querySelector('.thumbnail img') &&
+      !nsfwRow().querySelector('a.thumbnail.nsfw'));
+    check('the stamp still labels the post', !!nsfwRow().querySelector('.nsfw-stamp'));
+    // The re-render is a full teardown, so this is the assertion that nothing was lost in
+    // it: every source Reddit delivered is still in the page and must come back.
+    check('no rows are lost to the re-render', rows() === before, `${before} -> ${rows()}`);
+    check('and none are duplicated',
+      new Set([...doc.querySelectorAll('#shd-root .thing.link')]
+        .map(r => r.dataset.fullname)).size === rows());
+    check('the rebuilt header shows the toggle as on',
+      btn().getAttribute('aria-pressed') === 'true' && btn().classList.contains('selected'));
+
+    btn().dispatchEvent(new window.Event('click'));
+    await waitFor(() => !!nsfwRow()?.querySelector('a.thumbnail.nsfw'));
+    check('clicking again puts the placeholder back', writes.length === 2 &&
+      writes[1].showNsfwThumbnails === false &&
+      !nsfwRow().querySelector('.thumbnail img'));
+    check('the toggle survives the round trip in both directions',
+      btn().getAttribute('aria-pressed') === 'false' && rows() === before);
+  }
+
   console.log('\n\x1b[1mA SILENT OBSERVER MUST NOT STALL THE FEED\x1b[0m');
   {
     /**

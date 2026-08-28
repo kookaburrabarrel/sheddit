@@ -78,9 +78,30 @@ const bundle = `${banner}
   document.head.appendChild(style);
 
   // --- chrome.storage shim (DevTools has no extension APIs) ---------------------
+  // A REAL in-memory implementation, not a stub that swallows writes. The first version
+  // resolved set() and stored nothing, with no onChanged at all — so every in-page
+  // control that persists a setting (the header's nsfw toggle) appeared to do nothing
+  // here while working perfectly when installed, and the harness reported no error
+  // because the write "succeeded". Settings do not survive a reload in the harness,
+  // which is honest: there is nowhere to put them. Within one session they behave.
   if (typeof chrome === 'undefined' || !chrome.storage) {
+    const store = {};
+    const listeners = [];
     globalThis.chrome = Object.assign(globalThis.chrome || {}, {
-      storage: { sync: { get: async () => ({}), set: async () => {} } }
+      storage: {
+        sync: {
+          get: async (key) => (key ? { [key]: store[key] } : { ...store }),
+          set: async (obj) => {
+            const changes = {};
+            for (const [k, newValue] of Object.entries(obj)) {
+              changes[k] = { oldValue: store[k], newValue };
+              store[k] = newValue;
+            }
+            listeners.forEach(fn => { try { fn(changes, 'sync'); } catch (e) { console.warn(e); } });
+          }
+        },
+        onChanged: { addListener: (fn) => listeners.push(fn) }
+      }
     });
   }
 

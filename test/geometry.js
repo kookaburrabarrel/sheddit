@@ -991,6 +991,74 @@ const overlaps = (a, b) =>
     await tooShort.page.close();
   }
 
+  /* ================================================================== *
+   * THE NSFW TOGGLE KEEPS YOUR PLACE
+   * ================================================================== */
+  console.log('\n\x1b[1mA SETTINGS CHANGE KEEPS YOUR PLACE\x1b[0m');
+  // Changing a setting tears the render down — a placeholder tile and a picture are
+  // different markup, not different paint — and without care that lands the reader back
+  // at the top of a feed they may have paginated for a while. The options page is the
+  // path that makes this matter: it changes settings while the content tab sits wherever
+  // the reader left it, and every setting takes this route, not just the adult toggle.
+  // Only real layout can see it — jsdom has no scroll position to lose. Images are served
+  // so a placeholder and a thumbnail are both 70px and the document height is comparable.
+  {
+    const { page, pageErrors } = await open(browser, origin, PATHS.listing,
+      '#shd-root .thing.link', { width: 1280, height: 400 }, { images: true });
+    await page.evaluate(() => new Promise(r => {
+      const imgs = [...document.images].filter(i => !i.complete);
+      if (!imgs.length) return r();
+      let left = imgs.length;
+      imgs.forEach(i => i.addEventListener('load', () => --left || r()));
+      setTimeout(r, 2000);
+    }));
+
+    const scrollable = await page.evaluate(() =>
+      document.documentElement.scrollHeight - window.innerHeight);
+    check('control: the feed is long enough to have a scroll position to lose',
+      scrollable > 400, `${scrollable}px of scroll available`);
+
+    await page.evaluate(() => window.scrollTo(0, 300));
+    const before = await page.evaluate(() => ({
+      y: window.scrollY,
+      placeholder: !!document.querySelector('.thing[data-fullname="t3_nsfw1"] a.thumbnail.nsfw')
+    }));
+    check('setup: scrolled down, adult row showing its placeholder',
+      before.y === 300 && before.placeholder, JSON.stringify(before));
+
+    // Driven the way the options page drives it, NOT by clicking the header button:
+    // Puppeteer scrolls an element into view before clicking, so clicking the header
+    // would move the page to the top first and this section would measure nothing.
+    await page.evaluate(() => window.SHD.pipeline.setSetting('showNsfwThumbnails', true));
+    // Polled rather than waitForSelector, which THROWS on timeout — and a thrown suite
+    // prints no FAIL line, so the mutation sweep reads the crash as a surviving mutant.
+    // Measured: reverting the storage shim to one that swallows writes did exactly that.
+    const swapped = await (async () => {
+      for (let i = 0; i < 50; i++) {
+        if (await page.evaluate(() =>
+          !!document.querySelector('.thing[data-fullname="t3_nsfw1"] .thumbnail img'))) return true;
+        await page.evaluate(() => new Promise(r => setTimeout(r, 100)));
+      }
+      return false;
+    })();
+    check('the setting actually took effect — the write reached a listener', swapped,
+      'the picture never appeared: the write was accepted and dropped, or nothing re-rendered');
+    // Let the re-render settle before measuring where the page ended up.
+    await page.evaluate(() => new Promise(r => setTimeout(r, 400)));
+
+    const after = await page.evaluate(() => ({
+      y: window.scrollY,
+      picture: !!document.querySelector('.thing[data-fullname="t3_nsfw1"] .thumbnail img'),
+      rows: document.querySelectorAll('#shd-root .thing.link').length
+    }));
+    check('the toggle swapped the placeholder for the picture', after.picture);
+    check('...and the reader is still where they were, not back at the top',
+      Math.abs(after.y - before.y) <= 24,
+      `scrolled to ${before.y}, ended at ${after.y} — a jump to 0 is the bug this catches`);
+    check('no page errors from the toggle', pageErrors.length === 0, pageErrors.join(' | '));
+    await page.close();
+  }
+
   await browser.close();
   await server.close();
   report();

@@ -85,6 +85,8 @@ WHAT YOU GET
   stops when the feed is spent instead of spinning to keep the session open.
 • Five themes — classic, slate, sepia, night and carbon — switchable from the header.
   Classic is old.reddit.com as it was: Verdana, blue links, square corners.
+• Adult thumbnails behind old reddit's placeholder tile, with a one-click reveal in the
+  header when you want them.
 • An options page for turning any of it off: listings, comments, profiles, thumbnails,
   compact rows, auto-paging, inline video and images.
 
