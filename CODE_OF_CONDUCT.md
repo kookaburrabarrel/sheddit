@@ -101,6 +101,15 @@ disparagement of classes of individuals.
 
 **Consequence**: A permanent ban from any sort of public interaction within the community.
 
+## Where this applies to Sheddit
+
+The community spaces this covers are the issue tracker, pull requests, and any discussion
+attached to either — that is the whole of the project's public surface, and there is no
+chat or forum elsewhere. Two neighbouring documents answer the questions that usually
+arrive with this one: `CONTRIBUTING.md` for how a change is proposed and what will get it
+sent back, and `SECURITY.md` for a vulnerability, which goes through a private advisory
+rather than a public issue.
+
 ## Attribution
 
 This Code of Conduct is adapted from the [Contributor Covenant][homepage], version 2.1,
