@@ -325,6 +325,17 @@ Voting is the only behaviour that needs a logged-in session; everything else is 
 logged out. Run `npm run verify:live` first — it tells you whether the vote control is
 even reachable before you go looking for it by hand.
 
+**Scripted QA needs trusted input for the pagination hold.** The unprompted fill parks
+once the page is worth scrolling (`shdRefusal: filled`), and the release is the reader's
+own gesture. A page-world `window.scrollTo()` may never produce that gesture — measured
+by a live QA round: three programmatic scrolls over 12 s left `shdInteracted: false` and
+the rows pinned, while one trusted wheel scroll released everything instantly. That is
+correct behaviour for readers (a layout shift must not release the hold — bug 78), but it
+means an automation harness that only sends untrusted input will read `filled` forever
+and report a stall that is not one. Drive real input (CDP `Input.dispatchMouseEvent`,
+a real wheel) or read `shdRefusal` before concluding anything; the same trap manufactured
+the "dead wake-ups" artefacts of earlier rounds (bugs 53/56).
+
 ---
 
 ## Continuous integration

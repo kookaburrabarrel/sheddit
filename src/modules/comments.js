@@ -32,7 +32,66 @@ SHD.comments = (() => {
   function reset() {
     root = null;
     stack.length = 0;
+    expanderWatch?.disconnect();
+    expanderWatch = null;
     SHD.dom.passthroughClear();   // a route change ends any native handoff in progress
+  }
+
+  /**
+   * Offer a "N more replies" control for an expander that arrives AFTER its comment —
+   * bug 90, and the reason deep branches were unreachable.
+   *
+   * QA round 2026-08-27, measured with a MutationObserver on the native branch: one
+   * click on "20 more replies" delivered a slice whose comments arrived ALREADY CARRYING
+   * the affordances for the remainder — four of them, nested inside the just-delivered
+   * subtree — while the driven partial removed itself. Our side rendered zero controls
+   * for those four, because moreRepliesControl() is consulted once, at render time, and
+   * these expanders land in a comment's light DOM after that comment was consumed (the
+   * profile timestamp's late-arrival family, log 68). Net effect: every branch was one
+   * click deep, and the page-wide control count could only ever go down.
+   *
+   * ONE observer for the whole tree, not one per comment: "no expander at render time"
+   * is the COMMON case, and a thousand 15-second per-comment observers on a megathread
+   * is a cost with no ceiling. Insertions are the only way an expander can appear, so
+   * childList on the tree sees every candidate; each added node is checked for
+   * more-replies controls, resolved to its owning comment, and the rendered row —
+   * when it exists and lacks one — gets the same delegated control render() would have
+   * built. A comment not yet consumed is skipped here because render() will see the
+   * expander itself; a comment consumed long ago is exactly the case this exists for.
+   */
+  let expanderWatch = null;
+
+  function patchLateExpanders(node) {
+    const sel = `${C.LAZY_LOADER} button, ${C.LAZY_LOADER} a`;
+    const cands = node.matches?.(sel) ? [node] : [];
+    node.querySelectorAll?.(sel).forEach(b => cands.push(b));
+    for (const b of cands) {
+      if (!C.MORE_REPLIES_TEXT.test(b.textContent || '')) continue;
+      const src = b.closest(C.COMMENT);
+      if (!src) continue;
+      const id = src.getAttribute(C.COMMENT_ATTR.id);
+      const row = id && document.querySelector(`#${C.ROOT_ID} .thing[data-fullname="${id}"]`);
+      if (!row) continue;                       // not consumed yet — render() will offer it
+      const listing = row.querySelector(':scope > .child > .sitetable');
+      if (!listing || listing.querySelector(':scope > .shd-more-replies')) continue;
+      const line = moreRepliesControl({ id, source: src });
+      if (line) listing.appendChild(line);
+    }
+  }
+
+  function watchLateExpanders() {
+    if (expanderWatch) return;
+    const tree = document.querySelector(C.COMMENT_TREE);
+    if (!tree) return;
+    expanderWatch = new MutationObserver(records => {
+      for (const r of records) {
+        for (const n of r.addedNodes) {
+          if (n.nodeType !== Node.ELEMENT_NODE) continue;
+          try { patchLateExpanders(n); } catch { /* a patch must never cost the render */ }
+        }
+      }
+    });
+    expanderWatch.observe(tree, { childList: true, subtree: true });
   }
 
   /**
@@ -224,6 +283,8 @@ SHD.comments = (() => {
   function consume(el) {
     const m = SHD.model.comment(el);
     if (!m) return false;
+    // Idempotent; armed from here because the tree provably exists once a comment does.
+    watchLateExpanders();
 
     const built = render(m);
     /* Prefer the PHYSICAL parent over the depth-stack. Live comments are DOM-nested
@@ -396,6 +457,52 @@ SHD.comments = (() => {
     return box;
   }
 
+  /* How long the two late-hydration watchers below keep looking, and why 15s: long
+     enough for any real hydration, short enough that a page which genuinely has no more
+     to give does not hold observers for its lifetime. Same reasoning as listing.js's
+     LATE_TIME_MS for the profile timestamp — these are the same late-arrival family. */
+  const LATE_HYDRATE_MS = 15000;
+
+  /**
+   * Append gallery frames that hydrate AFTER the post was consumed — bug 91.
+   *
+   * QA round 2026-08-27, F3, two live galleries: the native carousel carried 2 loaded
+   * frames, the lazy remainder srcless, and exactly ONE frame was rendered both times.
+   * Nothing was wrong with imagesOf — it faithfully read every frame that HAD a src at
+   * consume time; the carousel simply had not hydrated the rest yet, and nothing ever
+   * looked again. The profile timestamp shipped this identical bug (log 68), and this is
+   * its fix transplanted: watch the source post for src/srcset arrivals, re-read the
+   * frames, append the ones the box does not have. The box is found (or created) at
+   * PATCH time, so a gallery with zero resolved frames at consume still gets its
+   * pictures when they turn up. Gated exactly as postImage is — the NSFW question must
+   * have the same answer however late the picture arrives.
+   */
+  function armLateGalleryFrames(row, m) {
+    if (m.type !== 'gallery' || !m.source) return;
+    if (!SHD.settings.inlineImages) return;
+    if (m.nsfw && !SHD.settings.showNsfwThumbnails) return;
+    const obs = new MutationObserver(() => {
+      if (!row.isConnected) { obs.disconnect(); clearTimeout(stop); return; }
+      const urls = SHD.model.imagesOf(m.source);
+      if (!urls.length) return;
+      let box = row.querySelector('.shd-image');
+      if (!box) {
+        box = h('div.shd-image');
+        // Where postImage's box goes: in the entry, before the selftext when there is one.
+        const text = row.querySelector('.shd-selftext');
+        if (text) text.before(box); else row.querySelector('.entry')?.appendChild(box);
+      }
+      const have = new Set([...box.querySelectorAll('img')].map(i => i.getAttribute('src')));
+      for (const u of urls) {
+        if (!have.has(u)) box.appendChild(h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
+      }
+    });
+    obs.observe(m.source, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'srcset']
+    });
+    const stop = setTimeout(() => obs.disconnect(), LATE_HYDRATE_MS);
+  }
+
   /** The submission itself, rendered above the thread. */
   function consumePost(el) {
     const m = SHD.model.post(el);
@@ -421,6 +528,8 @@ SHD.comments = (() => {
     let picture = null;
     try { picture = postImage(m); } catch { picture = null; }
     if (picture) row.querySelector('.entry').appendChild(picture);
+    // Guarded like the enhancements it patches: a watcher must never take the row down.
+    try { armLateGalleryFrames(row, m); } catch { /* the frames already rendered stand */ }
     // The post's own text, expanded — old reddit shows the selftext open on the comments
     // page, and this extension shipped without it: the row builder reads attributes, the
     // text is not an attribute (it is slotted light DOM, C.POST_BODY), and no fixture

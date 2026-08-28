@@ -15,6 +15,23 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ## Unreleased — 0.25.1
 
+### Fixed — deep comment branches are readable to the end again
+
+Found by a QA round, measured three for three on two live threads: clicking "N more
+replies" delivered one slice and then the branch dead-ended — the delivered comments
+carry the expanders for the remainder, but they can land inside a comment *after* it was
+rendered, and nothing ever looked again. A single watcher on the comment tree now offers
+the control on the already-rendered row the moment its expander arrives, so expansion
+keeps going as deep as the thread does.
+
+### Fixed — galleries show every frame, and their titles stop leaning on a redirect
+
+The gallery stack rendered only the frames that had loaded at the moment the post was
+first seen; the lazy remainder hydrated moments later and was dropped. Late frames are
+now appended as they arrive. Gallery titles also route straight to the post's comments
+page (where the frames render) instead of through `reddit.com/gallery/…`, which only
+landed there by Reddit's redirect grace.
+
 ### Fixed — hidden comment scores say "score hidden" instead of "1 point"
 
 On any young thread in a subreddit that hides new comments' scores, every comment —
