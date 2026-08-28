@@ -56,12 +56,24 @@ Sheddit's own `--shd-page-bg`, not something inherited from the host page, and `
 paints `--shd-bg` over the full viewport (`min-height: 100vh`) on top of it. It is also a
 themed token: forcing it white would be right for classic and wrong for every dark palette.
 
-**Missing features — recorded, not built.** Flair pills, the `.nextprev` pager, the footer,
-the comments sort bar, and the sidebar's description / subscriber count / subscribe button /
-`.morelink` / `#sr-header-area` all need post or subreddit data that is not currently read.
-Each one is a new entry in `contracts.js`, and a contract cannot be added honestly from a
-container — `verify:live` needs a real machine. The specs above are complete enough to build
-from the moment someone can confirm the attribute names.
+**Missing features — recorded, not built.** The `.nextprev` pager, the footer, and the
+sidebar's description / subscriber count / subscribe button / `.morelink` / `#sr-header-area`
+all need post or subreddit data that is not currently read. Each one is a new entry in
+`contracts.js`, and a contract cannot be added honestly from a container — `verify:live`
+needs a real machine. The specs above are complete enough to build from the moment someone
+can confirm the attribute names.
+
+Two of the entries that were on that list have moved since it was written, and the list is
+corrected here from the source rather than from memory, which is the only correction this
+file permits:
+
+- **The comments sort bar is built.** `comments.js` renders old reddit's `div.menuarea`
+  strip above the tree — `all N comments`, then `sorted by:` — and takes the current sort
+  from `route.sortQuery` rather than `location.search`, because the sort swap can read
+  during the pre-commit window and bold the sort the reader just left.
+- **Flair is read but not rendered.** The blocker moved: `contracts.js` and `model.js`
+  carry the field, so the pill is now a rendering job in `listing.js`, not a contract that
+  needs a live machine to confirm. The spec for it above still stands.
 
 **The reply textarea, search box and user bar are out of scope** — all auth-gated, and
 `README.md` "Scope" rules them out for the same reason `save` and `report` were removed.
