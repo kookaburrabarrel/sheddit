@@ -178,10 +178,10 @@ Tick **nothing** in the data-collection list. Sheddit collects none of the categ
 not personally identifiable information, health, financial, authentication, personal
 communications, location, browsing history, user activity, or website content.
 
-The video manifest request added in 0.16.0 does **not** change this, and the reasoning is
-worth having to hand if a reviewer asks: the categories are about data *collected from the
-user*, and that request sends none — no cookies (`credentials: 'omit'`), no identifiers, no
-page or account data. It is an outbound GET for a static file that Reddit's own player
+The video manifest request does **not** change this, and the reasoning is worth having
+to hand if a reviewer asks: the categories are about data *collected from the user*, and
+that request sends none — no cookies (`credentials: 'omit'`), no identifiers, no page or
+account data. It is an outbound GET for a static file that Reddit's own player
 reads to play the same video. Nothing is transmitted about the person using it, which is
 the test each category applies.
 
