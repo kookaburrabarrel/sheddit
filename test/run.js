@@ -600,6 +600,69 @@ async function boot(html, url, setup) {
       junk.querySelector('.shd-commentarea-head .menuarea .selected')?.textContent === 'best');
   }
 
+  /* QA round 2026-08-27, measured live on a real thread: clicking `new` in our own sort
+     strip moved the URL to `?sort=new`, the visible thread did not move, the bold stayed
+     on `best` — and Reddit's replacement tree was then consumed UNDER the stale render,
+     154 -> 179 rows, two sorts interleaved with nothing marking the seam. The mechanism:
+     the strip's links are ordinary hrefs, Reddit's router intercepts them, and a
+     comments-page sort is a QUERY-ONLY navigation on an unchanged pathname — the one
+     navigation the path-keyed emit latch (bug 34's fix) cannot see. Bug 87. */
+  console.log('\n\x1b[1mSORTING A COMMENTS PAGE IS A QUERY-ONLY NAVIGATION\x1b[0m');
+  {
+    const { doc, window } = await boot(commentsPage(),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    const rows = () => [...doc.querySelectorAll('#shd-root .thing.comment')];
+    check('setup: the default-sort thread rendered',
+      rows().length === COMMENT_DEPTHS.length, String(rows().length));
+    check('setup: the strip bolds the default sort',
+      doc.querySelector('.menuarea .selected')?.textContent === 'best');
+
+    /* The swap as measured: pathname unchanged, only ?sort= moves, the tree REPLACED
+       with fresh ids. The post element is deliberately LEFT IN PLACE, stamped — the
+       harder half, because a stamp is only cleared on re-insertion and this element is
+       never re-inserted; without the sort-swap unstamp the re-sorted page renders with
+       no post row and no strip. */
+    const section = doc.querySelector('shreddit-comment-tree section');
+    window.history.pushState({}, '', '/r/programming/comments/link1/nasa/?sort=new');
+    check('the query-only navigation emits — the stale sort is torn down synchronously',
+      !doc.querySelector('#shd-root'),
+      'no teardown: the path-keyed latch swallowed the sort change');
+
+    section.querySelectorAll('shreddit-comment').forEach(c => c.remove());
+    const FRESH = 3;
+    for (let i = 0; i < FRESH; i++) {
+      section.insertAdjacentHTML('beforeend',
+        `<shreddit-comment thingid="t1_new${i}" postid="t3_link1" author="fresh${i}"
+           score="${9 - i}" created="2026-08-27T00:00:00.000000+0000" depth="0"
+           comment-position="${i}" content-type="text"
+           permalink="/r/programming/comments/link1/comment/new${i}/">
+           <div slot="comment"><div class="md"><p>new-sort comment ${i}</p></div></div>
+         </shreddit-comment>`);
+    }
+    const swapped = await waitFor(() => rows().length === FRESH &&
+      !!doc.querySelector('#shd-root [data-fullname="t1_new0"]'), { timeout: 3000 });
+    check('the incoming sort renders alone — never interleaved with the outgoing one',
+      swapped && rows().every(r => /^t1_new/.test(r.dataset.fullname || '')),
+      rows().map(r => r.dataset.fullname).join(','));
+    check('the thread post renders again even though Reddit kept its element in place',
+      !!doc.querySelector('#shd-root .shd-selfpost'),
+      'stamped + never re-inserted = a thread with no post and no sort strip');
+    check('the strip bolds the INCOMING sort',
+      doc.querySelector('.menuarea .selected')?.textContent === 'new',
+      doc.querySelector('.menuarea .selected')?.textContent);
+
+    /* The counterweight: ONLY `sort` participates in the key. Reddit rewrites tracking
+       and view parameters in place, and tearing the page down for those throws away the
+       scroll position and every page the paginator has loaded. */
+    const root = doc.querySelector('#shd-root');
+    window.history.pushState({}, '', '/r/programming/comments/link1/nasa/?sort=new&chained=x');
+    check('an unrelated query rewrite does not tear the page down',
+      doc.querySelector('#shd-root') === root);
+    window.history.pushState({}, '', '/r/programming/comments/link1/nasa/?sort=new');
+    check('re-stating the same sort dedupes like any same-path emit',
+      doc.querySelector('#shd-root') === root);
+  }
+
   console.log('\n\x1b[1mCOMMENTS PAGE — AN IMAGE SUBMISSION\x1b[0m');
   {
     const { doc } = await boot(commentsPage({ imagePost: true }),

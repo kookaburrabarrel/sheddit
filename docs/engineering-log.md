@@ -1168,6 +1168,27 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     "there is no frame in which the reader faces a void", not "a placeholder eventually
     appears".
 
+87. **Sorting a comments page desynced the URL, then interleaved two sorts.** QA round
+    2026-08-27, measured live: clicking `new` in our own sort strip moved the URL to
+    `?sort=new`, the thread did not move, the bold stayed on `best` — and Reddit's
+    replacement tree (it DID navigate, client-side) was consumed under the stale
+    render, 154 -> 179 rows, two sorts on one page with nothing marking the seam. A
+    hard reload of the same URL rendered perfectly. The strip's links were built as
+    "ordinary hrefs, so route.js needs no new machinery" — but Reddit's router
+    intercepts them, and a comments-page sort is a QUERY-ONLY navigation on an
+    unchanged pathname: the one navigation bug 34's path-keyed emit latch cannot see.
+    The latch now keys on pathname + the `sort` parameter — ONLY `sort`, because
+    Reddit rewrites tracking and view parameters in place and keying on the whole
+    query would tear the page down (scroll, loaded pages and all) for junk. Two
+    subtleties cost their own halves of the fix: (1) on a same-thread sort swap Reddit
+    may keep the post element exactly where it is, and a stamp is only cleared on
+    re-insertion — so the swap unstamps POSTS (and only posts: the outgoing COMMENTS
+    at that pre-commit moment are the old sort's tree, and reviving them is bug 34
+    again; safe for the post because the outgoing post IS the incoming post); (2) the
+    strip's bold used to read location.search at consume time, which the swap can
+    reach pre-commit — it now reads route.sortQuery, the query half of the emitPath()
+    rule. Both halves carry mutation rows.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

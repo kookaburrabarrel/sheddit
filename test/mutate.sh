@@ -1243,6 +1243,18 @@ mutate "a click on the held control fires anyway" run \
 mutate "the between-pages window goes back to being an unexplained blank" run \
   src/core/gate.js "      showLoading();" "      ;"
 
+# Bug 87, measured live: a comments-page sort is a QUERY-ONLY navigation, and a latch
+# keyed on pathname alone swallowed it — no teardown, Reddit's replacement tree consumed
+# under the stale render, two sorts interleaved on one page. Two rows for the two halves:
+# the sort key in the emit latch, and the sort-swap unstamp without which the re-sorted
+# thread renders with no post row and no strip (the post element never re-inserts).
+mutate "a query-only sort change is swallowed and the sorts interleave again" run \
+  src/core/route.js "    if (next === current && emit.lastPath === path && emit.lastSort === sort) return;" \
+                    "    if (next === current && emit.lastPath === path) return;"
+
+mutate "the re-sorted thread loses its post row and sort strip" run \
+  src/core/pipeline.js "    if (sortSwap) {" "    if (false) {"
+
 # Live testing: the README claimed 72px rows and the geometry suite had never measured one.
 mutate "long titles are clipped instead of growing the row" geometry \
   src/styles/old-reddit.css ".thing.link {
