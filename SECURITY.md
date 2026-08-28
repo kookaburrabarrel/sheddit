@@ -15,8 +15,10 @@ you will be named in the advisory and the changelog.
 ## Supported versions
 
 Only the latest release is supported. Fixes ship on the current version rather than being
-backported — Sheddit is a browser extension with a single distribution channel, so the
-practical advice is always "update to the latest".
+backported, so the practical advice is always "update to the latest". The Chrome and
+Firefox builds are one source at one version — the Firefox manifest is derived from
+Chrome's at package time, and nothing else differs — so a fix reaches both in the same
+release rather than one browser lagging the other.
 
 ## What this extension does and doesn't do
 
@@ -30,6 +32,11 @@ Useful context for judging whether something is a real issue, and for scoping a 
   built for logged-out reading. It cannot act on your account.
 - **Two permissions only.** `*://*.reddit.com/*` to run on Reddit pages, and `storage` for
   your theme and settings via `chrome.storage.sync`.
+- **On Firefox, the host permission is revocable.** Firefox treats MV3 host permissions as
+  something the user can withdraw after install. Withdrawn, the content scripts never run
+  at all — and an extension whose scripts never run cannot report that from the page, so
+  the options page checks separately and offers a one-click grant. Worth ruling out before
+  concluding Sheddit failed silently on a page.
 - **One privileged crossing, deliberately narrow.** `src/core/bridge.js` is the only code
   that runs in the page's own JavaScript realm (`"world": "MAIN"`). It exists solely to call
   a method Reddit defines and a content script cannot reach. It takes its selector and
