@@ -438,19 +438,22 @@ SHD.comments = (() => {
    * new machinery and a deep link (?context, a single-comment permalink) gets its escape
    * hatch for free: `all N comments` IS the canonical page.
    *
-   * The current sort is read from location.search at consume time, which is safe here in
-   * a way it is not in onRoute(): comments render post-commit (the page that delivered
-   * them is the page on screen), whereas onRoute runs pre-commit when location still
-   * holds the outgoing URL. Do not move this read into a route handler.
+   * The current sort is the EMITTED one (route.sortQuery), not a raw location.search
+   * read. This used to read location at consume time, which was safe while every consume
+   * happened post-commit — but the sort swap (bug 87) can consume the thread's own post
+   * during the pre-commit window, when location still carries the OUTGOING sort, and the
+   * strip then bolds the sort the reader just left. route.sortQuery is the query half of
+   * emitPath(): it agrees with the navigation this render belongs to on both sides of
+   * the commit.
    */
   function ensureCommentHead(r, m) {
     const area = r.querySelector('.commentarea');
     if (!area || area.querySelector('.shd-commentarea-head')) return;
     let current = 'confidence';
-    try {
-      const q = new URLSearchParams(location.search).get('sort');
-      if (q && C.COMMENT_SORTS.some(s => s.id === q)) current = q;
-    } catch { /* an unparseable search string means the default order */ }
+    const q = SHD.route.sortQuery;
+    // An unrecognised value falls back to marking the default order, never a menu in
+    // which nothing is current.
+    if (q && C.COMMENT_SORTS.some(s => s.id === q)) current = q;
     const head = h('div.shd-commentarea-head', null, [
       h('div.panestack-title', null,
         h('a.title-button', {

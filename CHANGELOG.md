@@ -15,6 +15,18 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ## Unreleased — 0.25.1
 
+### Fixed — sorting a comments page no longer interleaves two sorts
+
+Found by a QA round on a live thread: clicking a sort in the comments page's own
+`sorted by:` strip moved the URL but not the page — and then quietly appended the new
+sort's comments under the old sort's render, two orderings on one page with nothing
+marking the seam. The strip's links were built as plain navigations, but Reddit's router
+intercepts them into a query-only client-side navigation, which the route-change
+detection (keyed on the path alone) could not see. It now watches the `?sort=` parameter
+too — and only that parameter, so Reddit rewriting tracking junk in the query can never
+tear the page down. The re-sorted thread keeps its post row and sort strip, and the
+strip bolds the sort that is actually on screen.
+
 ### Fixed — "load more" can no longer hijack a click into an unrelated post
 
 Reported from live use, with the stolen click's destination named: after a sort-tab

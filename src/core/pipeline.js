@@ -267,7 +267,15 @@ globalThis.SHD = globalThis.SHD || {};
   }
 
   /** Route change: tear down our render, reset module state, sweep again. */
-  function onRoute(next) {
+  function onRoute(next, path) {
+    /* A COMMENTS -> COMMENTS emit on an unchanged pathname is a SORT SWAP: the emit came
+       from the sort key (route.js bug 87), Reddit moves only `?sort=` and replaces the
+       tree — but it may keep the thread's own post element exactly where it is. A stamp
+       is only ever cleared on re-INSERTION, so an element that never moves keeps it, and
+       its row just went down with the teardown below: the re-sorted page would render
+       comments with no post and no sort strip. Detected here, acted on below. */
+    const sortSwap = mode === R.COMMENTS && next === R.COMMENTS && onRoute.lastPath === path;
+    onRoute.lastPath = path;
     mode = next;
     // A new page is a fresh attempt: clear the previous one's failure screen and re-arm
     // the deadline. No-ops if the user has released the page to native Reddit.
@@ -313,6 +321,18 @@ globalThis.SHD = globalThis.SHD || {};
     // stayed connected, 0 identities reused — so the incoming posts always arrive
     // stamp-free. watchSettings() is different: no navigation is in flight there, so the
     // stamped elements ARE the current page and re-rendering them is the point.
+    //
+    // The sort swap (see the top of this function) is the ONE exception, POSTS ONLY: on a
+    // same-thread `?sort=` change the outgoing post IS the incoming post — same element,
+    // same attributes — so re-rendering it pre-commit cannot mix pages, and if Reddit
+    // swaps it anyway the fresh copy arrives with its row already standing and is skipped
+    // by revive(). The COMMENTS stay stamped even here: at this pre-commit moment they
+    // are the OUTGOING sort's tree, and un-stamping them re-renders the old sort under
+    // the new URL — bug 34 by another door. The incoming tree arrives by insertion.
+    if (sortSwap) {
+      document.querySelectorAll(`${C.POST}[${C.MARK}]`)
+        .forEach(p => p.removeAttribute(C.MARK));
+    }
     observe();
     collect(document.body);
     // Nothing on the page yet is normal (streamed content); the observer will catch up.

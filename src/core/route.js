@@ -102,6 +102,27 @@ SHD.route = (() => {
   }
 
   /**
+   * The query half of a route's identity — the `sort` parameter, and nothing else.
+   *
+   * Sorting a COMMENTS page is a QUERY-ONLY navigation: the sort strip's links carry
+   * `?sort=new` on the post's own permalink, Reddit's router intercepts them, and the
+   * pathname never moves. A latch keyed on pathname alone concluded nothing had happened —
+   * so nothing tore down, the sort strip kept the old sort bold, and the pipeline consumed
+   * Reddit's replacement tree UNDER the stale render: two sorts interleaved on one page,
+   * with a hard reload of the same URL rendering fine (docs/engineering-log.md bug 87 —
+   * bug 34's mixed-sorts family, through the door a path key cannot see).
+   *
+   * ONLY `sort` takes part, deliberately: keying on the whole query string would tear the
+   * page down — scroll position, loaded pages and all — for any tracking or view parameter
+   * Reddit rewrites in place, which it does. A sort parameter on a LISTING is accepted
+   * too (harmless: listings sort by path segment, so it simply never differs there).
+   */
+  const sortParamOf = (search) => {
+    const m = /[?&]sort=([^&#]*)/.exec(search || '');
+    return m ? m[1] : '';
+  };
+
+  /**
    * Fire listeners when the route changes.
    *
    * `path` is a parameter and not a read of location.pathname because the caller is not
@@ -110,12 +131,17 @@ SHD.route = (() => {
    * changed, so a single pre-commit read recorded the old path as "seen", the real
    * navigation produced no second emit, and every later route change was compared against
    * a path one navigation stale. The change was not delayed; it was lost.
+   *
+   * `search` rides along for the sort key above, under the same pre-commit rule: the
+   * navigate handler passes the DESTINATION's search, never a read of location.
    */
-  function emit(path = location.pathname) {
+  function emit(path = location.pathname, search = location.search) {
     const next = classify(path);
-    if (next === current && emit.lastPath === path) return;
+    const sort = sortParamOf(search);
+    if (next === current && emit.lastPath === path && emit.lastSort === sort) return;
     current = next;
     emit.lastPath = path;
+    emit.lastSort = sort;
     listeners.forEach(fn => { try { fn(current, path); } catch (e) { SHD.gate.reportError(e); } });
   }
 
@@ -151,15 +177,16 @@ SHD.route = (() => {
         // Emitting on a genuine cross-document navigation is harmless: the document is
         // about to be replaced and the fresh boot re-emits from scratch.
         let path = null;
+        let search = '';
         try {
           const u = new URL(e.destination.url);
-          if (u.origin === location.origin) path = u.pathname;
+          if (u.origin === location.origin) { path = u.pathname; search = u.search; }
         } catch { /* unparseable destination — navigatesuccess below still covers us */ }
         // Emit BEFORE the commit, so our teardown runs before Reddit swaps its feed in.
         // Emitting only after the swap lets the incoming posts be consumed and stamped
         // against the outgoing page — and a stamped post is never rendered again, which is
         // where "6 posts, no more pages" came from.
-        if (path) emit(path);
+        if (path) emit(path, search);
       });
       // Post-commit safety net: redirects, destinations we could not parse, and anything
       // that reached the URL without a navigate event we understood. emit() is idempotent
@@ -172,5 +199,11 @@ SHD.route = (() => {
   return { LISTING, COMMENTS, PROFILE, OTHER, SORTS, PROFILE_TABS,
            classify, subredditOf, sortOf, usernameOf, profileTabOf, onChange, start,
            get current() { return current; },
-           get path() { return emitPath(); } };
+           get path() { return emitPath(); },
+           /* The `?sort=` value this module last emitted for — the emitPath() rule
+              applied to the query: anything decorating the render (the comments page's
+              sort strip) must agree with the navigation that produced it, not with a
+              location that is one commit behind or ahead. Empty string when the emitted
+              URL carried none. */
+           get sortQuery() { return emit.lastSort || ''; } };
 })();
