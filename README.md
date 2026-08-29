@@ -251,17 +251,17 @@ theme out at 360px and 1280px and asserting that no row moves. The theme is appl
 
 | classic | slate |
 |:---:|:---:|
-| <img src="docs/assets/listing-classic.png" alt="classic theme" width="400"> | <img src="docs/assets/listing-slate.png" alt="slate theme" width="400"> |
+| <img src="docs/assets/listing-classic.jpg" alt="classic theme" width="400"> | <img src="docs/assets/listing-slate.jpg" alt="slate theme" width="400"> |
 | old.reddit.com as it was — Verdana, blue links, square corners | the same layout softened — system font, muted greys, roomier rows |
 
 | sepia | night |
 |:---:|:---:|
-| <img src="docs/assets/comments-sepia.png" alt="sepia theme" width="400"> | <img src="docs/assets/comments-night.png" alt="night theme" width="400"> |
+| <img src="docs/assets/listing-sepia.jpg" alt="sepia theme" width="400"> | <img src="docs/assets/listing-night.jpg" alt="night theme" width="400"> |
 | warm paper and serif type, for a long thread | dark, and deliberately softer than white-on-black |
 
 | carbon |
 |:---:|
-| <img src="docs/assets/listing-carbon.png" alt="carbon theme" width="400"> |
+| <img src="docs/assets/listing-carbon.jpg" alt="carbon theme" width="400"> |
 | near-black, monospaced, Reddit orange, dense |
 
 </div>
