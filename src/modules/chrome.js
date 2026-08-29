@@ -118,7 +118,12 @@ SHD.chrome = (() => {
     const title = sub ? { href: `/r/${sub}/`, text: `r/${sub}` }
       : user ? { href: `/user/${user}/`, text: `u/${user}` }
       : { href: '/', text: 'front page' };
-    root.prepend(
+    /* The sidebar must start BELOW the blue tab bar: a float overlaps the background of
+       any full-width block it sits beside, so prepending it as the first child of
+       #shd-root painted the titlebox on top of .shd-tabmenu-wrap and the blue bar cut
+       "r/<sub>" in half. Insert after the tab bar (before the content) instead. */
+    const tabbar = root.querySelector('.shd-tabmenu-wrap');
+    const rail =
       h('div#shd-sidebar.side', null, [
         h('div.spacer', null, [
           h('div.titlebox', null, [
@@ -126,8 +131,9 @@ SHD.chrome = (() => {
             h('div.shd-note', { text: 'Rendered locally from page data. No API calls.' })
           ])
         ])
-      ])
-    );
+      ]);
+    if (tabbar) tabbar.after(rail);
+    else root.prepend(rail);
   }
 
   /**
