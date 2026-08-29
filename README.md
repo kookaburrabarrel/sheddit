@@ -41,10 +41,9 @@ that broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 <img src="docs/assets/themes.gif" alt="Sheddit cycling through its five themes: classic, slate, sepia, night and carbon" width="900">
 
-<br>
+<br><br>
 
-**Every kind of post — images, galleries, video with sound, crossposts and comment threads, with adult thumbnails behind a placeholder until you ask.**
-
+**NSFW Support**<br>
 <img src="docs/assets/post-types.jpg" alt="Sheddit rendering r/CombatFootage in the classic theme: video posts with thumbnails and watch links, NSFW-tagged posts, and comment counts" width="900">
 
 </div>
