@@ -414,3 +414,9 @@ distribute a modified version, it has to stay free software too.
 <sub>Not affiliated with, endorsed by, or connected to Reddit, Inc.<br>
 "Reddit" and the Reddit logo are trademarks of Reddit, Inc.</sub>
 </div>
+
+<div align="center">
+
+<img src="docs/assets/slava-ukraini.svg" alt="Slava Ukraini" width="300">
+
+</div>

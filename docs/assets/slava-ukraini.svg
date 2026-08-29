@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="52" viewBox="0 0 360 52" role="img" aria-label="Slava Ukraini">
+  <title>Slava Ukraini</title>
+  <text x="180" y="36" text-anchor="middle"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+        font-size="30" font-weight="700" letter-spacing="1.2">
+    <tspan fill="#FFD700">Slava</tspan><tspan fill="#0057B7" dx="11">Ukraini</tspan>
+  </text>
+</svg>
