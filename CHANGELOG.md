@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.28.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.28.1 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,16 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.28.1
+
+### Fixed — the sidebar title no longer sits under the blue tab bar
+
+The right rail was prepended as the first child of the page root, before the blue
+`.shd-tabmenu-wrap`. A right-float starting there overlaps the full-width bar beside it,
+so "r/&lt;sub&gt;" was painted half over blue, half over white. The sidebar is now
+inserted after the tab bar, so its title and the "Rendered locally from page data. No
+API calls." note both sit on the white content background.
 
 ## 0.28.0
 
