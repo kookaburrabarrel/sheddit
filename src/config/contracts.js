@@ -99,9 +99,22 @@ SHD.C = {
      cannot decode GIF; with no poster the element paints a solid black box. Our clone
      paints the same box — custom-element upgrade is document-global, so the copy in
      #shd-root comes alive as the same broken player. dom.inlineGifs swaps the clone for
-     a plain <img>, which is exactly how the comment GIFs that already worked on the same
-     page were delivered. */
+     the element that can actually show what the player was starving: an <img> for a real
+     GIF, which is exactly how the comment GIFs that already worked on the same page were
+     delivered, and a silent looping <video> for the mp4 delivery below. */
   GIF_PLAYER: 'shreddit-player[gif]',
+  /* Which of the two ways Reddit delivers that GIF this one is. Reported live 2026-08-30
+     (bug 93), with the audit attached: the player's source was `<name>.gif?width=370&
+     format=mp4`, and the file behind it answers 200 with `content-type: video/mp4` — an
+     mp4 wearing a `.gif` filename. The extension of the URL says GIF, the QUERY says what
+     is actually served, and nothing else can: reading the response header means fetching
+     the file first, which this extension does not do (media.js holds its one request, and
+     that one is a manifest, not a guess). So the query is the discriminator — `format=mp4`
+     goes in a <video>, anything else in an <img>, and a path that already ends `.mp4` is
+     covered because the one URL shape that states its format outright should not be the
+     one we miss. `format=gif` — bug 88's capture, still live on the same pages — falls
+     through to the <img> path unchanged. */
+  GIF_MP4_SRC: /[?&]format=mp4(?:&|$)|\.mp4(?:$|[?#])/i,
   /* The asset id inside a video post's `content-href`, and the manifest that lists what
      Reddit will actually serve for it. Added 0.16.0, when the packaged renditions above
      stopped being enough: on a repackaged asset every `DASH_*`/`m2-res_*` file 403s and

@@ -1276,6 +1276,36 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     double that accepts everything and reports nothing cannot fail, so it cannot protect
     anything either.
 
+93. **Comment GIFs went back to being blank boxes you had to click — bug 88's fix,
+    defeated by a second delivery format.** Reported live 2026-08-30 with a DOM audit
+    attached: on a 20-GIF thread every player sat at `initialized: false`, its inner
+    `<video>` at `networkState: 0` with an empty `currentSrc`, `poster` and `preview`
+    both empty — so natively the box is blank until it is clicked. The audit's last
+    line is the one that mattered here: the source is
+    `<name>.gif?width=370&format=mp4`, and the file behind it answers 200 with
+    `content-type: video/mp4`. Reddit serves the same `.gif` NAME two ways. Bug 88 read
+    `.gif` and degraded every player to an `<img>`, which is right for `format=gif` and
+    is the blank box again for `format=mp4` — an `<img>` cannot decode an mp4 any more
+    than the `<video>` it replaced could decode a GIF, so the fix had simply moved the
+    empty box into our own markup, inside the anchor to Reddit's /media viewer that
+    makes it clickable. The URL has to be the discriminator (`C.GIF_MP4_SRC`): reading
+    `content-type` means fetching the file first, and media.js holds this extension's
+    only request. `format=mp4` now renders a `<video>` playing the way a GIF plays —
+    autoplay, loop, muted, `playsinline`, no controls — and `format=gif` still renders
+    the `<img>` bug 88 shipped. Two details are load-bearing and both have mutation
+    rows. `muted` as an ATTRIBUTE is not enough on an element built in script: it seeds
+    `defaultMuted` at creation, the property stays false, and Chrome's autoplay policy
+    reads the property — an unmuted autoplay is a blocked autoplay, which is the blank
+    box with extra steps (jsdom agrees with the spec here, so the row catches it).
+    `preload="metadata"` is what keeps a thread of twenty from pulling twenty files up
+    front. Two limits worth stating rather than implying: a player whose URL lives only
+    in a JS property is still unreachable, because a clone carries attributes and not
+    properties — such a player is left alone, exactly as bug 88 left a sourceless one;
+    and the live capture that would have confirmed the shape first-hand could not be
+    taken from this environment (Reddit answers a headless browser with its bot
+    challenge), so the fixtures are built from the report's audit and cover BOTH
+    spellings on one page rather than betting on either.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
