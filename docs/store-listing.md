@@ -13,7 +13,8 @@ future manifest that references a path outside those four ships a zip missing it
 `icons/icon.svg` goes in today despite the manifest never naming it (harmless, ~1KB).
 
 The listing images live in `docs/assets/` and are already at the required sizes; see the
-asset checklist below.
+asset checklist below. The two promo tiles are built by `node docs/promo/render.js` — run
+it if anything about the layout or the icon has changed since they were last written.
 
 ---
 
@@ -211,12 +212,31 @@ so treat visibility as load-bearing for the listing rather than a preference.
 | --- | --- | --- |
 | Store icon | 128×128 PNG, artwork 96×96 with 16px transparent padding | `icons/icon128.png` |
 | Screenshot | 1–5 allowed, exactly 1280×800 or 640×400, full bleed, square corners | `docs/assets/store-screenshot.png` (1280×800) |
-| Small promo tile | 440×280 PNG or JPEG | `docs/assets/store-tile-440x280.png` (440×280) |
+| Small promo tile | 440×280 PNG or JPEG, 24-bit, no alpha | `docs/assets/store-tile-440x280.png` (440×280) |
 | Marquee promo tile | 1400×560, optional, only used if the item is featured | `docs/assets/store-marquee.png` (1400×560) |
 
-All three listing images are already at their exact required sizes. The `-source` files
-alongside them are the full-resolution originals, kept so the assets can be recut without
-starting over; they are not uploaded.
+All of them are already at their exact required sizes.
+
+**The two promo tiles are generated, not drawn.** Their source is `docs/promo/`, and
+`node docs/promo/render.js` rewrites both in place; `docs/promo/README.md` is the full
+account. What matters here is why it is worth the extra file: the product shot on both
+cards links `src/styles/old-reddit.css` directly and uses the class names `listing.js`
+actually emits, so the artwork is a screenshot of this extension's own output rather than a
+picture of it, and a change to the classic palette reaches the store art on the next run.
+Both cards reference `icons/icon.svg` rather than embedding a copy, for the same reason.
+The renderer also re-reads each PNG it writes and fails on a wrong size or a stray alpha
+channel — the two things the store rejects an upload for without saying which.
+
+Three constraints are baked into those cards and should survive any edit. No Chrome or
+Google branding and no "Add to Chrome" button, which promotional images may not carry. No
+Reddit marks — no alien, no wordmark, no shot of Reddit's own interface; the only
+Reddit-owned string on either card is the descriptive "old.reddit.com", on the same footing
+as its use in the item name above. And nothing that implies affiliation or endorsement,
+which is the rule the item name is already written around.
+
+`store-promo-source.jpeg` and `store-marquee-source.jpg` are the full-resolution originals
+of the artwork these replaced. Nothing references them now that the cards are generated,
+and they are not uploaded.
 
 Only one screenshot exists and the store accepts up to five. One is enough to submit —
 but the slots are free, and a listing that shows the comment tree and a dark theme as
