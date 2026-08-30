@@ -669,6 +669,82 @@ async function boot(html, url, setup) {
       !!doc.querySelector('shreddit-comment[thingid="t1_c0"] shreddit-player[gif]'));
   }
 
+  /* Reported live 2026-08-30 (bug 93), same symptom on a page where bug 88's fix was
+     already shipping: comment GIFs as blank boxes you have to click. The audit named the
+     difference — the player's source is `<name>.gif?width=370&format=mp4`, and the file
+     behind it answers 200 with `content-type: video/mp4`. An mp4 wearing a `.gif`
+     filename cannot be shown by an <img> any more than a GIF can be decoded by a <video>,
+     so bug 88's degradation just moved the blank box into our own markup. What this pins
+     is the discrimination: the query decides the element, both spellings on one page. */
+  console.log('\n\x1b[1mAN MP4 WEARING A .GIF NAME IS A VIDEO, NOT A BROKEN IMAGE\x1b[0m');
+  {
+    const GIF_DELIVERY =
+      '<shreddit-player gif>' +
+      '<source src="https://preview.redd.it/v3cm625e5zlh1.gif?width=189&amp;format=gif">' +
+      '</shreddit-player>';
+    // The reported shape, verbatim: mp4 delivery, stated only by the query.
+    const MP4_DELIVERY =
+      '<a href="https://www.reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fv4.gif">' +
+      '<shreddit-player gif>' +
+      '<source src="https://preview.redd.it/v4cm625e5zlh1.gif?width=370&amp;format=mp4">' +
+      '</shreddit-player></a>';
+    /* The other two ways the same fact can arrive: the URL on the player itself rather
+       than in a <source>, and a `type` Reddit has never yet troubled to state. */
+    const MP4_TYPED =
+      '<shreddit-player gif src="https://preview.redd.it/v5cm625e5zlh1.gif?width=370">' +
+      '<source src="https://preview.redd.it/v5cm625e5zlh1.gif?width=370" type="video/mp4">' +
+      '</shreddit-player>';
+    const page = commentsPage()
+      .replace('<p>Comment body number 0 at depth 0.</p>', '<p>a:</p>' + GIF_DELIVERY)
+      .replace('<p>Comment body number 1 at depth 0.</p>', '<p>b:</p>' + MP4_DELIVERY)
+      .replace('<p>Comment body number 2 at depth 0.</p>', '<p>c:</p>' + MP4_TYPED);
+    const { doc } = await boot(page, 'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    const bodyOf = (id) =>
+      doc.querySelector(`#shd-root .thing.comment[data-fullname="${id}"] .usertext-body`);
+
+    check('a `format=gif` source is still a plain <img>',
+      !!bodyOf('t1_c0')?.querySelector('img.shd-comment-gif') &&
+      !bodyOf('t1_c0')?.querySelector('video'),
+      bodyOf('t1_c0')?.innerHTML);
+
+    const video = bodyOf('t1_c1')?.querySelector('video.shd-comment-gif');
+    check('a `format=mp4` source becomes a <video>, not an <img> that cannot decode it',
+      !!video, bodyOf('t1_c1')?.innerHTML);
+    check('...sourcing the file the player was starving',
+      /format=mp4/.test(video?.getAttribute('src') || ''), video?.getAttribute('src'));
+    check('...and no <img> was left pointing at an mp4',
+      !bodyOf('t1_c1')?.querySelector('img'));
+    check('...and the player itself is gone from that row',
+      !bodyOf('t1_c1')?.querySelector('shreddit-player'));
+    check('the comment body survives around it',
+      /b:/.test(bodyOf('t1_c1')?.textContent || ''));
+
+    /* A GIF's semantics, not a video post's: it starts by itself, it repeats, it is
+       silent, and it carries no scrub bar — a comment GIF with controls reads as
+       something the commenter posted as a video. */
+    check('it plays as a GIF plays: autoplay + loop + playsinline',
+      video?.hasAttribute('autoplay') && video?.hasAttribute('loop') &&
+      video?.hasAttribute('playsinline'),
+      [...(video?.attributes || [])].map(a => a.name).join(' '));
+    check('...with no controls', !video?.hasAttribute('controls'));
+    /* The property, not just the attribute: Chrome's autoplay policy reads `muted`, and
+       on an element built in script the attribute only seeds it at creation time. An
+       unmuted autoplay is a BLOCKED autoplay, which is the blank box all over again. */
+    check('...and muted as a property, which is what the autoplay policy reads',
+      video?.muted === true, String(video?.muted));
+    check('...and as an attribute, for anything that reads the markup back',
+      video?.hasAttribute('muted'));
+    check('...not preloading the whole file for a thread full of them',
+      video?.getAttribute('preload') === 'metadata', video?.getAttribute('preload'));
+
+    check('a stated type="video/mp4" is honoured even when the URL says nothing',
+      !!bodyOf('t1_c2')?.querySelector('video.shd-comment-gif'),
+      bodyOf('t1_c2')?.innerHTML);
+    check('...resolving the URL off the player when there is one there too',
+      /v5cm625e5zlh1/.test(
+        bodyOf('t1_c2')?.querySelector('video')?.getAttribute('src') || ''));
+  }
+
   /* QA round 2026-08-27, measured live on a real thread: clicking `new` in our own sort
      strip moved the URL to `?sort=new`, the visible thread did not move, the bold stayed
      on `best` — and Reddit's replacement tree was then consumed UNDER the stale render,

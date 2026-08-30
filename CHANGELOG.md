@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.28.1 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.28.2 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,25 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.28.2
+
+### Fixed — comment GIFs play again where Reddit ships them as mp4
+
+A reader reported a thread of GIFs rendering as blank boxes you had to click to see, with
+a DOM audit attached, and the audit named a shape 0.26.0's fix had not met: Reddit serves
+the same `.gif` filename two ways. `format=gif` is a real GIF, and an `<img>` shows it —
+that is the fix that shipped. `format=mp4` is an mp4 wearing a `.gif` name (200,
+`content-type: video/mp4`), and an `<img>` can no more decode that than the `<video>` it
+replaced could decode a GIF. So the blank box moved from Reddit's player into ours,
+wrapped in the anchor to Reddit's media viewer that made clicking the only way to see it.
+
+The URL is what decides now, because it has to be: reading the response header means
+fetching the file first, and this extension's one request is a video manifest, not a
+probe. An mp4-delivered comment GIF renders as a `<video>` that plays the way a GIF plays
+— it starts by itself, it loops, it is silent, and it carries no scrub bar, because what
+the commenter posted was a GIF and not a video. A real GIF renders as the plain `<img>` it
+did before. Both spellings appear on the same thread, so the tests carry both.
 
 ## 0.28.1
 

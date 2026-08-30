@@ -1559,6 +1559,21 @@ mutate "the dev harness storage shim swallows writes again" geometry \
         }," \
            "        sync: { get: async () => ({}), set: async () => {} },"
 
+# Bug 93: Reddit delivers the same `.gif` name as a real GIF or as an mp4, and only the
+# query says which. Three rows for the three ways the fix can be undone — collapsing the
+# discrimination (everything back to an <img>, so the mp4 ones are blank boxes again),
+# dropping the `type` reading, and setting `muted` as an attribute alone, which leaves the
+# PROPERTY false and hands Chrome's autoplay policy a video it is obliged to block.
+mutate "an mp4 delivered under a .gif name goes back into an <img> that cannot show it" run \
+  src/core/dom.js "        SHD.C.GIF_MP4_SRC.test(src);" "        false;"
+
+mutate "a stated video/mp4 type stops being believed" run \
+  src/core/dom.js "      const mp4 = /^video\\//i.test(source?.getAttribute('type') || '') ||" \
+                  "      const mp4 = false ||"
+
+mutate "the gif video is muted in markup only, so autoplay is blocked and the box stays blank" run \
+  src/core/dom.js "    video.muted = true;" "    ;"
+
 # The README now TELLS a reader which version the downloads are, in three places. A
 # stated version that has gone stale is worse than none — it is the one fact a reader
 # uses to decide whether their copy is current. Mutating the manifest models the real

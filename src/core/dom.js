@@ -72,17 +72,25 @@ SHD.dom = (() => {
    * ------------------------------------------------------------------ */
 
   /**
-   * Swap a cloned body's <shreddit-player gif> for a plain <img> — bug 88.
+   * Swap a cloned body's <shreddit-player gif> for something that can show it — bugs 88, 93.
    *
    * Cloned comment and selftext bodies keep their custom elements, and custom-element
    * upgrade is DOCUMENT-global — so the clone in our layout comes alive as Reddit's own
    * player and inherits its defect wholesale: the gif variant feeds a raw `.gif` URL to
    * a <video> (which cannot decode GIF — readyState 0 on 8 of 8 captured live) and,
-   * carrying no poster, paints a solid black box where the picture should be. The
-   * picture is sitting in the player's light-DOM <source> the whole time, and the
-   * comment GIFs that already rendered fine on the same page were plain <img>s from the
-   * same host — so degrade to that. A player with no resolvable source is left alone:
-   * a black box beats silently deleting content someone wrote a comment around.
+   * carrying no poster, paints a solid box where the picture should be. The picture is
+   * sitting in the player's light-DOM <source> the whole time, and the comment GIFs that
+   * already rendered fine on the same page were plain <img>s from the same host — so
+   * degrade to that. A player with no resolvable source is left alone: an empty box beats
+   * silently deleting content someone wrote a comment around.
+   *
+   * WHICH ELEMENT depends on what Reddit is actually serving, which is bug 93: the same
+   * `.gif` name is delivered as a real GIF (`format=gif`) or as an mp4 (`format=mp4`,
+   * `content-type: video/mp4`), and an <img> can show only the first. Putting the second
+   * in an <img> is the blank box again wearing our own markup — so the mp4 delivery goes
+   * into a <video> playing it the way a GIF plays: muted, looping, no controls, started
+   * without being asked. C.GIF_MP4_SRC owns the discrimination and why it is the URL that
+   * has to answer.
    *
    * SHD.C is read at CALL time, not load time — dom.js stays dependency-free at load,
    * and nothing calls this before boot.
@@ -90,11 +98,42 @@ SHD.dom = (() => {
   function inlineGifs(root) {
     if (!root || !SHD.C || typeof root.querySelectorAll !== 'function') return root;
     root.querySelectorAll(SHD.C.GIF_PLAYER).forEach(p => {
-      const src = p.querySelector('source')?.getAttribute('src') || p.getAttribute('src');
+      const source = p.querySelector('source');
+      const src = source?.getAttribute('src') || p.getAttribute('src');
       if (!src) return;
-      p.replaceWith(h('img.shd-comment-gif', { src, alt: '', loading: 'lazy' }));
+      /* `type` when Reddit troubles to state one — it did not on any player captured, so
+         the URL is what decides in practice and this is belt to that braces. */
+      const mp4 = /^video\//i.test(source?.getAttribute('type') || '') ||
+        SHD.C.GIF_MP4_SRC.test(src);
+      p.replaceWith(mp4 ? gifVideo(src)
+        : h('img.shd-comment-gif', { src, alt: '', loading: 'lazy' }));
     });
     return root;
+  }
+
+  /**
+   * An mp4-delivered comment GIF, rendered as the GIF it is standing in for.
+   *
+   * No controls and no sound, because the thing it replaces has neither — a comment GIF
+   * that arrives with a scrub bar reads as a video someone posted, which is not what was
+   * posted. `preload="metadata"` is the one request worth making of a thread carrying
+   * twenty of these: ask for the first frame, not the whole file. Autoplay then pulls
+   * what it needs when the browser decides to start — Chrome defers an offscreen muted
+   * autoplay until it scrolls into view, which is the moment the picture is wanted.
+   *
+   * The `muted` ATTRIBUTE is not enough on its own and the difference is the whole fix:
+   * on an element built in script the attribute only seeds `defaultMuted` at CREATION,
+   * so setting it afterwards leaves `muted` false — and Chrome's autoplay policy reads
+   * the PROPERTY. An unmuted autoplaying video is blocked, and a blocked video is the
+   * blank box we came here to remove. Both are set: the property for this element, the
+   * attribute for anything that reads the markup back.
+   */
+  function gifVideo(src) {
+    const video = h('video.shd-comment-gif', {
+      src, autoplay: '', loop: '', muted: '', playsinline: '', preload: 'metadata'
+    });
+    video.muted = true;
+    return video;
   }
 
   /* ------------------------------------------------------------------ *
