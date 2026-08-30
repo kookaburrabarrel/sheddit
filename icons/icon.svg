@@ -8,11 +8,26 @@
       <stop offset="1" stop-color="#000" stop-opacity=".14"/>
     </linearGradient>
   </defs>
-  <!-- A shed: the pun, and a silhouette that still reads at 16px. -->
+  <!-- A shed: the pun, and a silhouette that still reads at 16px. Unchanged when the aerial
+       arrived — shrinking it to open more headroom cost more at 16px than the taller aerial
+       was worth, and the shed is the half that has to survive down there. -->
   <g fill="#fff">
     <path d="M64 24 111 60.5v7.5h-9.5V60L64 36.5 26.5 60v8H17v-7.5z"/>
     <path d="M27.5 66h73v38a4 4 0 0 1-4 4h-65a4 4 0 0 1-4-4z"/>
   </g>
+  <!-- The aerial, in the 24 units of tile above the ridge, which is all there is: this tile
+       is full bleed, so unlike the artwork in docs/assets/ the mast cannot break out of the
+       top of it. Kept compact for two reasons — 10 units of blue stay above the ball, which
+       is the margin a rounded icon mask eats first, and every unit of aerial is a unit of
+       white competing with the shed at 16px.
+
+       Stroked rather than drawn as an outline: a filled sliver this narrow thins to nothing
+       under the rasteriser at small sizes, where a stroke keeps its weight. The mast starts
+       below the ridge line so the two whites merge into one silhouette rather than meeting
+       at a seam. -->
+  <path d="M64 26 60 13 74.5 16.5" fill="none" stroke="#fff" stroke-width="6.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="81" cy="17.5" r="7" fill="#fff"/>
   <!-- Reddit orangered, for the one warm note. -->
   <rect x="54" y="80" width="20" height="28" rx="1.5" fill="#ff4500"/>
 </svg>
