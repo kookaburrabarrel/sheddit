@@ -1,6 +1,7 @@
-# Store artwork
+# Artwork
 
-The images the Chrome Web Store listing takes, and the sources they are built from. All of
+Every picture this project publishes — the Chrome Web Store's three listing images and the
+README's header banner in both colour schemes — and the sources they are built from. All of
 them are generated:
 
 ```bash
@@ -15,16 +16,43 @@ node docs/promo/render.js --scale 2          # 2x, for reading the type up close
 | `tile.html` | 440×280 | `docs/assets/store-tile-440x280.png` | Small promo tile — **required** |
 | `marquee.html` | 1400×560 | `docs/assets/store-marquee.png` | Marquee promo tile — optional, used if the item is featured |
 | `screenshot.html` | 1280×800 | `docs/assets/store-screenshot.png` | Screenshot — 1 required, up to 5 allowed |
+| `banner.html` | 2560×800 | `docs/assets/banner-light.png` | README header, light scheme |
+| `banner-dark.html` | 2560×800 | `docs/assets/banner-dark.png` | README header, dark scheme |
 
-`--scale` magnifies by raising the device scale factor, so the type is rasterised at the
-higher resolution rather than upscaled. It is for looking, not for uploading — the store
-wants the exact sizes above and nothing else.
+`--scale` on the command line magnifies everything by raising the device scale factor, so
+type is rasterised at the higher resolution rather than upscaled. It is for looking, not for
+uploading — the store wants its exact sizes and nothing else.
+
+The two banners carry a `scale: 2` of their own in `render.js`, which is not a preview flag
+but how they are authored: 1280×400 of layout, rasterised at 2×, giving the 2560×800 the
+README has always used. The store assets are the opposite case and stay at 1:1, because the
+store validates exact pixels and anything else is a rejected upload.
 
 `promo.css` holds everything the two cards share and `promo.js` prepares the icon for both;
 each card's own file holds only the numbers that differ. `screenshot.html` shares none of
 it — it is a crop, not a composition. The browser driving lives in the repository root's `headless.js`, shared with
 `export-icons.js`. Nothing here ships: `package-extension.js` builds the zip from a fixed
 list — `manifest.json`, `icons/`, `src/`, `options/` — so `docs/` never reaches a user.
+
+## The README banner
+
+`banner.html` and `banner-dark.html` are the same picture in two skins — README.md picks
+between them with `<picture>` and `prefers-color-scheme`. Only the palette and the shot's
+theme differ; the geometry is shared, so a reader switching their system theme sees the page
+redraw rather than relayout. The dark one shows the night theme in its product shot, which
+is not decoration: the banner is claiming the extension has a dark mode, and showing it is
+the honest way to claim it.
+
+Unlike the store cards, the shot sits fully inside the frame rather than bleeding off the
+edge. A promo tile is a poster and a crop reads as energy; a README header is something a
+reader scrolls past, and a complete window reads as the product where a cropped one reads as
+decoration. The tilt and the shadow do the lifting instead.
+
+These are generated for a reason worth stating plainly: the banner carried the old,
+aerial-less shed for as long as it did precisely *because* it was a hand-made PNG that
+nothing pointed at the icon. The mark changed and the front page of the project quietly did
+not. It cannot happen again — `npm run promo` redraws it from the same icon file the cards
+use.
 
 ## The screenshot
 

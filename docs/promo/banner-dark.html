@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sheddit — README banner, dark (2560x800)</title>
+<!--
+  The README's header image, dark variant. README.md picks between this and banner.html's
+  output with a <picture> + prefers-color-scheme, and shows whichever wins at width="900".
+
+  Only the palette and the shot's theme differ from banner.html; the geometry is copied so
+  the two images are the same picture in two skins, and a reader switching their system
+  theme sees the page redraw rather than relayout.
+
+  Authored at 1280x400 and shot at a device scale factor of 2, which is where the 2560x800
+  comes from: the type is rasterised at 2x rather than a 1x raster being enlarged, and the
+  file keeps the dimensions the README has always had, so nothing about the page's layout
+  moves.
+
+  It exists as a generated file for the reason every other asset here does. This banner
+  carried the old antenna-less shed for as long as it did precisely because it was a
+  hand-made PNG that nothing pointed at the icon — the mark changed and the front page of
+  the project did not. Now `npm run promo` redraws it from icons/icon.svg like the rest.
+-->
+<link rel="stylesheet" href="promo.css">
+<script src="promo.js" defer></script>
+<style>
+  /* The dark palette, as overrides rather than a second set of tokens: promo.css still owns
+     what each name MEANS, and this file only says what the dark answer is. */
+  :root {
+    --ink: #eef3f8;
+    --ink-soft: #93a6b8;
+    --rule: #2c3947;
+  }
+
+  html, body, .card { width: 1280px; height: 400px; }
+
+  .card {
+    /* Near-black rather than a soft grey: this sits against GitHub's own #0d1117 canvas,
+       and a mid-grey banner reads as a pale rectangle stuck to the page. */
+    background: linear-gradient(158deg, #1b2432 0%, #141b26 46%, #0e131b 100%);
+    --top-rule: 4px;
+    --icon: 106px;
+    --lockup-gap: 22px;
+    --wordmark: 104px;
+    --sub: 21px;
+    --claim: 15px;
+    --claim-gap: 11px;
+    --claim-pad: 8px 17px;
+  }
+
+  .brand {
+    position: absolute;
+    left: 52px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 600px;
+  }
+
+  .lockup { margin-bottom: 34px; }
+  .sub { margin-bottom: 30px; max-width: 520px; }
+
+  /* Tilted and bleeding off the right, which is the shape this banner has always had: a
+     page carrying on past the frame rather than a screenshot pasted onto a background. */
+  /* Fully inside the frame, unlike the store cards: those bleed off the edge because a
+     promo tile is a poster, and this is a header a reader scrolls past — a complete window
+     sitting on the page reads as the product, where a cropped one reads as decoration. The
+     tilt and the shadow are what lift it off the background instead. */
+  .shot {
+    left: 716px;
+    top: 58px;
+    width: 490px;
+    height: 288px;
+    transform: rotate(-1.6deg);
+    border-radius: 8px;
+  }
+  .shot iframe {
+    width: 1240px;                 /* > 1100px, so the sidebar and its note are in frame */
+    height: 729px;
+    transform: scale(0.3952);      /* 490 / 1240 */
+  }
+
+  /* The shot carries the night theme here. Not decoration: the banner is claiming the
+     extension has a dark mode, and the honest way to claim it is to show it. */
+  .shot { border-color: #2b3644; }
+
+  .claim {
+    background: rgba(255, 255, 255, 0.045);
+    color: #cddae6;
+  }
+  .claim.hot { color: var(--orangered); border-color: #6a3418; }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <div class="brand">
+    <div class="lockup">
+      <img src="../assets/store-icon.png" data-key-field alt="">
+      <div class="wordmark">Sheddit</div>
+    </div>
+
+    <div class="sub">
+      Modern Reddit, rewritten into the old.reddit.com layout — live, on every page.
+    </div>
+
+    <div class="claims">
+      <span class="claim">no account</span>
+      <span class="claim">no redirect</span>
+      <span class="claim hot">0 API calls</span>
+    </div>
+  </div>
+
+  <div class="shot"><iframe src="listing.html?theme=night" scrolling="no" title=""></iframe></div>
+
+</div>
+</body>
+</html>

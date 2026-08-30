@@ -43,9 +43,9 @@ rebuilds them and `npm run package:check` will tell you first.
 The store artwork is not here. Screenshots, the marquee and the promo tile live in
 `docs/assets/`, and `docs/store-listing.md` says which asset each store field takes.
 
-One thing to know about the store art: the promo cards under `docs/promo/` draw
-`docs/assets/store-icon.png` rather than this SVG, and that is deliberate rather than
-pending. Both are the shed with its aerial, but they are two drawings of it — that one sits
+One thing to know about the published artwork — the store's promo cards and the README's
+header banner alike: everything under `docs/promo/` draws `docs/assets/store-icon.png`
+rather than this SVG, and that is deliberate rather than pending. Both are the shed with its aerial, but they are two drawings of it — that one sits
 on an inset tile with the mast breaking up out of the top, this one keeps the mast tucked
 inside a full-bleed tile.
 
@@ -66,6 +66,8 @@ So the constraint is real and the tucked aerial is the answer to it, not a compr
 waiting to be revisited. `docs/promo/README.md` records the same decision from the artwork's
 end, where the keying it costs is paid.
 
-The cards reference an icon file rather than holding a copy of the mark either way, so
-re-exporting reaches them on the next `npm run promo` and there is no second copy of the
-shed to keep in step by hand.
+Everything there references an icon file rather than holding a copy of the mark either way,
+so re-exporting reaches all five images on the next `npm run promo` and there is no second
+copy of the shed to keep in step by hand. That is not a hypothetical tidiness: the README
+banner shipped the aerial-less shed for a while purely because it was a hand-made PNG nobody
+had to regenerate.

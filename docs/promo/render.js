@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * render.js — turns docs/promo/*.html into the Chrome Web Store's image assets: the two
- * promo tiles, and the listing screenshot.
+ * render.js — turns docs/promo/*.html into the project's picture assets: the Chrome Web
+ * Store's two promo tiles and listing screenshot, and the README's header banner in both
+ * colour schemes.
  *
- *   node docs/promo/render.js                 # writes all three into docs/assets/
+ *   node docs/promo/render.js                 # writes all five into docs/assets/
  *   node docs/promo/render.js --out /tmp/x    # somewhere else, to look before committing
  *   node docs/promo/render.js tile            # just the one
  *   node docs/promo/render.js --scale 2       # 2x, for reading the type up close
@@ -46,7 +47,14 @@ const SETTLE = {
 const CARDS = [
   { name: 'tile',       src: 'tile.html',       out: 'store-tile-440x280.png', w: 440,  h: 280, settle: SETTLE.card },
   { name: 'marquee',    src: 'marquee.html',    out: 'store-marquee.png',      w: 1400, h: 560, settle: SETTLE.card },
-  { name: 'screenshot', src: 'screenshot.html', out: 'store-screenshot.png',   w: 1280, h: 800, settle: SETTLE.framed }
+  { name: 'screenshot', src: 'screenshot.html', out: 'store-screenshot.png',   w: 1280, h: 800, settle: SETTLE.framed },
+
+  /* The README's header, in both schemes. `scale: 2` is not a preview flag here — it is
+     how these two are authored: 1280x400 of layout rasterised at 2x, which is the 2560x800
+     the README has always had. The store assets are the opposite case; the store validates
+     exact pixels, so they are 1:1 and a scale of anything else is a rejected upload. */
+  { name: 'banner',      src: 'banner.html',      out: 'banner-light.png', w: 1280, h: 400, scale: 2, settle: SETTLE.card },
+  { name: 'banner-dark', src: 'banner-dark.html', out: 'banner-dark.png',  w: 1280, h: 400, scale: 2, settle: SETTLE.card }
 ];
 
 /**
@@ -86,7 +94,10 @@ async function main() {
     return args[i + 1];
   };
   const outDir = flag('--out', path.join(ROOT, 'docs', 'assets'));
-  const scale = Number(flag('--scale', 1));
+  /* A --scale on the command line is a look-at-it-closely override and applies to every
+     card; without one, each card renders at the scale it is authored for. */
+  const override = flag('--scale', null);
+  const scaleOf = (card) => override !== null ? Number(override) : (card.scale ?? 1);
   const wanted = args.filter((a, i) => !a.startsWith('--') && !skip.has(i));
   const unknown = wanted.filter(w => !CARDS.some(c => c.name === w));
   if (unknown.length) {
@@ -101,14 +112,15 @@ async function main() {
       if (wanted.length && !wanted.includes(card.name)) continue;
       const dest = path.join(outDir, card.out);
       try {
+        const scale = scaleOf(card);
         const buf = await shoot({
           url: 'file://' + path.join(__dirname, card.src),
           width: card.w, height: card.h, scale, settle: card.settle
         });
         fs.writeFileSync(dest, buf);
-        const detail = scale === 1
-          ? verify(buf, card.w, card.h)
-          : `${card.w * scale}x${card.h * scale} (${scale}x preview — not for upload)`;
+        const detail = override !== null
+          ? `${card.w * scale}x${card.h * scale} (${scale}x preview — not for upload)`
+          : verify(buf, card.w * scale, card.h * scale);
         console.log(`${card.name.padEnd(10)} ${path.relative(ROOT, dest)}  —  ${detail}`);
       } catch (e) {
         const hint = /not ready to be shot/.test(e.message) && card.settle === SETTLE.card
