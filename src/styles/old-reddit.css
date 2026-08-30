@@ -182,6 +182,42 @@ html.shd-active body {
   font-weight: bold;
 }
 
+/* The update control, at the left end of the theme bar. Shaped like the buttons beside it
+   so the strip still reads as one row of furniture; only its states differ. Quiet is
+   --shd-meta, the colour this stylesheet already uses for things you are not being asked to
+   act on. Both states that DO ask use --shd-tab-text — old reddit's orangered, which every
+   palette already defines for the unselected sort tabs, so this needs no new token and no
+   edit to five palettes to stay legible (bug 43's lesson: a token added here is a token
+   owed everywhere). */
+.shd-update-btn {
+  font: inherit;
+  line-height: 14px;
+  padding: 2px 6px;
+  margin-right: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--shd-radius);
+  background: none;
+  color: var(--shd-meta);
+  cursor: pointer;
+  text-decoration: none;
+}
+.shd-update-btn:hover { background: var(--shd-hover-bg); }
+/* Mid-check. Not a hover target and not a click target — the request is already out. */
+.shd-update-btn[disabled] { cursor: default; opacity: 0.7; }
+.shd-update-btn[disabled]:hover { background: none; }
+/* "This copy is old" and "the check did not get through" are both invitations to look,
+   not answers, so they share one weight: coloured, not filled. */
+.shd-update-stale { color: var(--shd-tab-text); }
+/* A named newer version is the one state that has become an instruction, and it is the
+   only control in this bar allowed to fill. */
+.shd-update-new {
+  background: var(--shd-tab-text);
+  border-color: var(--shd-tab-text);
+  color: #ffffff;
+  font-weight: bold;
+}
+.shd-update-new:hover { background: var(--shd-tab-text); border-color: var(--shd-text); }
+
 /* The swatch is painted per theme in themes.css, next to that theme's palette. */
 .shd-theme-btn .shd-swatch {
   display: inline-block;

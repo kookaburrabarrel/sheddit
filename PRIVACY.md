@@ -1,6 +1,6 @@
 # Privacy Policy — Sheddit
 
-**Last updated:** 25 August 2026
+**Last updated:** 30 August 2026
 **Applies to:** the Sheddit browser extension, all versions, Chrome and Firefox alike.
 The Firefox build also declares this in its manifest, in the form Mozilla surfaces on
 the listing: data collection **none**.
@@ -10,6 +10,10 @@ the listing: data collection **none**.
 Sheddit collects nothing, transmits nothing, and contacts no server of its own — because
 there is no such server. It reads the Reddit page already open in your browser and
 re-draws it. That is the whole program.
+
+Two things leave your browser at all, both of them optional, neither of them about you: the
+manifest of a video you are watching, and — only if you press the button that asks — a file
+on GitHub stating the current version number. Both are described in full below.
 
 ## What Sheddit stores
 
@@ -22,8 +26,17 @@ One object, in `chrome.storage.sync`, holding your display preferences:
 | `compactRows`, `showThumbnails`, `showNsfwThumbnails`, `autoPaginate` | layout and paging toggles |
 | `inlineVideo`, `inlineImages` | whether video and pictures render inside the layout |
 
-That is the complete list. There is no identifier in it, nothing derived from your
-browsing, and nothing about you.
+Since 0.29.0 there is a second object, in `chrome.storage.local`, and only once you have
+pressed **updates** in the header:
+
+| Key | What it is |
+| --- | --- |
+| `update` | the answer to the last update check: the version number GitHub stated, the link it gave, its release note, and when you asked |
+
+That is the complete list. There is no identifier in either object, nothing derived from
+your browsing, and nothing about you. `chrome.storage.local` is deliberate for the second
+one: unlike your preferences it does **not** sync, because it describes the copy installed
+on this one machine and has no business travelling anywhere.
 
 `chrome.storage.sync` is the browser's own settings-sync mechanism — Firefox exposes the
 same API. With browser sync turned on, these preferences travel between your own
@@ -63,8 +76,28 @@ the extension removes them.
   image servers the same way any page loads its images — Sheddit only writes the `<img>`
   tag, and listing pictures are not fetched at all until you open them. Untick *"Show
   images inline"* to turn the full-size ones off.
+- **The update check, and why it waits for you.** Sheddit is installed by hand and never
+  updates itself, so since 0.29.0 the header carries an **updates** control. Pressing it
+  makes one request: a GET of
+  [`dist/latest.json`](https://github.com/kookaburrabarrel/sheddit/blob/main/dist/latest.json)
+  from GitHub, a static file holding a version number. It is sent **without cookies** and
+  **without a referrer** — the referrer is the one that would have mattered, because left
+  at its default it would have told GitHub which Reddit page you were reading when you
+  pressed it. Nothing is sent about you, your browser beyond what any HTTP request carries,
+  or what you were looking at.
+
+  **It never fires on its own.** Not on page load, not on a timer, not in the background,
+  not once a day. That is the entire design and not an accident of the first version: a
+  check that ran by itself would make every install emit a periodic request carrying an IP
+  and a timestamp, which is telemetry whatever it is called and whatever it asks for. The
+  press is the consent, and the answer is remembered so one press lasts.
+
+  Beside it, and costing nothing at all, is the part that needs no network: the build date
+  is stamped into the extension, so it can tell you this copy is two months old without
+  asking anyone. That is arithmetic, not a request.
 - **No remote code.** Everything that runs ships inside the extension. Nothing is
-  downloaded, evaluated, or updated out of band. (Manifest V3 forbids it; Sheddit would
+  downloaded, evaluated, or updated out of band — the update check reads a version
+  *number*, and cannot deliver anything that runs. (Manifest V3 forbids it; Sheddit would
   not do it regardless.)
 - **No account, no login, no API key.** Sheddit never sees your Reddit credentials or
   session, and never acts on your behalf.
@@ -72,7 +105,8 @@ the extension removes them.
 
 ## Permissions, and why each one exists
 
-**`storage`** — to remember the preferences listed above. Nothing else is written.
+**`storage`** — to remember the preferences listed above, and the last update-check answer
+if you have asked for one. Nothing else is written.
 
 **Host access to `*://*.reddit.com/*`** — Sheddit's entire function is rewriting Reddit's
 own pages into the old.reddit.com layout, which cannot be done without running on those
@@ -80,10 +114,12 @@ pages. The access is limited to reddit.com and is used only to read and re-draw 
 document already loaded in your tab. `old.reddit.com` itself and `reddit.com/media` are
 explicitly excluded.
 
-**No host access to `v.redd.it`, despite the request above.** Reddit's media server
-answers with `access-control-allow-origin: *`, so the manifest can be read without any
-additional permission — which is why enabling video did not widen what Sheddit is allowed
-to reach. The request is sent with `credentials: 'omit'`, so your cookies never go with it.
+**No host access to `v.redd.it` or `raw.githubusercontent.com`, despite the two requests
+above.** Both servers answer with `access-control-allow-origin: *`, so those files can be
+read without any additional permission — which is why neither the video player nor the
+update check widened what Sheddit is allowed to reach. Both requests are sent with
+`credentials: 'omit'`, so your cookies never go with them, and the update check adds
+`referrerPolicy: 'no-referrer'`.
 
 Sheddit requests no other permissions. It has no background service worker, no tabs
 access, no cookie access, and no host access to any other site.
@@ -99,15 +135,29 @@ remove them by uninstalling.
 Sheddit is free software under the GPL-3.0-or-later, and the entire source is public at
 <https://github.com/kookaburrabarrel/sheddit>. The claims above are checkable rather than
 promised — the published package contains only the files listed by `npm run package`, and
-`grep -rn "fetch(\|XMLHttpRequest\|sendBeacon\|WebSocket" src/` returns **exactly one
-hit**: the video manifest read in `src/core/media.js`, which that file's header documents
-in full. Any other hit would be a bug, and this is the check that would show it.
+`grep -rn "fetch(\|XMLHttpRequest\|sendBeacon\|WebSocket" src/` returns **exactly two
+hits**:
+
+1. `src/core/media.js` — the video manifest, read when you open a video post's comments page.
+2. `src/core/update.js` — the version file, read when you press **updates**.
+
+Each file's header documents its request in full. A third hit would be a bug, and this is
+the check that would show it. It was one hit until 0.29.0; that it is now two, and the
+reason, is recorded below rather than quietly absorbed.
+
+The harder claim — that the second request happens only on a press — is not something grep
+can settle, so it is asserted instead: `test/run.js` boots the extension with `fetch`
+stubbed and fails the suite if rendering a page issues any request at all.
 
 ## Changes to this policy
 
 If Sheddit ever handles data differently, this file changes in the same commit as the code
-that changed it, and the version that introduced it is noted here. There have been no such
-changes to date.
+that changed it, and the version that introduced it is noted here.
+
+**0.29.0 — the update check.** One new request, to GitHub, for a static file holding a
+version number, sent only when the reader presses **updates** in the header; and one new
+stored object, `update` in `chrome.storage.local`, holding that answer. Nothing about the
+reader is sent or stored by either. This is the first change to this policy.
 
 ## Contact
 

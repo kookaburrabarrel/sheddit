@@ -37,6 +37,8 @@ const JS = [
   'src/core/model.js',
   'src/core/media.js',
   'src/core/paginator.js',
+  // Loaded before chrome.js, which subscribes to it as it evaluates.
+  'src/core/update.js',
   'src/modules/listing.js',
   'src/modules/comments.js',
   'src/modules/chrome.js',

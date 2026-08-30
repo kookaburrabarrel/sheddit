@@ -19,13 +19,13 @@ Stay logged out, unprofiled, un-manipulated.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
 
-[![version 0.28.2](https://img.shields.io/badge/version-0.28.2-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.29.0](https://img.shields.io/badge/version-0.29.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.28.2 is out — everyone is welcome to try it
+### Beta 0.29.0 is out — everyone is welcome to try it
 
 If Sheddit improves your browsing experience, please help spread the word — share it with
 friends, on social media, or on Reddit itself (if you still have an account ;)
@@ -155,7 +155,7 @@ than Reddit's — which is why those thumbnails fall back to old Reddit's placeh
 
 ## Install
 
-> ### Current version: **0.28.2** — beta, open to everyone
+> ### Current version: **0.29.0** — beta, open to everyone
 > Both downloads below are this version. It is a beta in the honest sense: it works, it
 > is tested on both browsers — Chrome the more thoroughly of the two — and Reddit can
 > still change something tomorrow that breaks it. If that happens,
@@ -194,23 +194,17 @@ Sheddit card in `chrome://extensions`. Chrome keeps running the copy it read at 
 so without the ↻ you are still on the old build — the failure screen prints the version if
 you need to check which one you are looking at.
 
-### From source
+**Knowing when to update.** Since 0.29.0 the header carries an **updates** control, at the
+left end of the theme bar, because a hand-installed extension never updates itself and a
+stale copy is the likeliest reason for a bug nobody else can reproduce. It has two halves,
+and only one of them uses the network:
 
-For contributors, or anyone who would rather read the source first:
-
-```bash
-git clone https://github.com/kookaburrabarrel/sheddit.git
-```
-
-Then the same steps: `chrome://extensions` → **Developer mode** → **Load unpacked** → the
-cloned folder. There is no build step to run first.
-
-> **Try it without installing anything.** `npm install && npm run preview` writes
-> `dist/preview.listing.html` and `dist/preview.comments.html` — the actual renderer's
-> output, openable in any browser.
-
-Requires Chrome 111+ or any Chromium browser (Edge, Brave, Vivaldi, Opera), or
-Firefox 140+ — see below.
+- The build date is stamped into the extension, so once this copy is more than 30 days old
+  the control turns orangered and says so by itself — no request, works offline.
+- Pressing it asks GitHub for one static file holding the current version number, and it
+  asks **only** when pressed. Never on load, never on a timer, never in the background. No
+  cookies and no referrer go with it, so the request cannot say which page you were on, and
+  the answer is remembered so one press lasts. See [PRIVACY.md](PRIVACY.md#the-short-version).
 
 ### Firefox
 
@@ -231,6 +225,24 @@ Two Firefox notes. Firefox can revoke a site permission at any time — if reddi
 loads without the layout, open the extension's options page: it will say so and offer a
 button to grant access back. And Firefox needs to be version 140 or newer — the current
 ESR, and the version that reads the manifest's data-collection declaration.
+
+### From source
+
+For contributors, or anyone who would rather read the source first:
+
+```bash
+git clone https://github.com/kookaburrabarrel/sheddit.git
+```
+
+Then the Chrome steps above: `chrome://extensions` → **Developer mode** → **Load unpacked**
+→ the cloned folder. There is no build step to run first.
+
+> **Try it without installing anything.** `npm install && npm run preview` writes
+> `dist/preview.listing.html` and `dist/preview.comments.html` — the actual renderer's
+> output, openable in any browser.
+
+Requires Chrome 111+ or any Chromium browser (Edge, Brave, Vivaldi, Opera), or
+Firefox 140+ — see above.
 
 ## What it does
 
@@ -347,21 +359,34 @@ than replace it — logged-out reading stays the case everything is tested again
 For most extensions this section is fine print. Here it is the point: an extension built
 so you can read without being profiled had better not profile you itself, and had better
 be checkable on that claim rather than taken at its word. Everything below is verifiable
-from the source in this repository — and the one feature that fetches anything (the video
-player, below) is tested by **counting its requests**: one per video post opened, none
-anywhere else, none at all with the setting off. A change that quietly started fetching
-more would fail the build, not just the code review.
+from the source in this repository — and both features that fetch anything are tested by
+**counting their requests**, so a change that quietly started fetching more would fail the
+build, not just the code review.
 
 Sheddit makes **no API calls** — not to Reddit's API, not to anyone else's. There is no
 analytics, telemetry, or remote configuration, and nothing about you is sent anywhere.
 
-The one file it fetches is a video manifest, and only to play video: opening a **video**
-post's comments page reads that video's manifest from Reddit's media server so Sheddit
-knows which files to hand the player. It is a plain request for a static file, sent without
-cookies, and it is the same file your browser would read to play the video on Reddit
-itself. The video and its sound are then loaded by the player itself — Reddit ships newer
-videos with the audio in a separate file, so the two are played together. Untick *"Play
-video on the comments page"* in the options and none of it happens.
+Exactly two files leave the browser, both optional, neither about you:
+
+**A video manifest, to play video.** Opening a **video** post's comments page reads that
+video's manifest from Reddit's media server so Sheddit knows which files to hand the
+player. A plain request for a static file, sent without cookies, and the same file your
+browser would read to play the video on Reddit itself. The video and its sound are then
+loaded by the player — Reddit ships newer videos with the audio in a separate file, so the
+two are played together. Untick *"Play video on the comments page"* and none of it happens.
+Counted by the tests: one per video post opened, none anywhere else, none with the setting
+off.
+
+**A version number, if you press the button that asks.** The **updates** control in the
+header reads one static file from this repository stating the current version. It is sent
+without cookies **and without a referrer**, so it cannot report which page you were on, and
+it fires *only* on that press — never on load, never on a timer, never in the background. A
+check that ran by itself would make every install emit a periodic request carrying an IP and
+a timestamp, which is telemetry whatever it is called; the press is the consent. The tests
+boot the extension with `fetch` stubbed and fail if rendering a page issues any request at
+all. The other half of that feature — "this copy is 63 days old" — is arithmetic over a
+stamped build date and touches nothing.
+
 See [PRIVACY.md](PRIVACY.md).
 
 It requests exactly two permissions:
