@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.28.2 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.29.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -13,6 +13,68 @@ Entries lead with what changed for a *user* where there is such a thing, and not
 underlying cause where that is the more useful fact. Several entries describe bugs that
 existed from the first commit and were only found once a test could see them — those are
 marked **never worked**, because "fixed" would imply it once did.
+
+---
+
+## 0.29.0
+
+### Added — the header says when this copy has gone stale, and asks only when you ask it to
+
+Sheddit is installed by hand on both browsers, and neither path ever updates itself:
+`runtime.requestUpdateCheck()` answers only for a store install, and a manifest `update_url`
+is ignored for an unpacked one. So a copy goes stale in silence. That is not cosmetic here —
+Reddit changes its markup and this extension chases it, which makes "Sheddit stopped
+rendering comments" and "you are three builds back" frequently the same report, diagnosed
+twice.
+
+The theme bar now carries an **updates** control at its left end, in two halves that were
+kept apart deliberately because they cost different things.
+
+**The nudge is arithmetic.** The build date is stamped into `src/core/update.js` at release;
+once the copy on screen is more than 30 days old the control turns orangered and says how
+old it is. It contacts nothing, works offline, and cannot be wrong about the network. What
+it cannot know is whether a newer build actually exists — only that this one has been
+sitting a while, which on this project is itself the likeliest explanation for a bug nobody
+else can reproduce.
+
+**The check is one request, and only on a press.** It reads `dist/latest.json` from the
+repository over `raw.githubusercontent.com`, which answers `access-control-allow-origin: *`
+— so this needed no new host permission and did not widen what the extension may reach, the
+same reasoning the video manifest already stands on. A newer version turns the control into
+a link, and the tooltip names both versions and the ↻ step, because Chrome keeps running the
+copy it read at load time and a downloaded zip changes nothing until the card is reloaded.
+The answer is stored in `chrome.storage.local` — not `sync`, because it describes the copy
+on this one machine — so one press lasts across pages, and it clears itself once the reader
+has caught up.
+
+**It never fires on its own**, and that is the design rather than a first cut to be
+optimised later. A check that ran on load or on a timer would make every install emit a
+periodic request carrying an IP and a timestamp: telemetry whatever it is called, and
+indistinguishable from it at the receiving end. The press is the consent. `test/run.js`
+asserts it the way the video tests assert their call count — booting a page with `fetch`
+stubbed and failing if rendering issues any request at all.
+
+Two smaller decisions worth recording. The request carries `referrerPolicy: 'no-referrer'`,
+which is the leak that would otherwise have shipped by default: at its default a check run
+from a comments page hands GitHub the URL of the thread being read — which subreddit, which
+post — from a feature whose entire payload is a version number. And the answer is treated as
+untrusted input: a version that is not a string is refused rather than displayed, a `url`
+that is not `https:` is dropped for the project page, and the comparison reads every
+non-numeric part as 0, so a malformed answer can fail to be newer but can never claim to be.
+
+`PRIVACY.md` changed in the same commit, as that file promises. Its verifiable grep now
+returns **two** hits rather than one, and says so, along with the reason and the version
+that introduced it.
+
+### Changed — the version now has to agree in six places, and the release script stamps all of them
+
+`dist/latest.json` and the `BUILT` date in `update.js` join `manifest.json`, `package.json`
+and the README's two statements. Both new ones fail *quietly*, which is why they are
+asserted rather than remembered: a `latest.json` left behind at a release does not error, it
+tells every reader on every build that they are already current — worse than no check at
+all, because they now believe they checked — and a frozen `BUILT` eventually calls a fresh
+install stale and trains people to ignore the one notice they get. `refresh-zip.sh` rewrites
+all four files on a bump, and `test/run.js` asserts that it still names each of them.
 
 ---
 
