@@ -223,7 +223,17 @@ account. What matters here is why it is worth the extra file: the product shot o
 cards links `src/styles/old-reddit.css` directly and uses the class names `listing.js`
 actually emits, so the artwork is a screenshot of this extension's own output rather than a
 picture of it, and a change to the classic palette reaches the store art on the next run.
-Both cards reference `icons/icon.svg` rather than embedding a copy, for the same reason.
+Both cards reference their icon file rather than embedding a copy, for the same reason.
+
+Note which file that is: the promo cards draw `docs/assets/store-icon.png` — the shed with
+the antenna — while the **Store icon** row above is `icons/icon128.png`, which has no
+antenna, and is also what a browser installs. The store art and the installed extension
+therefore show different marks today. Two things to settle before submitting, if the
+antenna is meant to be the mark: `icons/` needs redrawing (see `icons/README.md`), and
+`store-icon.png` as it stands does not meet the store-icon spec anyway — it is 128×128 with
+an *opaque* pale-blue field and roughly 102×112 of artwork, where the field wants 96×96 of
+artwork inside 16px of *transparent* padding. The promo cards key that field out at render
+time, which is fine for artwork and is not a substitute for an icon export.
 The renderer also re-reads each PNG it writes and fails on a wrong size or a stray alpha
 channel — the two things the store rejects an upload for without saying which.
 
