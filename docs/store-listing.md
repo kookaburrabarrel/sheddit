@@ -225,23 +225,25 @@ actually emits, so the artwork is a screenshot of this extension's own output ra
 picture of it, and a change to the classic palette reaches the store art on the next run.
 Both cards reference their icon file rather than embedding a copy, for the same reason.
 
-Note which file that is: the promo cards draw `docs/assets/store-icon.png`, while the
-**Store icon** row above is `icons/icon128.png`, exported from `icons/icon.svg` by
-`npm run icons`. Both are the shed with its aerial, so they agree about what the mark is —
-but they are two drawings of it, one a raster with a navy outline and one flat vector.
-Pointing the cards at `icon.svg` instead is a one-line change and would make the store art
-the same file a browser installs.
+Note which file that is. The promo cards draw `docs/assets/store-icon.png`; the **Store
+icon** row above is `icons/icon128.png`, exported from `icons/icon.svg` by `npm run icons`.
+Both are the shed with its aerial, but they are two drawings of it: the artwork's mast
+breaks up out of an inset tile, the packaged icon's stays tucked inside a full-bleed one.
+That split is deliberate — the breaking-out silhouette is preferred and is used wherever the
+tile is not constrained, which is the artwork; a toolbar icon has no room for it.
+`icons/README.md` and `docs/promo/README.md` each record the decision from their own end.
 
-What `store-icon.png` is *not* is a candidate for the Store icon row. That field wants
-96×96 of artwork inside 16px of transparent padding; it is 128×128 with an **opaque**
-pale-blue field and roughly 102×112 of artwork. The promo cards key that field out at
-render time, which is fine for artwork and is not an icon export.
+What `store-icon.png` is *not* is a candidate for this row. The field wants 96×96 of artwork
+inside 16px of transparent padding; that file is 128×128 with an **opaque** pale-blue field
+and roughly 102×112 of artwork. The promo cards key the field out at render time, which is
+fine for artwork and is not an icon export.
 
-Worth knowing about the row itself: `icon128.png` is full bleed — the tile runs corner to
-corner, with transparency only outside its rounded corners — rather than 96×96 inside 16px
-of padding. That is the common shape for a packaged icon and is what the toolbar wants, but
-it is Chrome's recommendation being declined rather than met. Re-inset it here if a
-reviewer ever asks; `icons/icon.svg` is the only file that would change.
+And one thing to have an answer ready for: `icon128.png` is full bleed — the tile runs
+corner to corner, with transparency only outside its rounded corners — rather than 96×96
+inside 16px of padding. That is the ordinary shape for a packaged icon and is what the
+toolbar wants, but it is Chrome's recommendation being declined rather than met. Re-inset it
+if a reviewer ever raises it; `icons/icon.svg` is the only file that would change, and the
+padding would have to stay empty, so it is not somewhere the mast could go.
 The renderer also re-reads each PNG it writes and fails on a wrong size or a stray alpha
 channel — the two things the store rejects an upload for without saying which.
 

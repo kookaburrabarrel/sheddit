@@ -95,18 +95,23 @@ re-exported at different padding: the artwork sits inside 13px of empty margin e
 so that the layout box is the *ink* box — otherwise the mark hangs 13/128ths of its own
 width off the card's left margin.
 
-### The other copy of the mark
+### Why the cards do not use icons/icon.svg
 
-`icons/icon.svg` now carries the aerial too, so the extension and the store art no longer
-disagree about what the mark is — but they remain two drawings of it: `store-icon.png` is a
-raster with a navy outline, `icon.svg` is flat vector.
+They easily could: it is one line in `promo.css` plus dropping `data-key-field` from the two
+`<img>` tags, and it would delete `promo.js`, the `--allow-file-access-from-files` flag, the
+readiness assertion in `render.js` and the two padding constants — every one of which exists
+only because the raster brings a background with it.
 
-Pointing these cards at `../../icons/icon.svg` instead is one line in `promo.css` plus
-dropping `data-key-field` from the two `<img>` tags. It would make the store art the same
-file a browser installs, and it would remove `promo.js`, the `--allow-file-access-from-files`
-flag, the readiness assertion in `render.js`, and the two padding constants — all of which
-exist only because the raster brings a background with it. What it costs is the outlined
-look. That is a design call, not a technical one, which is why it has not been made here.
+**The mast is why.** `store-icon.png` sits on an inset tile and its aerial breaks up out of
+the top of it; `icons/icon.svg` has to keep its aerial tucked inside, because a packaged
+icon's tile is full bleed and there is nowhere else for the mast to go. That silhouette is
+the preferred one (project decision, 2026-08-30), so the artwork — where nothing constrains
+the tile — uses it, and the packaged icons use the tucked drawing because at toolbar sizes
+they have no choice. `icons/README.md` has the constraint from the other end.
+
+So the keying is not incidental complexity to be tidied away later. It is the price of the
+silhouette, and it is paid here rather than in `icons/` because this is the half that can
+afford it.
 
 ## Rendering
 

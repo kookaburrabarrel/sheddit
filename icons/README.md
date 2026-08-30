@@ -43,13 +43,29 @@ rebuilds them and `npm run package:check` will tell you first.
 The store artwork is not here. Screenshots, the marquee and the promo tile live in
 `docs/assets/`, and `docs/store-listing.md` says which asset each store field takes.
 
-One thing to know about the store art, though: the promo cards under `docs/promo/` draw
-`docs/assets/store-icon.png` rather than this SVG. Both are now the shed with an aerial, so
-they no longer disagree about what the mark IS, but they are two drawings of it — that one
-is a raster with a navy outline, this one is flat vector. Pointing the cards at `icon.svg`
-instead is a one-line change in `docs/promo/promo.css` and would make the store art the same
-file a browser installs; `docs/promo/README.md` says what that would remove.
+One thing to know about the store art: the promo cards under `docs/promo/` draw
+`docs/assets/store-icon.png` rather than this SVG, and that is deliberate rather than
+pending. Both are the shed with its aerial, but they are two drawings of it — that one sits
+on an inset tile with the mast breaking up out of the top, this one keeps the mast tucked
+inside a full-bleed tile.
 
-Either way the cards reference an icon file rather than holding a copy of the mark, so
+**The breaking-out silhouette is the preferred one** (project decision, 2026-08-30). It is
+used wherever nothing constrains the tile, which means the promo artwork. It is not used
+here, for three reasons that all point the same way:
+
+- A toolbar icon wants a full-bleed tile. Insetting it far enough for the mast to clear the
+  top costs about 22% of the tile, and at 16px the shed cannot spare it — the same argument
+  that kept the shed at full size when the aerial arrived.
+- Chrome's 128 guidance asks for 96×96 of artwork inside 16px of transparent padding.
+  That padding is meant to be *empty*, so a mast poking into it is not the guidance being
+  met, it is the artwork being bigger than the guidance allows.
+- The four PNGs have to agree with each other. A 128 whose tile is inset and a 16 whose tile
+  is full bleed are two marks, and a browser picks between them per context.
+
+So the constraint is real and the tucked aerial is the answer to it, not a compromise
+waiting to be revisited. `docs/promo/README.md` records the same decision from the artwork's
+end, where the keying it costs is paid.
+
+The cards reference an icon file rather than holding a copy of the mark either way, so
 re-exporting reaches them on the next `npm run promo` and there is no second copy of the
 shed to keep in step by hand.
