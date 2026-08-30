@@ -68,6 +68,18 @@
 </div>
 
 <script>
+/* The theme is a URL parameter because the dark README banner wants the night palette and
+   everything else wants classic — and themes.js already treats the attribute as the single
+   switch, so this is the same lever the header buttons pull, not a second one. An unknown
+   or missing value stays classic, exactly as SHD.theme.resolve() would have it. */
+const THEME = new URLSearchParams(location.search).get('theme');
+if (['slate', 'sepia', 'night', 'carbon'].includes(THEME)) {
+  document.documentElement.setAttribute('data-shd-theme', THEME);
+  for (const btn of document.querySelectorAll('.shd-theme-btn')) {
+    btn.classList.toggle('selected', btn.dataset.theme === THEME);
+  }
+}
+
 /* The rows, built the way listing.js builds them — one array, one loop, so a row can
    never be half-edited into a shape the real renderer would not produce. */
 const POSTS = [
