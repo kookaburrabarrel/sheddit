@@ -1,0 +1,180 @@
+/*
+ * promo.css — the shared half of the two Chrome Web Store promo cards.
+ *
+ * Both cards are the same object at two sizes: a light field in old reddit's own header
+ * blue, the shipped icon, the wordmark, a line of copy, and a real product shot bleeding
+ * off the right edge. tile.html and marquee.html add only the numbers that differ.
+ *
+ * RULES THE STORE IMPOSES, AND WHY THIS FILE LOOKS THE WAY IT DOES
+ *  - Exact pixel sizes, 440x280 and 1400x560. The <body> IS the canvas: no margins, no
+ *    scrollbars, nothing that can shift a screenshot by a pixel.
+ *  - 24-bit, no alpha. Every layer here is opaque, so Chromium writes RGB rather than
+ *    RGBA and no post-processing step is needed to strip a channel.
+ *  - No Chrome or Google branding, and no "Add to Chrome" — promotional images may not
+ *    carry the store's own furniture. There is none here.
+ *  - No Reddit marks. Neither card shows the alien, the wordmark or Reddit's own UI; the
+ *    product shot is OUR layout, which is the thing being sold, and the only Reddit-owned
+ *    string on either card is the descriptive "old.reddit.com".
+ */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('fonts/inter-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  /* block, not swap: a swap would let the fallback paint first, and the screenshot is
+     taken once. A card rendered in DejaVu because the font was 8ms late is a silent
+     failure that only shows up on the store. */
+  font-display: block;
+}
+
+:root {
+  --blue: #5f99cf;        /* old reddit's header blue, and the icon tile's fill */
+  --blue-pale: #cee3f8;   /* #header's background — the pale band the layout is known by */
+  --blue-deep: #336699;   /* --shd-accent */
+  --orangered: #ff4500;
+  --ink: #16232f;
+  --ink-soft: #4d6072;
+  --rule: #b9d0e6;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', 'DejaVu Sans', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  color: var(--ink);
+}
+
+/* The canvas. Sized in each card's own file, because the size is the one thing the store
+   checks before it checks anything else. */
+.card {
+  position: relative;
+  overflow: hidden;
+  /* Light rather than saturated: the store's own chrome is white, and the layout this
+     extension restores is a white page with a pale blue band across the top. A dark tile
+     would pop harder and describe the product less. */
+  background:
+    linear-gradient(158deg, #ffffff 0%, #f1f7fd 44%, #d6e8f8 100%);
+}
+
+/* Old reddit's header border, run across the top of the card. One pixel of brand that
+   costs no space and no legibility. */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--top-rule, 5px);
+  background: var(--blue);
+  z-index: 3;
+}
+
+/* ---------- the brand block ---------- */
+
+.brand { position: relative; z-index: 2; }
+
+.lockup {
+  display: flex;
+  align-items: center;
+  gap: var(--lockup-gap, 22px);
+}
+
+/* The shipped icon, referenced rather than redrawn: icons/icon.svg is the source of truth
+   for the mark, and a promo card holding its own copy is a promo card that goes stale the
+   first time the icon is touched. */
+.lockup img {
+  width: var(--icon, 84px);
+  height: var(--icon, 84px);
+  display: block;
+  border-radius: calc(var(--icon, 84px) * 0.203);   /* icon.svg's rx 26 of 128 */
+  box-shadow: 0 3px 10px rgba(24, 62, 100, 0.22);
+}
+
+.wordmark {
+  font-size: var(--wordmark, 84px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.hook {
+  font-size: var(--hook, 31px);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.22;
+  color: var(--ink);
+}
+
+.sub {
+  font-size: var(--sub, 20px);
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+/* The README's badge row, rebuilt as type rather than as images. Three claims, each one
+   checkable in the source — which is the argument the whole listing makes. */
+.claims {
+  display: flex;
+  align-items: center;
+  gap: var(--claim-gap, 10px);
+  font-size: var(--claim, 15px);
+  font-weight: 600;
+  letter-spacing: 0.005em;
+}
+
+.claim {
+  padding: var(--claim-pad, 7px 15px);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--blue-deep);
+  white-space: nowrap;
+}
+
+/* The one warm note, the same place the icon puts it. */
+.claim.hot {
+  color: var(--orangered);
+  border-color: #ffc4a8;
+}
+
+/* ---------- the product shot ---------- */
+
+/*
+ * A real render of the extension's own output, not a drawing of one: listing.html loads
+ * src/styles/*.css and the class names listing.js emits. It sits in an <iframe> because
+ * old-reddit.css styles `html.shd-active body` with !important — dropped into this
+ * document directly it would repaint the card.
+ */
+.shot {
+  position: absolute;
+  z-index: 1;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #bdd2e5;
+  box-shadow:
+    0 2px 6px rgba(19, 52, 88, 0.10),
+    0 18px 44px rgba(19, 52, 88, 0.22);
+}
+
+.shot iframe {
+  display: block;
+  border: 0;
+  transform-origin: 0 0;
+}
+
+/* The lockup stacks on the small card and sits in a row on the marquee. Both are the same
+   two elements in the same order, so only the axis changes. */
+.lockup.stacked {
+  flex-direction: column;
+  align-items: flex-start;
+}

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sheddit — marquee promo tile (1400x560)</title>
+<!--
+  The Chrome Web Store's marquee promo tile: 1400x560, optional, and the only artwork the
+  store shows if the item is ever featured. Rendered by render.js; see docs/promo/README.md.
+-->
+<link rel="stylesheet" href="promo.css">
+<style>
+  html, body, .card { width: 1400px; height: 560px; }
+
+  .card {
+    --top-rule: 6px;
+    --icon: 92px;
+    --lockup-gap: 24px;
+    --wordmark: 90px;
+    --hook: 33px;
+    --sub: 20px;
+    --claim: 15px;
+  }
+
+  /* The text column stops at 660px whatever the copy does. Past that it would run under
+     the product shot, and a headline that collides with a screenshot is the failure this
+     whole file exists to avoid. */
+  .brand {
+    position: absolute;
+    left: 86px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 596px;
+  }
+
+  .lockup { margin-bottom: 30px; }
+  .hook { margin-bottom: 14px; }
+  .sub { margin-bottom: 30px; max-width: 566px; }
+
+  /* Bleeding off the right edge rather than sitting inside a margin: a window that
+     continues past the frame reads as a live page, where a floating rectangle reads as a
+     screenshot pasted onto a background. */
+  .shot {
+    left: 702px;
+    top: 72px;
+    width: 800px;                  /* 98px of it past the right edge, on purpose */
+    height: 512px;                 /* and 24px past the bottom */
+  }
+  /* 1080 is deliberately under old-reddit.css's 1100px breakpoint, which drops the right
+     sidebar and gives the gutter back to the feed. At this scale the sidebar's 10px note
+     would be four pixels tall — illegible, and half of it would fall off the card anyway,
+     so the honest crop is the one that does not include it. */
+  .shot iframe {
+    width: 1080px;
+    height: 691px;
+    transform: scale(0.7407);      /* 800 / 1080 */
+  }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <div class="brand">
+    <div class="lockup">
+      <img src="../../icons/icon.svg" alt="">
+      <div class="wordmark">Sheddit</div>
+    </div>
+
+    <div class="hook">Shed the feed. Keep the conversation.</div>
+
+    <div class="sub">
+      Modern Reddit, redrawn in the old.reddit.com layout — live, on every page,
+      rendered locally in your browser.
+    </div>
+
+    <div class="claims">
+      <span class="claim">no account</span>
+      <span class="claim">no redirect</span>
+      <span class="claim hot">0 API calls</span>
+    </div>
+  </div>
+
+  <div class="shot"><iframe src="listing.html" scrolling="no" title=""></iframe></div>
+
+</div>
+</body>
+</html>

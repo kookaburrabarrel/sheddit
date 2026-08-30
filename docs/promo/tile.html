@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sheddit — small promo tile (440x280)</title>
+<!--
+  The Chrome Web Store's small promo tile: 440x280, required, and the one a browser sees
+  in a category grid — often scaled below its own size. Everything on it is sized to
+  survive that: three tiers of type, none of them below 11px, and a product shot that is
+  meant to read as texture rather than as text.
+-->
+<link rel="stylesheet" href="promo.css">
+<style>
+  html, body, .card { width: 440px; height: 280px; }
+
+  .card {
+    --top-rule: 4px;
+    --icon: 50px;
+    --lockup-gap: 11px;
+    --wordmark: 42px;
+    --sub: 14px;
+    --claim: 12px;
+    --claim-gap: 6px;
+    --claim-pad: 4px 9px;
+  }
+
+  /* Stacked, not side by side. "Sheddit" at a size that still reads when the store shrinks
+     this tile into a grid is wider than the column left over beside a 50px icon, and a
+     clipped wordmark is the one mistake a promo tile cannot survive. */
+  .brand {
+    position: absolute;
+    left: 26px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 190px;
+  }
+
+  .lockup { margin-bottom: 13px; }
+  .lockup img { margin-bottom: 10px; }
+  .sub { margin-bottom: 14px; }
+  .sub b { font-weight: 700; color: var(--ink); }
+
+  .shot {
+    left: 224px;
+    top: 34px;
+    width: 266px;                  /* 50px past the right edge */
+    height: 272px;                 /* and 26px past the bottom */
+    border-radius: 5px;
+  }
+  /* 700 rather than something narrower: at this scale the type is texture either way, and
+     a row whose title fits on one line makes an orderly texture where a wrapped one makes
+     a noisy grey block. The rows are the shape being advertised, so the shape has to be
+     the legible part. */
+  .shot iframe {
+    width: 700px;
+    height: 716px;
+    transform: scale(0.38);        /* 266 / 700 */
+  }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <div class="brand">
+    <div class="lockup stacked">
+      <img src="../../icons/icon.svg" alt="">
+      <div class="wordmark">Sheddit</div>
+    </div>
+
+    <div class="sub">
+      New Reddit, redrawn in the <b>old.reddit.com</b> layout.
+    </div>
+
+    <div class="claims">
+      <span class="claim">no account</span>
+      <span class="claim hot">0 API calls</span>
+    </div>
+  </div>
+
+  <div class="shot"><iframe src="listing.html" scrolling="no" title=""></iframe></div>
+
+</div>
+</body>
+</html>

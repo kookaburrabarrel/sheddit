@@ -23,3 +23,8 @@ detail that reads fine at 128 turns to mush.
 
 The store artwork is not here. Screenshots, the marquee and the promo tile live in
 `docs/assets/`, and `docs/store-listing.md` says which asset each store field takes.
+
+One thing follows the icon out of this directory, though: both Chrome Web Store promo cards
+reference `icon.svg` itself rather than holding a copy of the mark, so re-exporting the icon
+changes them too — `node docs/promo/render.js` re-renders both, and there is no second copy
+of the shed to keep in step by hand.
