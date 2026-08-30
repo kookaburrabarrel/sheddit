@@ -28,18 +28,22 @@ list — `manifest.json`, `icons/`, `src/`, `options/` — so `docs/` never reac
 
 ## The screenshot
 
-`screenshot.html` frames `docs/assets/listing-classic.jpg` — the extension rendering a real
-Reddit front page in the classic theme — down to the store's mandatory 1280×800.
+`screenshot.html` frames `docs/assets/screenshot-source.jpg` — the extension rendering a
+real Reddit front page in the classic theme — down to the store's mandatory 1280×800.
 
 It is a **real capture**, and that is the point of the file. What was in this slot before
-was generated marketing art filed under the name `store-screenshot.png`. The crop numbers
-and why they are what they are live in that file's own comment; the short version is that
-1408×708 cannot become 1280×800 by renaming, the spare pixels are all horizontal, and the
-cut stops in the gap before the sidebar so nothing is sliced mid-word.
+was generated marketing art filed under the name `store-screenshot.png`. The crop arithmetic
+lives in that file's own comment; the two things worth knowing here are that a 1497-wide
+source lets the crop keep every row and still be a slight *downscale* — so nothing is
+enlarged — and that it stops eleven columns short of the maximum to land the cut between
+words rather than through them. The bottom row cuts mid-post, which is what the bottom of a
+scrolled viewport looks like; the right edge is the one that has to be careful, because a
+viewport does not clip its own sidebar mid-word.
 
-Four more real captures sit beside it — `listing-slate.jpg`, `listing-sepia.jpg`,
-`listing-night.jpg`, `listing-carbon.jpg` — same size, same crop, and the store allows five
-screenshots. Adding them is four more entries in `render.js`'s list.
+The store allows five screenshots and the other four themes have captures too —
+`listing-slate.jpg`, `listing-sepia.jpg`, `listing-night.jpg`, `listing-carbon.jpg`. They
+are 1408×708 rather than 1497×812, so each would need a 17% upscale to reach 1280 wide;
+re-capturing them at the wider size first would make all five as sharp as this one.
 
 ## Why the cards are generated rather than drawn
 
