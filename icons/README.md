@@ -24,7 +24,14 @@ detail that reads fine at 128 turns to mush.
 The store artwork is not here. Screenshots, the marquee and the promo tile live in
 `docs/assets/`, and `docs/store-listing.md` says which asset each store field takes.
 
-One thing follows the icon out of this directory, though: both Chrome Web Store promo cards
-reference `icon.svg` itself rather than holding a copy of the mark, so re-exporting the icon
-changes them too — `node docs/promo/render.js` re-renders both, and there is no second copy
-of the shed to keep in step by hand.
+**The mark in this directory and the mark on the store art are not the same drawing.** The
+promo cards under `docs/promo/` are built from `docs/assets/store-icon.png`, which is the
+shed with an antenna over the roof; `icon.svg` and the four PNGs here are the shed without
+one, and they are what a browser installs. Nothing enforces the difference away, so it is
+worth knowing which one you are looking at. If the antenna is meant to be the mark, this
+directory is what has to change: redraw `icon.svg`, re-export all four PNGs, and the
+extension and the store art agree again.
+
+Whichever it is, the promo cards reference their icon file rather than holding a copy of
+it, so re-exporting reaches them on the next `node docs/promo/render.js` and there is no
+second copy of the shed to keep in step by hand.

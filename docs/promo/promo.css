@@ -86,15 +86,37 @@ body {
   gap: var(--lockup-gap, 22px);
 }
 
-/* The shipped icon, referenced rather than redrawn: icons/icon.svg is the source of truth
-   for the mark, and a promo card holding its own copy is a promo card that goes stale the
-   first time the icon is touched. */
+/* The icon, referenced rather than redrawn: docs/assets/store-icon.png is the source of
+   truth for the mark, and a promo card holding its own copy is a promo card that goes stale
+   the first time the icon is touched.
+
+   No border-radius: the artwork brings its own rounded tile, and the antenna deliberately
+   breaks out of it. drop-shadow rather than box-shadow for the same reason — box-shadow
+   traces the element's rectangle, which after promo.js keys the field out is a box of empty
+   space around the shed. drop-shadow follows the alpha, so the antenna casts one too. */
 .lockup img {
   width: var(--icon, 84px);
   height: var(--icon, 84px);
   display: block;
-  border-radius: calc(var(--icon, 84px) * 0.203);   /* icon.svg's rx 26 of 128 */
-  box-shadow: 0 3px 10px rgba(24, 62, 100, 0.22);
+  /* The artwork sits inside its 128px box with 13px of empty margin each side (and 9/7 top
+     and bottom). Those become transparent once promo.js keys the field out, so left as
+     layout they would hold the mark 13/128ths of its own width off the card's left margin
+     and open the gap to the wordmark by the same again. Taking them back makes the layout
+     box the INK box, which is the box the eye is aligning to. Re-measure both numbers if
+     the icon is ever re-exported at different padding. */
+  margin-left: calc(var(--icon, 84px) * -0.1016);    /* 13 / 128 */
+  margin-right: calc(var(--icon, 84px) * -0.1016);
+  /* drop-shadow, not box-shadow: box-shadow traces the element's rectangle, which after the
+     key is a box of empty space around the shed. This follows the alpha, so the antenna
+     casts one too. */
+  filter: drop-shadow(0 3px 9px rgba(24, 62, 100, 0.30));
+}
+
+/* Stacked, the trim that matters is the bottom one — the right margin is not between
+   anything. */
+.lockup.stacked img {
+  margin-right: 0;
+  margin-bottom: calc(var(--icon, 84px) * -0.0547);  /* 7 / 128 */
 }
 
 .wordmark {

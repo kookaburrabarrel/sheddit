@@ -155,19 +155,31 @@ async function shoot(cdp, card, dest, scale) {
     await cdp.send('Page.navigate', { url: 'file://' + path.join(__dirname, card.src) }, sessionId);
     await loaded;                                    // includes the product-shot <iframe>
 
-    /* The webfont, then two frames. load fires before an @font-face file is necessarily
-       applied, and a card screenshotted mid-swap is one rendered in the fallback face —
-       a failure that looks like a design choice rather than like a bug. */
-    await cdp.send('Runtime.evaluate', {
-      expression: `document.fonts.ready.then(() =>
-        new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))`,
-      awaitPromise: true
+    /* The icon key, the webfont, then two frames. load fires before an @font-face file is
+       necessarily applied, and a card screenshotted mid-swap is one rendered in the fallback
+       face — a failure that looks like a design choice rather than like a bug. */
+    const { result } = await cdp.send('Runtime.evaluate', {
+      expression: `Promise.all([window.shdPromoReady, document.fonts.ready])
+        .then(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))
+        .then(() => window.shdPromoKeyed === true)`,
+      awaitPromise: true, returnByValue: true
     }, sessionId);
+    /* An icon that did not key is a pale rectangle sitting on the card's gradient. It is
+       perfectly legible, which is exactly why it has to fail here: nothing downstream would
+       notice, and the store would take the upload. */
+    if (result.value !== true) {
+      throw new Error('the icon background did not key — promo.js could not read the canvas ' +
+                      '(is --allow-file-access-from-files still being passed?)');
+    }
 
+    /* clip.scale stays 1 and the magnification is entirely the device scale factor set
+       above. The two MULTIPLY — passing the scale in both places asked for 3x and wrote a
+       9x image — and the device scale factor is the one that rasterises the type at the
+       higher resolution rather than upscaling a 1x raster. */
     const { data } = await cdp.send('Page.captureScreenshot', {
       format: 'png',
       captureBeyondViewport: false,
-      clip: { x: 0, y: 0, width: card.w, height: card.h, scale }
+      clip: { x: 0, y: 0, width: card.w, height: card.h, scale: 1 }
     }, sessionId);
     fs.writeFileSync(dest, Buffer.from(data, 'base64'));
   } finally {
@@ -202,6 +214,11 @@ async function main() {
     '--headless',
     '--no-sandbox',                     // the usual container case; harmless elsewhere
     '--disable-gpu',
+    /* promo.js reads the icon's pixels back off a canvas to key its flat background out,
+       and a canvas holding a file:// image is tainted without this. Scoped to a throwaway
+       profile rendering two local files, and the alternative is committing a second,
+       background-free copy of the icon that goes stale the first time the real one moves. */
+    '--allow-file-access-from-files',
     '--hide-scrollbars',
     '--force-color-profile=srgb',       // else the same card differs per display profile
     '--disable-lcd-text',               // subpixel AA would leave colour fringes on the type
