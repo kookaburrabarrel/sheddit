@@ -260,20 +260,24 @@ of the artwork the tiles replaced. Nothing references them now, and they are not
 
 What sat in that slot was generated marketing art — a drawn browser window, Reddit's alien,
 a Chrome logo, a caption — filed under the name `store-screenshot.png`, which it had no
-business carrying. It is now built from `docs/assets/listing-classic.jpg`: the extension
+business carrying. It is now built from `docs/assets/screenshot-source.jpg`: the extension
 actually rendering an actual Reddit front page in the classic theme.
 
-That took a crop rather than a rename, because the capture is 1408×708 and the store takes
-1280×800 or nothing. `docs/promo/screenshot.html` carries the numbers and the reasoning; the
-short version is that the crop comes off the right, stops in the gap before the sidebar so
-nothing is sliced mid-word, and costs a 17% upscale — some crispness, no legibility.
+That still takes a crop rather than a rename, because the capture is 1497×812 and the store
+takes 1280×800 or nothing. But at that width the crop keeps every row and still comes out a
+1.5% **downscale** — nothing is enlarged, so the type is as sharp as the capture. It stops
+eleven columns short of the maximum to put the cut in the gaps: the sidebar note breaks
+after "Rendered locally from" rather than through "page", and the theme bar after `night`
+rather than through `carbon`. `docs/promo/screenshot.html` carries the arithmetic.
 
-Only one screenshot exists and the store accepts up to five. One is enough to submit, but
-the slots are free and there are four more real captures sitting beside this one:
-`listing-slate.jpg`, `listing-sepia.jpg`, `listing-night.jpg` and `listing-carbon.jpg`, all
-the same size and all croppable by the same numbers. A listing that shows a dark theme as
-well as the front page answers more of what a visitor is deciding about, and adding them is
-four more entries in `render.js`'s list.
+Only one screenshot exists and the store accepts up to five. The other four themes have
+captures too — `listing-slate.jpg`, `listing-sepia.jpg`, `listing-night.jpg`,
+`listing-carbon.jpg` — and a listing that shows a dark theme as well as the front page
+answers more of what a visitor is deciding about. Worth knowing before adding them: those
+four are 1408×708, the narrower shape this asset used to be cut from, so each would need a
+17% upscale to reach 1280 wide. Re-capturing them at the width of `screenshot-source.jpg`
+would cost one pass through the theme switcher and would make all five as sharp as this
+one.
 
 ---
 

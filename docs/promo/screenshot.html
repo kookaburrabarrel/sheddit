@@ -9,29 +9,30 @@
 
   This is a REAL CAPTURE, and that is the whole point of the file. What sat in this slot
   before was generated marketing art — a drawn browser window, Reddit's alien, a Chrome
-  logo, a caption — labelled "screenshot", which it was not. docs/assets/listing-classic.jpg
-  is the extension actually rendering an actual Reddit front page in the classic theme, and
-  that is what a screenshot slot is for.
+  logo, a caption — labelled "screenshot", which it was not.
+  docs/assets/screenshot-source.jpg is the extension actually rendering an actual Reddit
+  front page in the classic theme, and that is what a screenshot slot is for.
 
   WHY IT IS FRAMED HERE RATHER THAN JUST RENAMED
-  listing-classic.jpg is 1408x708 and the store takes 1280x800 or nothing — a rename cannot
-  fix an aspect ratio. 1.99:1 has to become 1.6:1, and the only spare pixels are horizontal,
-  so the crop comes off the right. The numbers below are the least-bad version of that:
+  The capture is 1497x812 and the store takes 1280x800 or nothing — a rename cannot fix an
+  aspect ratio. 1.84:1 has to become 1.6:1, and the only spare pixels are horizontal, so the
+  crop comes off the right. Two numbers decide where:
 
-    - Cropping 1096 of the 1408 columns is as much width as can go while keeping every row
-      of pixels, which keeps the upscale to 17%. Taking less width means taking height too,
-      and every pixel of height costs more width and more upscale.
-    - 1096 lands in the gap after the theme bar's `slate` button and before the sidebar
-      starts at ~1100. One column further and the sidebar's "front page" heading is sliced
-      mid-word, which is the tell that an image was cropped; stopping short of it reads as
-      a narrower window, which is a shape this layout genuinely has.
-    - The bottom row is cut mid-post. That is not damage — it is what the bottom of any
-      scrolled viewport looks like, and it is in the source capture too.
+    - 812 rows at 1.6:1 allows 1299 columns of the 1497, so the crop can keep every row and
+      still come out as a 1.5% DOWNSCALE. Nothing is enlarged, which is why the type here is
+      as sharp as the capture itself. (The first version of this file cropped an earlier
+      1408x708 capture and had to upscale 17% to reach 1280 wide. A wider source is worth
+      more than any amount of care with the crop.)
+    - It stops at 1288 rather than 1299. Those eleven columns are what put the cut in the
+      GAPS: the sidebar note breaks after "Rendered locally from" instead of mid-way through
+      "page", and the theme bar breaks after `night` instead of through `carbon`'s swatch.
+      A cut through a glyph is the tell that an image was cropped; a cut between words reads
+      as the window edge. Costing 7 rows off the bottom to buy that is a good trade — see
+      below for why the bottom is the cheap end.
 
-  The store shows this at 1280x800 at most, so the 17% upscale costs some crispness and no
-  legibility. Re-rendering the layout instead would be pixel-sharp, and would be a picture
-  of invented posts rather than a screenshot of a real page. This slot is the one place that
-  trade is not worth making.
+  The bottom row cuts mid-post, and that is not damage: it is what the bottom of any scrolled
+  viewport looks like, and it is in the source capture too. The right edge is the one that
+  has to be careful, because a viewport does not clip its own sidebar mid-word.
 -->
 <style>
   html, body { margin: 0; padding: 0; overflow: hidden; background: #fff; }
@@ -45,20 +46,23 @@
     overflow: hidden;
   }
 
-  /* 1644 = 1408 * (1280 / 1096), i.e. the whole capture scaled until its first 1096 columns
-     measure 1280. 827 = 708 at the same scale; the frame keeps the top 800 of it. */
+  /* 1487.7 = 1497 * (1280 / 1288), i.e. the whole capture scaled until its first 1288
+     columns measure exactly 1280. 806.96 = 812 at that same scale, and the frame keeps the
+     top 800 of it — the 7 rows that buys the word-boundary cut on the right.
+
+     Both numbers are derived from the crop width; change 1288 and both move. */
   .frame img {
     position: absolute;
     left: 0;
     top: 0;
-    width: 1644px;
-    height: 827px;
+    width: 1487.7px;
+    height: 806.96px;
   }
 </style>
 </head>
 <body>
 <div class="frame">
-  <img src="../assets/listing-classic.jpg"
+  <img src="../assets/screenshot-source.jpg"
        alt="Sheddit rendering the Reddit front page in the classic old.reddit.com layout">
 </div>
 </body>
