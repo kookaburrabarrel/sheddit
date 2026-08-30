@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * render.js — turns docs/promo/*.html into the two Chrome Web Store promo images.
+ * render.js — turns docs/promo/*.html into the Chrome Web Store's image assets: the two
+ * promo tiles, and the listing screenshot.
  *
- *   node docs/promo/render.js                 # writes both into docs/assets/
+ *   node docs/promo/render.js                 # writes all three into docs/assets/
  *   node docs/promo/render.js --out /tmp/x    # somewhere else, to look before committing
  *   node docs/promo/render.js tile            # just the one
  *   node docs/promo/render.js --scale 2       # 2x, for reading the type up close
@@ -23,13 +24,29 @@ const { withChrome, pngInfo } = require('../../headless.js');
 
 const ROOT = path.join(__dirname, '..', '..');
 
-/* Exactly the sizes the store validates on upload. They live here as well as in each
-   card's CSS because this is what asserts them afterwards: a card whose <body> disagrees
-   with its entry here is a silently wrong-sized upload, and the store rejects those with a
-   message that does not say which dimension moved. */
+/* What each page must be ready for before it is photographed. A page that says it is not
+   ready throws instead of being shot anyway — see headless.js. */
+const SETTLE = {
+  /* The icon key and the webfont together. An icon that did not key is a pale rectangle on
+     the card's gradient — perfectly legible, which is exactly why it has to stop the render:
+     nothing downstream would notice and the store would take the upload. promo.js explains
+     what the key is for. */
+  card: `Promise.all([window.shdPromoReady, document.fonts.ready])
+           .then(() => window.shdPromoKeyed === true)`,
+  /* decode() rather than trusting load: the frame is a crop of one image, and an image that
+     has loaded but not decoded can still paint a frame late. A blank white 1280x800 is a
+     perfectly valid PNG and would upload without complaint. */
+  framed: `Promise.all([...document.images].map(i => i.decode())).then(() => true)`
+};
+
+/* Exactly the sizes the store validates on upload. They live here as well as in each page's
+   CSS because this is what asserts them afterwards: a page whose <body> disagrees with its
+   entry here is a silently wrong-sized upload, and the store rejects those with a message
+   that does not say which dimension moved. */
 const CARDS = [
-  { name: 'tile',    src: 'tile.html',    out: 'store-tile-440x280.png', w: 440,  h: 280 },
-  { name: 'marquee', src: 'marquee.html', out: 'store-marquee.png',      w: 1400, h: 560 }
+  { name: 'tile',       src: 'tile.html',       out: 'store-tile-440x280.png', w: 440,  h: 280, settle: SETTLE.card },
+  { name: 'marquee',    src: 'marquee.html',    out: 'store-marquee.png',      w: 1400, h: 560, settle: SETTLE.card },
+  { name: 'screenshot', src: 'screenshot.html', out: 'store-screenshot.png',   w: 1280, h: 800, settle: SETTLE.framed }
 ];
 
 /**
@@ -86,24 +103,18 @@ async function main() {
       try {
         const buf = await shoot({
           url: 'file://' + path.join(__dirname, card.src),
-          width: card.w, height: card.h, scale,
-          /* Waits for the icon key and the webfont together. An icon that did not key is a
-             pale rectangle on the card's gradient — perfectly legible, which is exactly why
-             it has to stop the render: nothing downstream would notice and the store would
-             take the upload. promo.js explains what the key is for. */
-          settle: `Promise.all([window.shdPromoReady, document.fonts.ready])
-                     .then(() => window.shdPromoKeyed === true)`
+          width: card.w, height: card.h, scale, settle: card.settle
         });
         fs.writeFileSync(dest, buf);
         const detail = scale === 1
           ? verify(buf, card.w, card.h)
           : `${card.w * scale}x${card.h * scale} (${scale}x preview — not for upload)`;
-        console.log(`${card.name.padEnd(8)} ${path.relative(ROOT, dest)}  —  ${detail}`);
+        console.log(`${card.name.padEnd(10)} ${path.relative(ROOT, dest)}  —  ${detail}`);
       } catch (e) {
-        const hint = /not ready to be shot/.test(e.message)
+        const hint = /not ready to be shot/.test(e.message) && card.settle === SETTLE.card
           ? ' — the icon background did not key; is --allow-file-access-from-files still being passed?'
           : '';
-        console.error(`${card.name.padEnd(8)} FAILED: ${e.message}${hint}`);
+        console.error(`${card.name.padEnd(10)} FAILED: ${e.message}${hint}`);
         failed += 1;
       }
     }
