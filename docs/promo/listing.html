@@ -1,0 +1,140 @@
+<!doctype html>
+<html class="shd-active" data-shd-theme="classic">
+<head>
+<meta charset="utf-8">
+<title>sheddit — listing mock</title>
+<!--
+  The promo cards' product shot. This is NOT a mockup of the layout: it links the two
+  stylesheets the extension actually ships and uses the class names src/modules/listing.js
+  and src/modules/chrome.js really emit, so a change to old-reddit.css changes this page
+  too and the artwork cannot drift away from the product it advertises. Rendered inside an
+  <iframe> by tile.html / marquee.html, which is what keeps `html.shd-active`'s !important
+  body rules off the promo card's own layout.
+
+  The posts open with the same seven the README banner uses — same fiction, same voice, one
+  place to change it — and three more follow them. The count is load bearing: both cards
+  crop this page to a fixed height and a short list would leave the bottom of the product
+  shot as an empty white rectangle. Ten rows overfill the taller crop; do not trim it.
+-->
+<link rel="stylesheet" href="../../src/styles/themes.css">
+<link rel="stylesheet" href="../../src/styles/old-reddit.css">
+<style>
+  /* The extension inherits a real page's scrollbars and margins; a screenshot source has
+     neither. Nothing here touches a --shd- token, so css-lint's rule about themes not
+     owning metrics is not in play — this file is not a theme and is not shipped. */
+  html, body { margin: 0; padding: 0; overflow: hidden; }
+  #shd-root { min-height: 100vh; padding-bottom: 0; }
+</style>
+</head>
+<body>
+
+<div id="shd-header" class="shd-chrome">
+  <span class="pagename"><a href="/">reddit</a></span>
+  <ul class="tabmenu">
+    <li><a href="/">front</a></li>
+    <li><a href="/r/all/">all</a></li>
+    <li><a href="/r/popular/">popular</a></li>
+  </ul>
+  <div class="shd-themebar" role="group" aria-label="colour theme">
+    <span class="shd-themelabel">theme:</span>
+    <button class="shd-theme-btn selected" data-theme="classic"><span class="shd-swatch"></span>classic</button>
+    <button class="shd-theme-btn" data-theme="slate"><span class="shd-swatch"></span>slate</button>
+    <button class="shd-theme-btn" data-theme="sepia"><span class="shd-swatch"></span>sepia</button>
+    <button class="shd-theme-btn" data-theme="night"><span class="shd-swatch"></span>night</button>
+    <button class="shd-theme-btn" data-theme="carbon"><span class="shd-swatch"></span>carbon</button>
+  </div>
+</div>
+
+<div class="shd-tabmenu-wrap">
+  <ul class="tabmenu">
+    <li class="selected"><a href="#">hot</a></li>
+    <li><a href="#">new</a></li>
+    <li><a href="#">rising</a></li>
+    <li><a href="#">controversial</a></li>
+    <li><a href="#">top</a></li>
+  </ul>
+</div>
+
+<div id="shd-root">
+  <div id="shd-sidebar" class="side">
+    <div class="spacer">
+      <div class="titlebox">
+        <h1 class="redditname"><a href="/">front page</a></h1>
+        <div class="shd-note">Rendered locally from page data. No API calls.</div>
+      </div>
+    </div>
+  </div>
+  <div id="siteTable" class="shd-sitetable"></div>
+</div>
+
+<script>
+/* The rows, built the way listing.js builds them — one array, one loop, so a row can
+   never be half-edited into a shape the real renderer would not produce. */
+const POSTS = [
+  { rank: 1, score: '42817', title: 'TIL the first webcam was invented to check if a coffee pot was full',
+    domain: 'st.cam.ac.uk', author: 'trojanroom', sub: 'r/todayilearned', comments: '1204 comments', hue: 205 },
+  { rank: 2, score: '9330', title: 'After 11 years, I finally finished my hand-built mechanical keyboard',
+    domain: 'i.redd.it', author: 'switchfiend', sub: 'r/MechanicalKeyboards', comments: '487 comments', hue: 42 },
+  { rank: 3, score: '3182', title: 'What is a small programming habit that made you dramatically better?',
+    domain: 'self.programming', author: 'quietcompiler', sub: 'r/programming', comments: '942 comments', self: true },
+  { rank: 4, score: '15602', title: 'Timelapse of a supercell forming over Nebraska',
+    domain: 'v.redd.it', author: 'stormchaser', sub: 'r/weather', comments: '331 comments', hue: 212, video: true },
+  { rank: 5, score: '28104', title: 'Old.reddit is still the fastest way to read this site and I will not be taking questions',
+    domain: 'self.Save3rdPartyApps', author: 'markdownemptyist', sub: 'r/Save3rdPartyApps', comments: '2077 comments', self: true },
+  { rank: 6, score: '7741', title: 'My cat has decided the server rack is now her thermal regulation device',
+    domain: 'i.redd.it', author: 'rackmounted', sub: 'r/homelab', comments: '208 comments', hue: 18 },
+  { rank: 7, score: '6019', title: 'A 40-year-old bug in the original Unix `sort` was fixed this week',
+    domain: 'lwn.net', author: 'coreutils', sub: 'r/linux', comments: '415 comments', hue: 138 },
+  { rank: 8, score: '11408', title: 'The bakery on my street has been feeding the same sourdough starter since 1974',
+    domain: 'i.redd.it', author: 'proofingdrawer', sub: 'r/Breadit', comments: '664 comments', hue: 32 },
+  { rank: 9, score: '5211', title: 'Someone rebuilt the 1977 Apple II BASIC interpreter in 4 KB of JavaScript',
+    domain: 'github.com', author: 'sixtyfiveohtwo', sub: 'r/retrocomputing', comments: '188 comments', hue: 262 },
+  { rank: 10, score: '4477', title: "What's a book you finished in one sitting and still think about?",
+    domain: 'self.books', author: 'marginalia', sub: 'r/books', comments: '1839 comments', self: true }
+];
+
+/* Thumbnails as flat data URIs rather than files: test/preview.js already establishes the
+   convention, and a promo asset that fetched seven pictures would fail to render the day
+   one of them 404s. */
+const swatch = (hue) => 'data:image/svg+xml,' + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="140" height="104">
+     <defs><linearGradient id="a" x1="0" y1="0" x2="0.4" y2="1">
+       <stop offset="0" stop-color="hsl(${hue},48%,78%)"/>
+       <stop offset="1" stop-color="hsl(${hue + 14},40%,62%)"/>
+     </linearGradient></defs>
+     <rect width="140" height="104" fill="url(#a)"/>
+   </svg>`);
+
+const table = document.getElementById('siteTable');
+for (const p of POSTS) {
+  const thumb = p.self
+    ? '<a class="thumbnail self" href="#"></a>'
+    : `<a class="thumbnail" href="#"><img src="${swatch(p.hue)}" alt=""></a>`;
+  const watch = p.video ? '<li><a class="watch" href="#">watch</a></li>' : '';
+  table.insertAdjacentHTML('beforeend', `
+    <div class="thing link ${p.self ? 'self' : 'linkpost'}" data-type="${p.video ? 'video' : 'link'}">
+      <span class="rank">${p.rank}</span>
+      <div class="midcol unvoted">
+        <div class="arrow up" role="button" aria-label="upvote"></div>
+        <div class="score unvoted">${p.score}</div>
+        <div class="arrow down" role="button" aria-label="downvote"></div>
+      </div>
+      ${thumb}
+      <div class="entry">
+        <p class="title">
+          <a class="title" href="#">${p.title}</a>
+          <span class="domain">(<a href="#">${p.domain}</a>)</span>
+        </p>
+        <p class="tagline">submitted <time>1 week ago</time> by <a class="author" href="#">${p.author}</a> to <a class="subreddit" href="#">${p.sub}</a></p>
+        <ul class="flat-list buttons">
+          <li class="first"><a class="comments" href="#">${p.comments}</a></li>
+          ${watch}
+          <li><a class="share" href="#">share</a></li>
+          <li><a class="hide" href="#">hide</a></li>
+        </ul>
+      </div>
+    </div>`);
+}
+</script>
+</body>
+</html>
