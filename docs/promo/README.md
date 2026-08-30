@@ -19,10 +19,11 @@ node docs/promo/render.js --scale 2          # 2x, for reading the type up close
 higher resolution rather than upscaled. It is for looking, not for uploading — the store
 wants the exact sizes above and nothing else.
 
-`promo.css` holds everything the two cards share and `promo.js` prepares the icon for both;
-each card's own file holds only the numbers that differ. Nothing here ships:
-`package-extension.js` builds the zip from a fixed list — `manifest.json`, `icons/`, `src/`,
-`options/` — so `docs/` never reaches a user.
+`npm run promo` is the same command. `promo.css` holds everything the two cards share and
+`promo.js` prepares the icon for both; each card's own file holds only the numbers that
+differ. The browser driving lives in the repository root's `headless.js`, shared with
+`export-icons.js`. Nothing here ships: `package-extension.js` builds the zip from a fixed
+list — `manifest.json`, `icons/`, `src/`, `options/` — so `docs/` never reaches a user.
 
 ## Why they are generated rather than drawn
 
@@ -94,9 +95,18 @@ re-exported at different padding: the artwork sits inside 13px of empty margin e
 so that the layout box is the *ink* box — otherwise the mark hangs 13/128ths of its own
 width off the card's left margin.
 
-Note that the extension itself ships a different drawing: `icons/icon.svg` and the four PNGs
-beside it are the same shed **without** the antenna. `icons/README.md` says what to do about
-that.
+### The other copy of the mark
+
+`icons/icon.svg` now carries the aerial too, so the extension and the store art no longer
+disagree about what the mark is — but they remain two drawings of it: `store-icon.png` is a
+raster with a navy outline, `icon.svg` is flat vector.
+
+Pointing these cards at `../../icons/icon.svg` instead is one line in `promo.css` plus
+dropping `data-key-field` from the two `<img>` tags. It would make the store art the same
+file a browser installs, and it would remove `promo.js`, the `--allow-file-access-from-files`
+flag, the readiness assertion in `render.js`, and the two padding constants — all of which
+exist only because the raster brings a background with it. What it costs is the outlined
+look. That is a design call, not a technical one, which is why it has not been made here.
 
 ## Rendering
 
@@ -110,7 +120,8 @@ Old Headless was removed from the Chrome binary in 132, and under new Headless
 screenshot is padded to the requested height with the page's background colour — so the
 bottom of the card is missing, at exactly the size the store accepts without complaint.
 `Emulation.setDeviceMetricsOverride` sets the viewport itself and `Page.captureScreenshot`'s
-clip crops to the pixel.
+clip crops to the pixel. That reasoning, and the browser handling around it, is in
+`headless.js` rather than here, because `export-icons.js` needs all of it too.
 
 The card is screenshotted only after `document.fonts.ready` and two animation frames. A
 card shot mid-font-swap renders in the fallback face, which looks like a design decision
