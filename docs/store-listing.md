@@ -211,15 +211,14 @@ so treat visibility as load-bearing for the listing rather than a preference.
 | Asset | Requirement | File |
 | --- | --- | --- |
 | Store icon | 128×128 PNG, artwork 96×96 with 16px transparent padding | `icons/icon128.png` |
-| Screenshot | 1–5 allowed, exactly 1280×800 or 640×400, full bleed, square corners | `docs/assets/store-screenshot.png` (1280×800) |
+| Screenshot | 1–5 allowed, exactly 1280×800 or 640×400, full bleed, square corners | `docs/assets/store-screenshot.png` (1280×800) — generated |
 | Small promo tile | 440×280 PNG or JPEG, 24-bit, no alpha | `docs/assets/store-tile-440x280.png` (440×280) |
 | Marquee promo tile | 1400×560, optional, only used if the item is featured | `docs/assets/store-marquee.png` (1400×560) |
 
 All of them are already at their exact required sizes.
 
-**The two promo tiles are generated, not drawn.** Their source is `docs/promo/`, and
-`node docs/promo/render.js` rewrites both in place; `docs/promo/README.md` is the full
-account. What matters here is why it is worth the extra file: the product shot on both
+**All three of those images are generated.** Their source is `docs/promo/`, and
+`npm run promo` rewrites them in place; `docs/promo/README.md` is the full account. What matters here is why it is worth the extra file: the product shot on both
 cards links `src/styles/old-reddit.css` directly and uses the class names `listing.js`
 actually emits, so the artwork is a screenshot of this extension's own output rather than a
 picture of it, and a change to the classic palette reaches the store art on the next run.
@@ -255,12 +254,26 @@ as its use in the item name above. And nothing that implies affiliation or endor
 which is the rule the item name is already written around.
 
 `store-promo-source.jpeg` and `store-marquee-source.jpg` are the full-resolution originals
-of the artwork these replaced. Nothing references them now that the cards are generated,
-and they are not uploaded.
+of the artwork the tiles replaced. Nothing references them now, and they are not uploaded.
 
-Only one screenshot exists and the store accepts up to five. One is enough to submit —
-but the slots are free, and a listing that shows the comment tree and a dark theme as
-well as the front page answers more of what a visitor is deciding about.
+### The screenshot is a screenshot again
+
+What sat in that slot was generated marketing art — a drawn browser window, Reddit's alien,
+a Chrome logo, a caption — filed under the name `store-screenshot.png`, which it had no
+business carrying. It is now built from `docs/assets/listing-classic.jpg`: the extension
+actually rendering an actual Reddit front page in the classic theme.
+
+That took a crop rather than a rename, because the capture is 1408×708 and the store takes
+1280×800 or nothing. `docs/promo/screenshot.html` carries the numbers and the reasoning; the
+short version is that the crop comes off the right, stops in the gap before the sidebar so
+nothing is sliced mid-word, and costs a 17% upscale — some crispness, no legibility.
+
+Only one screenshot exists and the store accepts up to five. One is enough to submit, but
+the slots are free and there are four more real captures sitting beside this one:
+`listing-slate.jpg`, `listing-sepia.jpg`, `listing-night.jpg` and `listing-carbon.jpg`, all
+the same size and all croppable by the same numbers. A listing that shows a dark theme as
+well as the front page answers more of what a visitor is deciding about, and adding them is
+four more entries in `render.js`'s list.
 
 ---
 

@@ -1,31 +1,47 @@
-# Store promo cards
+# Store artwork
 
-The two promotional images the Chrome Web Store asks for, and the source they are built
-from. Both are generated:
+The images the Chrome Web Store listing takes, and the sources they are built from. All of
+them are generated:
 
 ```bash
-node docs/promo/render.js                    # writes both into docs/assets/
+npm run promo                                # writes all three into docs/assets/
 node docs/promo/render.js tile               # just the small one
 node docs/promo/render.js --out /tmp/look    # somewhere else, to check before committing
 node docs/promo/render.js --scale 2          # 2x, for reading the type up close
 ```
 
-| Card | Size | Written to | Store field |
+| Source | Size | Written to | Store field |
 | --- | --- | --- | --- |
 | `tile.html` | 440×280 | `docs/assets/store-tile-440x280.png` | Small promo tile — **required** |
 | `marquee.html` | 1400×560 | `docs/assets/store-marquee.png` | Marquee promo tile — optional, used if the item is featured |
+| `screenshot.html` | 1280×800 | `docs/assets/store-screenshot.png` | Screenshot — 1 required, up to 5 allowed |
 
 `--scale` magnifies by raising the device scale factor, so the type is rasterised at the
 higher resolution rather than upscaled. It is for looking, not for uploading — the store
 wants the exact sizes above and nothing else.
 
-`npm run promo` is the same command. `promo.css` holds everything the two cards share and
-`promo.js` prepares the icon for both; each card's own file holds only the numbers that
-differ. The browser driving lives in the repository root's `headless.js`, shared with
+`promo.css` holds everything the two cards share and `promo.js` prepares the icon for both;
+each card's own file holds only the numbers that differ. `screenshot.html` shares none of
+it — it is a crop, not a composition. The browser driving lives in the repository root's `headless.js`, shared with
 `export-icons.js`. Nothing here ships: `package-extension.js` builds the zip from a fixed
 list — `manifest.json`, `icons/`, `src/`, `options/` — so `docs/` never reaches a user.
 
-## Why they are generated rather than drawn
+## The screenshot
+
+`screenshot.html` frames `docs/assets/listing-classic.jpg` — the extension rendering a real
+Reddit front page in the classic theme — down to the store's mandatory 1280×800.
+
+It is a **real capture**, and that is the point of the file. What was in this slot before
+was generated marketing art filed under the name `store-screenshot.png`. The crop numbers
+and why they are what they are live in that file's own comment; the short version is that
+1408×708 cannot become 1280×800 by renaming, the spare pixels are all horizontal, and the
+cut stops in the gap before the sidebar so nothing is sliced mid-word.
+
+Four more real captures sit beside it — `listing-slate.jpg`, `listing-sepia.jpg`,
+`listing-night.jpg`, `listing-carbon.jpg` — same size, same crop, and the store allows five
+screenshots. Adding them is four more entries in `render.js`'s list.
+
+## Why the cards are generated rather than drawn
 
 `listing.html` is the product shot, and it is not a mockup of the layout. It links
 `src/styles/old-reddit.css` and `src/styles/themes.css` directly and uses the class names
