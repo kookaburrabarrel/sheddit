@@ -8,12 +8,13 @@
   store shows if the item is ever featured. Rendered by render.js; see docs/promo/README.md.
 -->
 <link rel="stylesheet" href="promo.css">
+<script src="promo.js" defer></script>
 <style>
   html, body, .card { width: 1400px; height: 560px; }
 
   .card {
     --top-rule: 6px;
-    --icon: 92px;
+    --icon: 116px;                 /* 116 x 102/128 = a 92px tile, as before */
     --lockup-gap: 24px;
     --wordmark: 90px;
     --hook: 33px;
@@ -61,7 +62,7 @@
 
   <div class="brand">
     <div class="lockup">
-      <img src="../../icons/icon.svg" alt="">
+      <img src="../assets/store-icon.png" data-key-field alt="">
       <div class="wordmark">Sheddit</div>
     </div>
 

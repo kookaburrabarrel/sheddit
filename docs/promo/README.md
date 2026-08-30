@@ -15,9 +15,14 @@ node docs/promo/render.js --scale 2          # 2x, for reading the type up close
 | `tile.html` | 440×280 | `docs/assets/store-tile-440x280.png` | Small promo tile — **required** |
 | `marquee.html` | 1400×560 | `docs/assets/store-marquee.png` | Marquee promo tile — optional, used if the item is featured |
 
-`promo.css` holds everything the two cards share; each card's own file holds only the
-numbers that differ. Nothing here ships: `package-extension.js` builds the zip from a fixed
-list — `manifest.json`, `icons/`, `src/`, `options/` — so `docs/` never reaches a user.
+`--scale` magnifies by raising the device scale factor, so the type is rasterised at the
+higher resolution rather than upscaled. It is for looking, not for uploading — the store
+wants the exact sizes above and nothing else.
+
+`promo.css` holds everything the two cards share and `promo.js` prepares the icon for both;
+each card's own file holds only the numbers that differ. Nothing here ships:
+`package-extension.js` builds the zip from a fixed list — `manifest.json`, `icons/`, `src/`,
+`options/` — so `docs/` never reaches a user.
 
 ## Why they are generated rather than drawn
 
@@ -63,9 +68,35 @@ Three things the store's policies rule out, so that a later edit does not put th
 
 ## The icon
 
-Both cards reference `icons/icon.svg` rather than holding a copy, so the mark on the store
-art is the mark that ships. Re-export the icon and the promo cards follow on the next run;
-there is no second copy to forget.
+Both cards reference `docs/assets/store-icon.png` rather than holding a copy, so
+re-exporting the icon reaches the store art on the next run and there is no second copy to
+forget.
+
+That file is 128×128 with **no alpha**: the artwork sits on an opaque pale-blue field
+(~`#cfebfe`), and the antenna deliberately breaks up out of the rounded tile into it. Drop
+it on a card as-is and it reads as a pale rectangle stuck to a gradient, with any box-shadow
+tracing the rectangle instead of the shed — and cropping is no answer either, because a box
+tight enough to lose the field also cuts the antenna off.
+
+So `promo.js` keys the field out at render time: flood-fill inward from the border (not a
+global colour key, or it would punch a hole through the antenna's pale-centred ring), then
+recover the true colour of the part-covered edge pixels so no pale rim survives. It reads
+the pixels back off a canvas, which is why `render.js` passes
+`--allow-file-access-from-files` — without it the canvas is tainted and `getImageData`
+throws. **Opening these pages by hand in an ordinary browser will therefore show the pale
+square**, which is fine for checking a layout and wrong for an upload; `render.js` waits on
+`window.shdPromoReady` and refuses to screenshot a card whose icon did not key, so that
+difference cannot reach the store.
+
+Two numbers in `promo.css` come off that file and would need re-measuring if it is
+re-exported at different padding: the artwork sits inside 13px of empty margin each side and
+9/7 top and bottom within its 128px box, and the card takes those back as negative margins
+so that the layout box is the *ink* box — otherwise the mark hangs 13/128ths of its own
+width off the card's left margin.
+
+Note that the extension itself ships a different drawing: `icons/icon.svg` and the four PNGs
+beside it are the same shed **without** the antenna. `icons/README.md` says what to do about
+that.
 
 ## Rendering
 

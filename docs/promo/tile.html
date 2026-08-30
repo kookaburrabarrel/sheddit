@@ -10,12 +10,13 @@
   meant to read as texture rather than as text.
 -->
 <link rel="stylesheet" href="promo.css">
+<script src="promo.js" defer></script>
 <style>
   html, body, .card { width: 440px; height: 280px; }
 
   .card {
     --top-rule: 4px;
-    --icon: 50px;
+    --icon: 64px;                  /* 64 x 102/128 = a 51px tile, as before */
     --lockup-gap: 11px;
     --wordmark: 42px;
     --sub: 14px;
@@ -36,7 +37,8 @@
   }
 
   .lockup { margin-bottom: 13px; }
-  .lockup img { margin-bottom: 10px; }
+  /* on top of the -7/128 trim promo.css applies, for a 10px optical gap */
+  .lockup img { margin-bottom: calc(10px - var(--icon) * 0.0547); }
   .sub { margin-bottom: 14px; }
   .sub b { font-weight: 700; color: var(--ink); }
 
@@ -63,7 +65,7 @@
 
   <div class="brand">
     <div class="lockup stacked">
-      <img src="../../icons/icon.svg" alt="">
+      <img src="../assets/store-icon.png" data-key-field alt="">
       <div class="wordmark">Sheddit</div>
     </div>
 
