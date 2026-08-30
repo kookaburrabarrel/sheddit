@@ -39,12 +39,12 @@ that broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 **Five ways to read it, all of them content to let you leave — and none of them watching you read.**
 
-<img src="docs/assets/themes.gif" alt="Sheddit cycling through its five themes: classic, slate, sepia, night and carbon" width="900">
+<img src="docs/assets/themes.gif" alt="Sheddit cycling through its five themes: classic, slate, sepia, night and carbon" width="630">
 
 <br><br>
 
 **NSFW Support**<br>
-<img src="docs/assets/post-types.jpg" alt="Sheddit rendering r/CombatFootage in the classic theme: video posts with thumbnails and watch links, NSFW-tagged posts, and comment counts" width="900">
+<img src="docs/assets/post-types.jpg" alt="Sheddit rendering r/CombatFootage in the classic theme: video posts with thumbnails and watch links, NSFW-tagged posts, and comment counts" width="630">
 
 </div>
 
