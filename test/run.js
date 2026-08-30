@@ -2480,7 +2480,7 @@ async function boot(html, url, setup) {
       /'pushState'\s*,\s*'replaceState'/.test(bridgeSrc) && /history\s*\[\s*m\s*\]\s*=/.test(bridgeSrc));
   }
 
-  console.log('\n\x1b[1mTHE VERSION IS STATED IN FOUR PLACES\x1b[0m');
+  console.log('\n\x1b[1mTHE VERSION IS STATED IN SIX PLACES\x1b[0m');
   {
     // The version is the only build identity available while testing — the failure card
     // prints it and a report can only be matched to a build if it moved with the build.
@@ -2510,6 +2510,53 @@ async function boot(html, url, setup) {
     check('every version the README states is the shipped one',
       stated.every(v => v === manifestV),
       `README says ${[...new Set(stated)].join(', ')}; manifest says ${manifestV}`);
+
+    /* Two more since 0.29.0, and they are the two that fail SILENTLY.
+       dist/latest.json is the answer an installed copy gets when it asks "is there a newer
+       one?" — left behind at a release, it tells every reader on every build that they are
+       current, forever, and the update check reports success while being useless.
+       BUILT in update.js is the other half: the staleness nudge measures from it, so a
+       BUILT that stops moving eventually calls every fresh install stale. Neither breaks a
+       test on its own; both are one perl line in refresh-zip.sh away from being right. */
+    const latest = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '..', 'dist', 'latest.json'), 'utf8'));
+    check('dist/latest.json offers the version this tree actually ships',
+      latest.version === manifestV, `latest.json ${latest.version} vs manifest ${manifestV}`);
+    check('...and points somewhere https, since the header links whatever it names',
+      typeof latest.url === 'string' && latest.url.startsWith('https://'), String(latest.url));
+    /* `notes` is the one field in that file no script can bump: it is a sentence a person
+       wrote about a particular release, and it is shown to the reader as the reason to
+       update. A note left over from an earlier version is a lie told with confidence, so
+       it has to name the version it belongs to. */
+    check('...and any release note names the release it describes',
+      latest.notes == null ||
+      (typeof latest.notes === 'string' && latest.notes.includes(latest.version)),
+      String(latest.notes));
+
+    const updateSrc = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'core', 'update.js'), 'utf8');
+    const built = (updateSrc.match(/const BUILT = '(\d{4}-\d{2}-\d{2})'/) || [])[1];
+    check('update.js carries a build date in a form Date.parse understands',
+      !!built && !Number.isNaN(Date.parse(built)), String(built));
+    check('...that is not in the future, which would read as a negative age',
+      Date.parse(built) <= Date.now() + 86400000, String(built));
+    check('...and agrees with the release date latest.json states',
+      built === latest.released, `${built} vs ${latest.released}`);
+
+    /* dist/ is ignored wholesale except for the artifacts that are deliberately committed,
+       and latest.json is one of them — it is not a build output but the file an installed
+       copy READS to learn whether a newer version exists. Left ignored it never reaches
+       main, every check in the field answers 404 forever, and nothing here would have said
+       so: the tests read it off disk, where it exists either way. */
+    const ignore = fs.readFileSync(path.join(__dirname, '..', '.gitignore'), 'utf8');
+    check('dist/latest.json is exempted from the dist/ ignore, or it never ships',
+      /^!dist\/latest\.json$/m.test(ignore));
+
+    /* The release script is the only thing that keeps all six in step, so what it rewrites
+       is itself the contract. A file dropped from this list is the drift that follows. */
+    const refresh = fs.readFileSync(path.join(__dirname, '..', 'refresh-zip.sh'), 'utf8');
+    for (const f of ['manifest.json', 'package.json', 'dist/latest.json', 'src/core/update.js'])
+      check(`refresh-zip.sh rewrites ${f} on a version bump`, refresh.includes(f), f);
   }
 
   console.log('\n\x1b[1mTHE FIREFOX MANIFEST\x1b[0m');
@@ -2718,6 +2765,228 @@ async function boot(html, url, setup) {
       !nsfwRow().querySelector('.thumbnail img'));
     check('the toggle survives the round trip in both directions',
       btn().getAttribute('aria-pressed') === 'false' && rows() === before);
+  }
+
+  /* THE UPDATE CHECK (0.29.0). Sheddit is installed by hand and never updates itself, so
+     the header carries the only notice a reader will ever get. The feature is two halves
+     with very different costs, and the tests are split the same way: the NUDGE is local
+     arithmetic over the build date and must never touch the network, and the CHECK is one
+     request that must happen on a click and at no other moment.
+
+     Every test here counts requests, for the reason the video tests do and one more: a
+     check that fired on its own would be a periodic ping carrying an IP and a timestamp
+     from every install — telemetry by accident, and the exact thing PRIVACY.md says this
+     extension does not do. `calls.length === 0` on boot is the assertion that keeps that
+     promise, and it is worth more than everything below it. */
+  console.log('\n\x1b[1mTHE UPDATE CHECK\x1b[0m');
+  {
+    const LATEST = {
+      version: '0.30.0',
+      released: '2026-09-15',
+      url: 'https://github.com/kookaburrabarrel/sheddit#install',
+      notes: 'Comments render again on the new markup.'
+    };
+
+    /** boot() with a manifest version, chrome.storage.local and fetch all stubbed. */
+    const bootUpdate = async ({ installed = '0.29.0', answer = LATEST, stored = null,
+                               ok = true, fail = false } = {}) => {
+      const calls = [];
+      const writes = [];
+      const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/', (w) => {
+        w.chrome = {
+          runtime: { getManifest: () => ({ version: installed }) },
+          storage: {
+            local: {
+              get: async () => (stored ? { update: stored } : {}),
+              set: async (v) => { writes.push(v); }
+            },
+            sync: { get: async () => ({}), set: async () => {} },
+            onChanged: { addListener() {} }
+          }
+        };
+        w.fetch = (u, init) => {
+          calls.push({ url: String(u), init: init || {} });
+          return fail ? Promise.reject(new Error('network'))
+                      : Promise.resolve({ ok, json: () => Promise.resolve(answer) });
+        };
+      });
+      const host = () => doc.querySelector('#shd-header .shd-update');
+      const btn = () => host()?.firstElementChild;
+      const click = () => btn().dispatchEvent(new window.Event('click'));
+      return { doc, window, calls, writes, host, btn, click };
+    };
+
+    {
+      const { doc, calls, host, btn, click, writes } = await bootUpdate();
+
+      /* Position is the request: left of the theme switcher, inside the same bar. */
+      const bar = doc.querySelector('#shd-header .shd-themebar');
+      check('the control sits in the theme bar, left of everything else in it',
+        !!host() && host().parentElement === bar && bar.firstElementChild === host(),
+        bar?.firstElementChild?.className);
+      check('...and ahead of the theme label, which is what "left of the theme toggle" means',
+        !!host() && !!doc.querySelector('#shd-header .shd-themelabel') &&
+        (host().compareDocumentPosition(doc.querySelector('#shd-header .shd-themelabel'))
+          & 4) !== 0);
+      check('it is a live region, so the answer is announced and not just painted',
+        host().getAttribute('role') === 'status' &&
+        host().getAttribute('aria-live') === 'polite');
+
+      /* THE ONE THAT MATTERS. */
+      check('rendering the header sends NO request — the check is a click, never a page load',
+        calls.length === 0, JSON.stringify(calls.map(c => c.url)));
+      check('a fresh build says so quietly rather than nagging',
+        btn().textContent === 'updates' &&
+        !btn().classList.contains('shd-update-stale'), btn().textContent);
+      check('...and it is a button at that point, not a link to somewhere',
+        btn().tagName === 'BUTTON');
+
+      click();
+      await waitFor(() => btn()?.textContent === 'update to 0.30.0');
+
+      check('one click sends exactly one request', calls.length === 1,
+        JSON.stringify(calls.map(c => c.url)));
+      check('...for the version file in the repo, over https',
+        calls[0].url ===
+          'https://raw.githubusercontent.com/kookaburrabarrel/sheddit/main/dist/latest.json',
+        calls[0].url);
+      /* The referrer is the leak that would have shipped by default: without this, a check
+         run from a comments page hands GitHub the thread being read. */
+      check('...carrying no cookies and no referrer',
+        calls[0].init.credentials === 'omit' &&
+        calls[0].init.referrerPolicy === 'no-referrer', JSON.stringify(calls[0].init));
+      check('...and refusing a cached answer, which would claim currency it cannot know',
+        calls[0].init.cache === 'no-store', String(calls[0].init.cache));
+
+      const a = btn();
+      check('a newer version turns the control into a link you can act on',
+        a.tagName === 'A' && a.getAttribute('href') === LATEST.url &&
+        a.classList.contains('shd-update-new'), a.getAttribute('href'));
+      check('...opening in a new tab without handing the target a window reference',
+        a.getAttribute('rel') === 'noopener noreferrer' && a.getAttribute('target') === '_blank');
+      check('...naming both versions, since "which one am I on" is the actual question',
+        a.title.includes('0.30.0') && a.title.includes('0.29.0'), a.title);
+      check('...and saying the reload step, which is the part people miss',
+        /chrome:\/\/extensions/.test(a.title));
+      check('the answer is stored, so the next page load knows without asking again',
+        writes.length === 1 && writes[0].update.version === '0.30.0' &&
+        typeof writes[0].update.at === 'number', JSON.stringify(writes));
+
+      click();
+      check('clicking the link does not fire a second request', calls.length === 1);
+    }
+
+    {
+      /* The stored answer is what makes one check enough. */
+      const { calls, btn } = await bootUpdate({
+        stored: { at: Date.now(), version: '0.30.0', url: LATEST.url, notes: null }
+      });
+      await waitFor(() => btn()?.textContent === 'update to 0.30.0');
+      check('a stored answer paints the notice on the next page with no request at all',
+        calls.length === 0 && btn().tagName === 'A', JSON.stringify(calls.map(c => c.url)));
+    }
+
+    {
+      const { calls, btn } = await bootUpdate({
+        installed: '0.30.0',
+        stored: { at: Date.now(), version: '0.30.0', url: LATEST.url, notes: null }
+      });
+      /* Self-clearing: once the reader actually updates, the notice has nothing to say and
+         stops saying it — no dismiss button, no stored "seen" flag to go stale. */
+      await new Promise(r => setTimeout(r, 20));
+      check('a stored answer the reader has caught up with goes quiet by itself',
+        btn().textContent === 'updates' && calls.length === 0, btn().textContent);
+    }
+
+    {
+      const { btn, click, calls } = await bootUpdate({ installed: '0.30.0' });
+      click();
+      await waitFor(() => btn()?.textContent === 'up to date');
+      check('being current is an answer worth showing, not silence',
+        btn().textContent === 'up to date' && btn().tagName === 'BUTTON');
+      check('...and it stays clickable, because the answer ages', calls.length === 1);
+    }
+
+    {
+      const { btn, click } = await bootUpdate({ fail: true });
+      click();
+      await waitFor(() => btn()?.textContent === 'check failed');
+      const a = btn();
+      check('a check that cannot reach GitHub is not a dead end — it still offers the page',
+        a.tagName === 'A' && a.getAttribute('href') === 'https://github.com/kookaburrabarrel/sheddit#install',
+        a.getAttribute('href'));
+    }
+
+    {
+      const { btn, click } = await bootUpdate({ ok: false });
+      click();
+      await waitFor(() => btn()?.textContent === 'check failed');
+      check('an error status is a failure, not an answer', btn().textContent === 'check failed');
+    }
+
+    {
+      /* A hostile or corrupted answer must be unable to claim anything. The version is the
+         claim, and the url is where the claim sends you — both are attacker-shaped inputs
+         the moment the file is not what we think it is. */
+      const { btn, click, writes } = await bootUpdate({ answer: { version: 99 } });
+      click();
+      await waitFor(() => btn()?.textContent === 'check failed');
+      check('an answer with no usable version is refused rather than displayed',
+        btn().textContent === 'check failed' && writes.length === 0);
+    }
+
+    {
+      const { btn, click } = await bootUpdate({
+        answer: { version: '0.30.0', url: 'javascript:alert(1)' }
+      });
+      click();
+      await waitFor(() => btn()?.tagName === 'A');
+      check('a non-https url in the answer is dropped for the project page, not followed',
+        btn().getAttribute('href') === 'https://github.com/kookaburrabarrel/sheddit#install',
+        btn().getAttribute('href'));
+    }
+
+    {
+      /* THE NUDGE. No request, no answer, no network: just the build date and the clock,
+         which is the half that still works for a reader who never clicks anything. */
+      const { window, calls } = await bootUpdate();
+      const built = Date.parse(window.SHD.update.BUILT);
+      const realNow = window.Date.now;
+      window.Date.now = () => built + (window.SHD.update.STALE_DAYS + 33) * 86400000;
+      const bar = window.SHD.chrome.themeBar();
+      const b = bar.querySelector('.shd-update-btn');
+      check('a build old enough to be the likely explanation says so on its own',
+        b.textContent === 'update?' && b.classList.contains('shd-update-stale'),
+        b.textContent);
+      check('...naming the age, because "old" is not actionable and "63 days" is',
+        /\b63 days\b/.test(b.title), b.title);
+      check('...and telling the reader why a hand-install is different',
+        /never updates itself/.test(b.title));
+      check('the nudge costs no request — it is arithmetic over a stamped date',
+        calls.length === 0, JSON.stringify(calls.map(c => c.url)));
+
+      /* And the rule that keeps it from becoming a nag: a fresh answer resets the clock the
+         nudge reads, so a reader who checked yesterday is not told tomorrow that a build
+         nobody has replaced is suspect. */
+      window.Date.now = realNow;
+      const quiet = window.SHD.chrome.themeBar().querySelector('.shd-update-btn');
+      check('...and a build inside the window says nothing at all', quiet.textContent === 'updates');
+    }
+
+    {
+      const { window } = await bootUpdate();
+      const cmp = window.SHD.update.cmp;
+      check('0.29.0 < 0.30.0 < 0.30.1 < 1.0.0',
+        cmp('0.29.0', '0.30.0') === -1 && cmp('0.30.0', '0.30.1') === -1 &&
+        cmp('0.30.1', '1.0.0') === -1);
+      check('10 sorts above 9, which string comparison gets backwards',
+        cmp('0.9.0', '0.10.0') === -1 && cmp('0.10.0', '0.9.0') === 1);
+      check('equal is equal, however many parts are written',
+        cmp('0.29.0', '0.29.0') === 0 && cmp('1.0', '1.0.0') === 0);
+      /* The direction that matters: garbage must fail to be newer, never manage to be. */
+      check('a malformed version cannot claim to be newer',
+        cmp('rm -rf', '0.29.0') === -1 && cmp('', '0.0.1') === -1);
+    }
   }
 
   console.log('\n\x1b[1mA SILENT OBSERVER MUST NOT STALL THE FEED\x1b[0m');

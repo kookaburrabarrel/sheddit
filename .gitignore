@@ -2,5 +2,9 @@ node_modules/
 dist/*
 !dist/sheddit.zip
 !dist/sheddit-firefox.zip
+# Not a build artifact: this is the file an installed copy READS to learn whether a newer
+# version exists, served straight out of the repository. Ignored, it never reaches main and
+# every check answers 404 forever.
+!dist/latest.json
 test/out.*.html
 .DS_Store

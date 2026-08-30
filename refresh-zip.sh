@@ -33,7 +33,26 @@ if [ -n "$BUMP" ]; then
   for f in manifest.json package.json; do
     perl -0pi -e 's/("version":\s*")[0-9]+\.[0-9]+\.[0-9]+(")/${1}'"$BUMP"'${2}/' "$f"
   done
+
+  # And the two halves of the update check, which fail QUIETLY rather than loudly.
+  #
+  # dist/latest.json is what an installed copy is answered with when its reader asks
+  # whether there is anything newer. Left at the old version it does not error — it tells
+  # every reader on every build that they are already current, which is worse than having
+  # no check at all, because they now believe they checked.
+  #
+  # BUILT in update.js is the local half: the header's nudge measures this copy's age from
+  # it without touching the network. Frozen, it eventually calls a fresh install stale and
+  # trains people to ignore the one notice they get.
+  #
+  # run.js asserts all four names appear in this script, so dropping one fails the suite
+  # rather than the next release.
+  TODAY=$(date -u +%F)
+  perl -0pi -e 's/("version":\s*")[0-9]+\.[0-9]+\.[0-9]+(")/${1}'"$BUMP"'${2}/' dist/latest.json
+  perl -0pi -e 's/("released":\s*")[0-9-]+(")/${1}'"$TODAY"'${2}/' dist/latest.json
+  perl -0pi -e "s/(const BUILT = ')[0-9-]+(')/\${1}$TODAY\${2}/" src/core/update.js
   echo "bumped manifest.json + package.json to $BUMP"
+  echo "stamped dist/latest.json + src/core/update.js with $BUMP / $TODAY"
 fi
 
 VERSION=$(perl -ne 'print $1 and exit if /"version":\s*"([^"]+)"/' manifest.json)
@@ -49,7 +68,7 @@ fi
 node package-extension.js
 node package-extension.js --check
 
-git add dist/sheddit.zip manifest.json package.json
+git add dist/sheddit.zip dist/latest.json manifest.json package.json src/core/update.js
 git commit --quiet --message "Rebuild the download zip for $VERSION"
 git push --quiet origin main
 echo

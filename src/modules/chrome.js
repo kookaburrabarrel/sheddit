@@ -32,6 +32,100 @@ SHD.chrome = (() => {
   }
 
   /**
+   * The update control, at the left end of the theme bar.
+   *
+   * It lives here rather than on the options page for the reason the theme buttons do: this
+   * bar is the surface a reader actually sees. An extension installed by hand never updates
+   * itself (see update.js), so a notice nobody opens the options page to find is a notice
+   * that does not exist — and the reader who most needs it is by definition the one who set
+   * this up once, months ago, and has not thought about it since.
+   *
+   * Quiet by default. It says nothing but its own name until either the copy is old enough
+   * to be worth a look (arithmetic, no network) or the reader has clicked and been told
+   * there is something newer (one request, on that click). It never checks by itself.
+   */
+  function updateControl() {
+    /* Kick the stored answer off on first paint. A promise that has already run is a no-op,
+       and when it does land it repaints through the watcher below rather than here. */
+    SHD.update.load();
+    return h('span.shd-update', { role: 'status', 'aria-live': 'polite' }, updateBody());
+  }
+
+  /** The control's one child, chosen from update state. A link when there is somewhere to
+      go, a button when there is something to ask. */
+  function updateBody() {
+    const s = SHD.update.state();
+
+    if (s.phase === 'checking') {
+      return h('button.shd-update-btn', {
+        type: 'button', disabled: true, text: 'checking\u2026'
+      });
+    }
+
+    if (s.ahead) {
+      /* The reload step is the part people miss — Chrome keeps running the copy it read at
+         load time, so a downloaded zip changes nothing until the card is reloaded. Saying so
+         in the title is cheaper than the bug report that follows from not saying it. */
+      return h('a.shd-update-btn.shd-update-new', {
+        href: s.url, target: '_blank', rel: 'noopener noreferrer',
+        /* Both version numbers, always. "Which one am I on" is the question a reader
+           actually has, and the release note — when there is one — answers a different
+           one, so it is added to that rather than substituted for it. */
+        title: `Version ${s.latest} is out.${s.notes ? ' ' + s.notes : ''} `
+             + `You are running ${s.installed}. `
+             + 'Download it, replace the folder, then press \u21bb on the Sheddit card in '
+             + 'chrome://extensions — until you do, the old copy keeps running.',
+        text: `update to ${s.latest}`
+      });
+    }
+
+    if (s.phase === 'failed') {
+      /* A check that cannot reach GitHub must not be a dead end: the reader still wanted to
+         know, and the download page answers the question by hand. */
+      return h('a.shd-update-btn.shd-update-stale', {
+        href: s.url, target: '_blank', rel: 'noopener noreferrer',
+        title: 'Could not reach GitHub to ask. Opens the download page instead, '
+             + 'where the current version is stated.',
+        text: 'check failed'
+      });
+    }
+
+    if (s.phase === 'done') {
+      return h('button.shd-update-btn', {
+        type: 'button',
+        title: `Version ${s.latest} is the newest, and it is the one you are running. `
+             + 'Click to ask again.',
+        onclick: () => SHD.update.check(),
+        text: 'up to date'
+      });
+    }
+
+    return h('button.shd-update-btn', {
+      type: 'button',
+      class: s.stale ? 'shd-update-stale' : null,
+      title: s.stale
+        ? `This copy is ${s.days} days old and has not been checked. A hand-installed `
+          + 'extension never updates itself, so it stays this old until you replace it. '
+          + 'Click to ask GitHub whether a newer one exists — one request for a version '
+          + 'file, no cookies, no referrer, nothing about you.'
+        : 'Ask GitHub whether a newer build exists. One request for a version file, sent '
+          + 'only when you click: no cookies, no referrer, nothing about you.',
+      onclick: () => SHD.update.check(),
+      text: s.stale ? 'update?' : 'updates'
+    });
+  }
+
+  /* ONE subscription for the life of the page, not one per header. The header is torn down
+     and rebuilt on every route change and every re-render (see reset()), so a watcher
+     registered inside the builder would leave a dead copy behind on each navigation and
+     paint through a detached node. This one finds whatever control is on screen now, and
+     does nothing when there is none. */
+  SHD.update.onChange(() => {
+    const host = document.querySelector('#shd-header .shd-update');
+    if (host) host.replaceChildren(updateBody());
+  });
+
+  /**
    * The adult-thumbnail toggle, beside the theme buttons.
    *
    * It writes the same `showNsfwThumbnails` the options page writes, so the two surfaces
@@ -68,6 +162,7 @@ SHD.chrome = (() => {
   function themeBar() {
     const active = SHD.theme.current();
     return h('div.shd-themebar', { role: 'group', 'aria-label': 'colour theme' }, [
+      updateControl(),
       h('span.shd-themelabel', { text: 'theme:' }),
       ...SHD.theme.LIST.map(t => h('button.shd-theme-btn', {
         type: 'button',
@@ -146,5 +241,5 @@ SHD.chrome = (() => {
     document.querySelector('#shd-header')?.remove();
   }
 
-  return { header, tabMenu, themeBar, nsfwToggle, sidebar, reset };
+  return { header, tabMenu, themeBar, nsfwToggle, updateControl, sidebar, reset };
 })();

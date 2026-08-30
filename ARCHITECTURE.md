@@ -145,11 +145,12 @@ sheddit/
 │   │   ├── paginator.js        drives faceplate-partial.loadContent() off its own sentinel
 │   │   ├── model.js            shreddit-* element → plain JS model object
 │   │   ├── media.js            DASH-manifest resolution + video/audio pairing (0.16–0.17)
+│   │   ├── update.js           build-age nudge + the click-only version check (0.29.0)
 │   │   └── dom.js              tiny h() builder, escaping, number/time formatting
 │   ├── modules/
 │   │   ├── listing.js          feed & subreddit → old-reddit link rows
 │   │   ├── comments.js         comment list → nested thread tree, via `depth` (§1.4)
-│   │   └── chrome.js           header bar, theme switcher, tab menu, right sidebar
+│   │   └── chrome.js           header bar, update control, theme switcher, tab menu, sidebar
 │   └── styles/
 │       ├── suppress.css        hides native shreddit chrome (document_start)
 │       ├── themes.css          the alternate palettes (document_start — see themes.js)
