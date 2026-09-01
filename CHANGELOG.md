@@ -86,16 +86,36 @@ a working volume slider — the exact lie the "no audio track" note exists to pr
 layer down. The sound row now says the audio track was refused, and deliberately does not
 take the picture down with it.
 
-### Fixed — the player's poster walked past the adult-content gate
+### Added — an adult video post is blurred with a *click to play*, not replaced by a tile
 
-Found while adding the still above, and the same bug at a different size. Bug 41's rule is
-that anything Sheddit *draws itself* from a URL it read off the page bypasses the blur Reddit
-applies for logged-out readers, so every picture asks the same question first. The video
-poster never did — it was written as a loading state rather than as a picture, and it is
-both. Poster and still are now gated exactly as the thumbnail and the inline images are:
-adult video still plays wherever inline video is on, it simply does not show a frame of
-itself first. PRIVACY.md is unchanged — nothing new leaves the browser — and the README's
-statement of the adult opt-in now says what it covers on a video post.
+Two things collided here. The player's poster frame had never answered to the adult opt-in —
+it was written as a loading state rather than as a picture, and it is both, so it walked past
+the gate every other picture stops at (bug 41's rule: anything Sheddit draws itself from a
+URL it read off the page bypasses the blur Reddit applies to logged-out readers). And the
+obvious fix, gating it like a thumbnail, was put to the maintainer and rejected — correctly.
+Old reddit's answer everywhere else is a placeholder tile, but **a player is not a tile**:
+declining to draw a thumbnail somebody scrolled past is a different act from hiding a video
+they navigated to on purpose, and the setting's own name is about what is *shown*, not about
+what may be *watched*.
+
+So a flagged video post now renders its player **blurred, under a single `adult content —
+click to play` button**, which is also what Reddit itself does to a logged-out reader — bug
+41 is the record that Reddit *blurs* rather than withholds. This draws the blur instead of
+walking past it.
+
+The load discipline is the part that matters more than the look. A blurred `<video>` that had
+already fetched its media would be CSS over a completed download, which is the bug wearing a
+disguise. Nothing but the poster loads while the blur stands: `preload="none"`, no source
+mounted, no manifest read — a scrolled-past adult post costs exactly one thumbnail, the same
+picture its listing row would have shown. Pressing the button is what starts the source list,
+and the tests assert the request count on both sides of the press. It is a real `<button>`,
+so keyboard readers get the same control; `test/geometry.js` measures in a real engine that
+it lands inside the player rather than escaping to the viewport, and that the frame under it
+is actually blurred rather than merely wearing a class name.
+
+With the opt-in on, an adult video post is an ordinary one — no blur, no button, poster and
+still drawn like any other post's. PRIVACY.md is unchanged: nothing new leaves the browser,
+and while the blur stands rather less does.
 
 ### Changed — two fixtures that had quietly stopped testing anything
 
