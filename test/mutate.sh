@@ -1513,6 +1513,29 @@ mutate "the expando's [hidden] counterpart vanishes (static)" css-lint \
 mutate "the expando's [hidden] counterpart vanishes (layout)" geometry \
   src/styles/old-reddit.css ".expando[hidden] { display: none; }" ""
 
+# ------------------------------ the time window on top/controversial listings ---
+# The strip itself. Without it, "top" is half a control: the reader gets whatever window
+# Reddit defaults to and cannot ask for another.
+mutate "the time window disappears from top/controversial" run \
+  src/modules/chrome.js "      timeMenu(base, active)" "      null"
+
+# The window is a QUERY-ONLY navigation, so a latch keyed on the path alone sees nothing:
+# no teardown, and Reddit's replacement feed is consumed UNDER the old window's rows —
+# bug 87's interleave, on the listing side.
+mutate "a time-window change is invisible to the route latch" run \
+  src/core/route.js "  const CONTENT_PARAMS = ['sort', 't'];" \
+                    "  const CONTENT_PARAMS = ['sort'];"
+
+# Offering the window on sorts that ignore it is a control that changes nothing — bug 62's
+# shape, and bug 10's (our own UI leading somewhere it should not).
+mutate "the window is offered on sorts that have none" run \
+  src/modules/chrome.js "    if (!SHD.route.TIMED_SORTS.includes(active)) return null;" "    ;"
+
+# Marking a guessed default tells the reader they are looking at a span they may not be.
+mutate "an absent t= is rendered as though a period were chosen" run \
+  src/modules/chrome.js "    const current = SHD.route.timeQuery;" \
+                        "    const current = SHD.route.timeQuery || 'day';"
+
 # ------------------------------------------------ 0.26.0: the header's nsfw toggle ---
 # The control itself. Without it the setting is options-page-only again — which is where
 # it went unnoticed, and the reason the toggle exists.

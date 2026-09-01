@@ -12,11 +12,11 @@ summary over this table when they disagree, and update the table when they do.)
 | # | Command | Needs | Assertions |
 |---|---|---|---|
 | 1 | `node test/css-lint.js` | nothing | 39 |
-| 2 | `node test/run.js` | jsdom | 551 |
-| 3 | `node test/geometry.js` | Chromium | 193 |
-| 4 | `node test/extension.js` | Chromium | 141 |
+| 2 | `node test/run.js` | jsdom | 664 |
+| 3 | `node test/geometry.js` | Chromium | 219 |
+| 4 | `node test/extension.js` | Chromium | 143 |
 | 5 | `node test/extension-firefox.js` | Firefox + geckodriver | 40 |
-| 6 | `node test/media-sync.js` | Chromium | 8 |
+| 6 | `node test/media-sync.js` | Chromium | 9 |
 | 7 | `npm run verify:live` | real network | manual |
 
 `npm run test:fast` is 1+2 only (no browser) for a tight edit loop;

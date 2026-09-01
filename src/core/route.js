@@ -46,6 +46,24 @@ SHD.route = (() => {
   const EXTRA_SORTS = ['best'];
   const SORT_RE = [...SORTS, ...EXTRA_SORTS].join('|');
 
+  /* The time window `top` and `controversial` are ranked over, owned here for the same
+     reason SORTS is: chrome.js renders the strip from this list, and the `t` values have
+     to agree with what sortParamOf() watches or a click changes the URL and nothing
+     re-renders. Reddit's own parameter values; old reddit's own labels.
+
+     Only these two sorts take a window. `hot`, `new` and `rising` ignore `t` entirely —
+     rendering the strip there would offer a control that changes nothing, which is the
+     shape of bug 62 and of the tab that routed to OTHER (bug 10). */
+  const TIMED_SORTS = ['top', 'controversial'];
+  const TIMES = [
+    { id: 'hour', label: 'past hour' },
+    { id: 'day', label: 'past 24 hours' },
+    { id: 'week', label: 'past week' },
+    { id: 'month', label: 'past month' },
+    { id: 'year', label: 'past year' },
+    { id: 'all', label: 'all time' }
+  ];
+
   /* The one profile tab list, owned here for the same reason SORTS is: chrome.js renders
      tabs from it, and every href those tabs carry must classify back to PROFILE — a tab
      that routes to OTHER drops the reader out of the extension (bug 10). `path` is the
@@ -103,7 +121,8 @@ SHD.route = (() => {
   }
 
   /**
-   * The query half of a route's identity — the `sort` parameter, and nothing else.
+   * The query half of a route's identity — the parameters that change WHICH content
+   * Reddit serves, and nothing else.
    *
    * Sorting a COMMENTS page is a QUERY-ONLY navigation: the sort strip's links carry
    * `?sort=new` on the post's own permalink, Reddit's router intercepts them, and the
@@ -113,13 +132,28 @@ SHD.route = (() => {
    * with a hard reload of the same URL rendering fine (docs/engineering-log.md bug 87 —
    * bug 34's mixed-sorts family, through the door a path key cannot see).
    *
-   * ONLY `sort` takes part, deliberately: keying on the whole query string would tear the
-   * page down — scroll position, loaded pages and all — for any tracking or view parameter
-   * Reddit rewrites in place, which it does. A sort parameter on a LISTING is accepted
-   * too (harmless: listings sort by path segment, so it simply never differs there).
+   * `t` joins it for the same reason one release later: a LISTING's time window is also
+   * query-only (`/top/?t=month`), so without it the period strip would change the URL,
+   * Reddit would swap the feed, and the pipeline would append the new window's posts
+   * under the old window's rows — bug 87 again, on the other page type.
+   *
+   * ONLY these two take part, deliberately: keying on the whole query string would tear
+   * the page down — scroll position, loaded pages and all — for any tracking or view
+   * parameter Reddit rewrites in place, which it does. Each is harmless on the page type
+   * that ignores it: a listing sorts by path segment, and a comments page has no window.
    */
-  const sortParamOf = (search) => {
-    const m = /[?&]sort=([^&#]*)/.exec(search || '');
+  const CONTENT_PARAMS = ['sort', 't'];
+  const sortParamOf = (search) => CONTENT_PARAMS
+    .map((k) => {
+      const m = new RegExp(`[?&]${k}=([^&#]*)`).exec(search || '');
+      return m ? `${k}=${m[1]}` : '';
+    })
+    .filter(Boolean)
+    .join('&');
+
+  /** The emitted time window, or '' — the strip reads this, never location.search. */
+  const timeOf = () => {
+    const m = /(?:^|&)t=([^&]*)/.exec(emit.lastSort || '');
     return m ? m[1] : '';
   };
 
@@ -197,7 +231,7 @@ SHD.route = (() => {
     emit(location.pathname);
   }
 
-  return { LISTING, COMMENTS, PROFILE, OTHER, SORTS, PROFILE_TABS,
+  return { LISTING, COMMENTS, PROFILE, OTHER, SORTS, PROFILE_TABS, TIMES, TIMED_SORTS,
            classify, subredditOf, sortOf, usernameOf, profileTabOf, onChange, start,
            get current() { return current; },
            get path() { return emitPath(); },
@@ -205,6 +239,13 @@ SHD.route = (() => {
               applied to the query: anything decorating the render (the comments page's
               sort strip) must agree with the navigation that produced it, not with a
               location that is one commit behind or ahead. Empty string when the emitted
-              URL carried none. */
-           get sortQuery() { return emit.lastSort || ''; } };
+              URL carried none. Parsed out of the composite latch key rather than being
+              the key itself, because the key now carries the time window too. */
+           get sortQuery() {
+             const m = /(?:^|&)sort=([^&]*)/.exec(emit.lastSort || '');
+             return m ? m[1] : '';
+           },
+           /* The `?t=` window, same rule. '' when the URL carried none, which is Reddit's
+              own default and NOT one of TIMES — see the strip in chrome.js. */
+           get timeQuery() { return timeOf(); } };
 })();

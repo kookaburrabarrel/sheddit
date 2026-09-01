@@ -263,6 +263,21 @@ html.shd-active body {
   background: var(--shd-header-bg);
   padding: 4px 10px 0;
 }
+/* The "links from:" window, under the sort tabs on top/controversial. Same visual
+   language as the comments page's sort strip — small, dim, the current one bold — so the
+   two menus read as the same kind of control. Wraps, because six periods plus separators
+   is exactly the row that overflowed a 360px viewport as bug 31. */
+.shd-timemenu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 4px;
+  padding: 4px 0 3px;
+  font-size: 11px;
+  color: var(--shd-meta);
+}
+.shd-timemenu a { color: var(--shd-link); }
+.shd-timemenu .selected { font-weight: bold; color: var(--shd-text); }
 
 /* ---------- page frame ---------- */
 #shd-root {
