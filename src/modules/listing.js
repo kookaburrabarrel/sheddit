@@ -32,6 +32,100 @@ SHD.listing = (() => {
 
   function reset() { container = null; rank = 0; }
 
+  /* ------------------------------------------------------------------ *
+   * the empty listing
+   * ------------------------------------------------------------------ */
+
+  const EMPTY_CLASS = 'shd-empty';
+
+  /**
+   * What a listing with no posts in it says.
+   *
+   * Reddit's own line for this is "This community doesn't have any posts yet" and it is
+   * shown for every reason a feed can come back empty — including the one that prompted
+   * bug 94, where a twelve-year-old subreddit had nothing in the window `top` was ranked
+   * over. That sentence describes a brand new community, so a reader looking at a
+   * time-filtered listing reads it as the renderer having failed. The fix is not to soften
+   * it, it is to say which question was actually asked.
+   *
+   * So the second line NAMES THE WINDOW, and takes its two forms from what the URL
+   * actually tells us:
+   *
+   *   ?t=week    a period we can name, so it is named.
+   *   no ?t=     Reddit is applying its own window and does not say which. We say THAT,
+   *              and no more. route.js's `timeQuery` deliberately reports '' here and the
+   *              "links from:" strip deliberately marks nothing, because Reddit's default
+   *              is unverified (see chrome.timeMenu); a line here reading "no posts from
+   *              the past 24 hours" would be exactly the guess that decision refuses,
+   *              printed in a full sentence. Naming the MECHANISM still answers the
+   *              reader's question — the feed is empty because of a window, not because
+   *              the community is — which is the whole of what went wrong.
+   *
+   * The first line is old reddit's own wording for an empty listing, kept verbatim: it
+   * says "here", which is the honest scope, and it is what this extension exists to put
+   * back. Nothing anywhere in the box claims the community is empty, new, or banned — we
+   * cannot see any of that from a feed of zero, and Reddit's copy asserting it is the bug.
+   */
+  function emptyNotice() {
+    const R = SHD.route;
+    const sub = R.subredditOf();
+    const user = R.usernameOf();
+    const onProfile = R.current === R.PROFILE;
+    const where = sub ? `r/${sub}` : user ? `u/${user}` : 'the front page';
+    /* Whether a window applies at all is route.TIMED_SORTS's answer, never this
+       function's — the same list the strip above the box is built from, so the line and
+       the control cannot disagree about whether this listing is filtered. */
+    const timed = !onProfile && R.current === R.LISTING
+      && R.TIMED_SORTS.includes(R.sortOf());
+    const period = timed ? R.TIMES.find(t => t.id === R.timeQuery) : null;
+
+    const why = onProfile ? `${where} has nothing on this tab.`
+      : period ? `${where} has no posts from ${period.phrase}.`
+        : timed ? `${where} has no posts in the time window this sort ranks over.`
+          : `${where} has no posts.`;
+    /* A hint only where there is a control to point at — the "links from:" strip is
+       rendered by the same tab menu that sits directly above this box. A hint with
+       nothing behind it would be the "control that ignores a click" failure (bug 62) in
+       prose. */
+    const hint = !timed ? null
+      : period ? 'Widen the window above to look further back.'
+        : 'Reddit applies one whether or not the URL says so, and does not say which. '
+          + 'Pick a window above to make it explicit.';
+
+    return h('div.' + EMPTY_CLASS, null, [
+      h('p.shd-empty-line', { text: "there doesn't seem to be anything here" }),
+      h('p.shd-empty-why', { text: why }),
+      hint ? h('p.shd-empty-hint', { text: hint }) : null
+    ]);
+  }
+
+  /**
+   * Mount the listing itself for an empty feed: #shd-root, the tab bar (with its "links
+   * from:" row) and an empty #siteTable carrying the notice. The header and sidebar are
+   * the pipeline's, exactly as they are for a page with rows in it.
+   *
+   * Idempotent — the gate may ask more than once while the page settles.
+   */
+  function renderEmpty() {
+    const box = ensureContainer();
+    if (box.querySelector('.' + EMPTY_CLASS)) return;
+    box.appendChild(emptyNotice());
+  }
+
+  /**
+   * Add a row, retiring the empty notice if one is standing.
+   *
+   * A feed can be empty when we ask and carry posts a second later — a slow stream, a
+   * partial we drove, a history traversal restoring cached elements. The row wins: leaving
+   * "there doesn't seem to be anything here" above a list of posts would be a worse lie
+   * than the copy this replaced.
+   */
+  function place(node) {
+    const box = ensureContainer();
+    box.querySelector('.' + EMPTY_CLASS)?.remove();
+    box.appendChild(node);
+  }
+
   /* A miss is either "not hydrated yet" (retry works) or "contracts.js is stale"
      (retry never works). The first cut logged console.debug for both, which made a
      permanent break indistinguishable from a timing miss. Warn once, with the evidence
@@ -248,7 +342,7 @@ SHD.listing = (() => {
     if (el.closest(C.AD_POST)) return false;         // never render ads
     const m = SHD.model.post(el);
     if (!m) return false;
-    ensureContainer().appendChild(render(m));
+    place(render(m));
     return true;
   }
 
@@ -356,10 +450,10 @@ SHD.listing = (() => {
     const m = SHD.model.profileComment(el);
     if (!m) return false;
     const thing = renderProfileComment(m);
-    ensureContainer().appendChild(thing);
+    place(thing);
     armLateTime(thing, m);
     return true;
   }
 
-  return { consume, consumeProfileComment, render, reset };
+  return { consume, consumeProfileComment, render, renderEmpty, reset };
 })();

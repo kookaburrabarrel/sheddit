@@ -1306,6 +1306,74 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     challenge), so the fixtures are built from the report's audit and cover BOTH
     spellings on one page rather than betting on either.
 
+94. **A subreddit with twelve years of posts came up as native Reddit, and told the
+    reader it had never had one.** Reported 2026-09-01 with both halves of the DOM
+    state attached, which is why this is two bugs and not one. `/r/DIYfail/top/`
+    rendered in Reddit's own dark UI: `<html class="theme-beta theme-dark">` with no
+    `shd-active`, `data-shd-waiting="empty-feed"`, 0 `shreddit-post`, 0 `shd-`
+    elements. The same URL at `?t=all` was `shd-active`, 27 posts, 23 shd- elements,
+    27 rows. **Nothing was broken.** `top` ranks over a time window, `/top/` with no
+    `t=` leaves Reddit to pick one, and whichever it picked held nothing — measured
+    across the windows the same day: today 0, this week 1, this month 1, this year 10+,
+    all time 10+.
+
+    **The renderer never activated, because the only test for "this page is ours" was
+    whether a ROW had been drawn.** `gate.nothingToRender()` was right that an empty
+    feed is not a failure (bug 52) — and that verdict was then treated as a reason to
+    keep WAITING. `waiting` means "the feed has not arrived", which is the correct
+    posture for a feed still streaming in; a Top/Today window with nothing in it HAS
+    arrived, and its answer is zero. A check that counts posts cannot tell those apart,
+    so the page waited for something that was never coming: no timeout, no terminal
+    state, `data-shd-waiting="empty-feed"` sitting there indefinitely with no signal of
+    any kind. The same infinite-wait-where-a-terminal-state-belonged as the video bug
+    two rounds earlier.
+
+    The cost was not the post list. The chrome and the listing are built in ONE pass
+    (`flush`'s `rendered > 0`), so an empty feed cost the entire shell — header, tab
+    menu, theme bar, sidebar — which is why the page came up in Reddit's dark UI even
+    though `data-shd-theme="night"` was set and correct the whole time. The theme
+    survived; the renderer that applies it never ran.
+
+    The split is a CONTRACT, not a looser count, and that distinction is the whole fix:
+    `C.FEED_EMPTY` is Reddit's own no-content panel inside the feed, which is Reddit
+    stating the answer. Without it, "a feed with no posts in it" also describes an age
+    gate shipping bare feed scaffolding, and drawing our empty page over one buries the
+    button the reader has to press — bug 21 through a new door. So the panel settles it
+    immediately; absent the panel there is an inference (document complete, no pending
+    partial, markup inside the feed, no native modal, and the full patience window
+    elapsed) that fires at the deadline and is deliberately the last resort. Either way
+    the page then gets the whole shell and an empty `#siteTable`.
+
+    **And the copy was Reddit's, which is the half the reader actually met.** Reddit's
+    panel says "This community doesn't have any posts yet" — the message for a brand new
+    community — for every reason a feed can come back empty, including a time-filtered
+    window on a twelve-year-old sub. Read as a data failure, which is exactly what that
+    wording invites. Ours says `there doesn't seem to be anything here` (old reddit's own
+    line, and "here" is the honest scope) over a line naming the community and the range
+    in force. It never asserts what we cannot see: nothing about whether the community
+    has posts at all.
+
+    **What the line may and may not say about the window is the one open question this
+    entry leaves.** The window strip landed independently in 0.31.0 and made a deliberate
+    call: when the URL carries no `t=`, NOTHING is marked, because Reddit's default is
+    unverified and marking a guess tells the reader they are looking at a span they may
+    not be. The empty line is the same claim in a full sentence — worse, because a
+    sentence reads as knowledge — so it keeps the same silence: `?t=week` is named
+    ("no posts from the past week"), and a bare `/top/` gets "no posts in the time window
+    this sort ranks over". That still answers what actually went wrong; the reader's
+    mistake was thinking the feed was broken, not mistaking which period it was.
+
+    The evidence for the default IS suggestive and is written down rather than acted on:
+    the report's own measurements (0 today, 1 this week, 1 this month, 10+ this year) are
+    what a `day` default looks like from outside, but that is one subreddit on one day.
+    `verify:live`'s time-window section exists to settle it — it loads a bare `/top/`
+    beside each period and reports which one it matches. Two agreeing runs on busy
+    subreddits are enough to name `day` in `route.TIMES`, let the strip bold it and the
+    empty line say it, and put a mutation row on the pair. Until then, note what the
+    silence costs: `/r/x/top/` and `/r/x/top/?t=day` are one page whose meaning is
+    invisible, and a captured `top` page means something different depending on when it
+    is replayed.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

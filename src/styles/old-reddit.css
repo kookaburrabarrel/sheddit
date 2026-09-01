@@ -279,6 +279,31 @@ html.shd-active body {
 .shd-timemenu a { color: var(--shd-link); }
 .shd-timemenu .selected { font-weight: bold; color: var(--shd-text); }
 
+/* ---------- a listing with nothing in it ---------- */
+/* Deliberately quiet and deliberately present. The page it sits on is a WORKING page —
+   the feed arrived and the answer was zero — so this is a sentence in the layout, not an
+   error card. It has the same left inset as a row, so it reads as the first thing in the
+   listing rather than as furniture. */
+.shd-empty {
+  padding: 24px 10px 30px;
+  max-width: 44em;
+}
+.shd-empty .shd-empty-line {
+  margin: 0;
+  font-size: 16px;
+  color: var(--shd-text);
+}
+.shd-empty .shd-empty-why {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--shd-text);
+}
+.shd-empty .shd-empty-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--shd-meta);
+}
+
 /* ---------- page frame ---------- */
 #shd-root {
   background: var(--shd-bg);

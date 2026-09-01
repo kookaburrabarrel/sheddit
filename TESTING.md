@@ -12,9 +12,9 @@ summary over this table when they disagree, and update the table when they do.)
 | # | Command | Needs | Assertions |
 |---|---|---|---|
 | 1 | `node test/css-lint.js` | nothing | 39 |
-| 2 | `node test/run.js` | jsdom | 664 |
+| 2 | `node test/run.js` | jsdom | 692 |
 | 3 | `node test/geometry.js` | Chromium | 219 |
-| 4 | `node test/extension.js` | Chromium | 143 |
+| 4 | `node test/extension.js` | Chromium | 152 |
 | 5 | `node test/extension-firefox.js` | Firefox + geckodriver | 40 |
 | 6 | `node test/media-sync.js` | Chromium | 9 |
 | 7 | `npm run verify:live` | real network | manual |
@@ -68,6 +68,8 @@ output:
 | Nested comments | the live 2026-08-14 shape, in BOTH body orderings: every comment shows its own body rather than a descendant's, and the tree still matches every `depth` |
 | Live settings | a toggle takes effect without a reload, a partial write does not tear the page down, unrelated storage changes are ignored |
 | Pages with nothing to render | an age gate is not blanked and not blamed, late content still renders, an empty *feed* is not written off the same way |
+| An empty listing | a feed Reddit says is empty is RENDERED — whole shell, empty `#siteTable`, our own line naming the community and the window — rather than waited on behind native Reddit; with no `?t=` the line names the mechanism and invents no period, matching the strip above it; a post arriving afterwards retires the notice; a bare feed shell (an age gate's scaffolding) is still not mistaken for an answer; the deadline's own attempt is pinned by a feed that answers late, the boot-time attempt by the clock in the packed suite |
+| The time window | `top`/`controversial` carry old Reddit's *links from:* strip and nothing else does; the period in the URL is the one marked and is not also offered as a link; a URL with no `?t=` marks nothing, because Reddit's default is unverified; every link classifies back to a listing; changing only `?t=` is seen as a route change, and the incoming window replaces the old rows rather than interleaving with them |
 | Reddit's own modals | while `body.rpl-scroll-lock` is set Sheddit stands aside — native Reddit and its dialog visible, its button actually clickable, Sheddit's own render hidden rather than left unstyled — and dismissing it hands the page back |
 | Logged-out scope | nothing Sheddit renders requires a session |
 | Options page | every shipped setting has a **control** and vice versa (`theme` is a `<select>`, not a checkbox), its DEFAULTS match contracts.js, its theme list matches themes.js, a change writes the whole object in the shape the content script listens for |

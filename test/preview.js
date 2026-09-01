@@ -54,3 +54,7 @@ function build(name) {
 
 build('listing');
 build('comments');
+/* A listing with nothing in it — the page bug 94 was reported against. Worth an eye
+   because it is mostly empty space, and the difference between "deliberate" and
+   "abandoned" there is layout, which no assertion in run.js can see. */
+build('empty');

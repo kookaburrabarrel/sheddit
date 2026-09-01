@@ -55,13 +55,17 @@ SHD.route = (() => {
      rendering the strip there would offer a control that changes nothing, which is the
      shape of bug 62 and of the tab that routed to OTHER (bug 10). */
   const TIMED_SORTS = ['top', 'controversial'];
+  /* `phrase` is the same period in a SENTENCE, for the empty-listing line ("no posts
+     from the past week"). Written out rather than derived from `label`, because the
+     derivation is "the " + label with one exception — `all time` takes no article — and a
+     rule with an exception per row is a rule that breaks the next time a period is added. */
   const TIMES = [
-    { id: 'hour', label: 'past hour' },
-    { id: 'day', label: 'past 24 hours' },
-    { id: 'week', label: 'past week' },
-    { id: 'month', label: 'past month' },
-    { id: 'year', label: 'past year' },
-    { id: 'all', label: 'all time' }
+    { id: 'hour', label: 'past hour', phrase: 'the past hour' },
+    { id: 'day', label: 'past 24 hours', phrase: 'the past 24 hours' },
+    { id: 'week', label: 'past week', phrase: 'the past week' },
+    { id: 'month', label: 'past month', phrase: 'the past month' },
+    { id: 'year', label: 'past year', phrase: 'the past year' },
+    { id: 'all', label: 'all time', phrase: 'all time' }
   ];
 
   /* The one profile tab list, owned here for the same reason SORTS is: chrome.js renders

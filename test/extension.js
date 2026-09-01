@@ -1153,6 +1153,98 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     await page3.close();
   }
 
+  /* ================================================================== *
+   * AN EMPTY FEED STILL GETS THE WHOLE LAYOUT — bug 94
+   *
+   * The reported symptom was a page in REDDIT'S dark UI: `data-shd-waiting="empty-feed"`
+   * on <html>, no shd-active, zero shd- elements. The theme was set and correct the whole
+   * time — the renderer that applies it simply never ran, because the only test for "this
+   * page is ours" was whether a row had been drawn.
+   *
+   * This is the assertion jsdom structurally cannot make: it does no layout and applies no
+   * stylesheet, so "did the reader actually SEE our page or Reddit's" is only answerable in
+   * a real browser with the packed extension's own CSS delivery.
+   * ================================================================== */
+  console.log('\n\x1b[1mPACKED EXTENSION — AN EMPTY FEED IS STILL OUR PAGE\x1b[0m');
+  {
+    const pageE = await browser.newPage();
+    // Wider than the 1100px breakpoint at which old-reddit.css drops the right rail: the
+    // sidebar is one of the pieces the report lost, so the viewport has to be one where a
+    // populated page would have it.
+    await pageE.setViewport({ width: 1280, height: 900 });
+    const startedE = Date.now();
+    await pageE.goto(origin + PATHS.emptyTop, { waitUntil: 'domcontentloaded' });
+
+    const drew = await until(pageE, () =>
+      document.documentElement.hasAttribute('data-shd-empty'));
+    const drewAfter = Date.now() - startedE;
+    const seen = await pageE.evaluate(() => {
+      const vis = (sel) => {
+        const el = document.querySelector(sel);
+        return !!el && el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+      };
+      const notice = document.querySelector('#siteTable .shd-empty');
+      return {
+        empty: document.documentElement.getAttribute('data-shd-empty'),
+        waiting: document.documentElement.getAttribute('data-shd-waiting'),
+        active: document.documentElement.classList.contains('shd-active'),
+        ourPage: vis('#shd-root') && vis('#shd-header'),
+        // Reddit's own page — and its own empty-state copy — must be off screen, the
+        // same as on any other page we render.
+        nativeVisible: vis('shreddit-app'),
+        nativeCopyVisible: vis('#empty-feed-content'),
+        rows: document.querySelectorAll('#shd-root .thing').length,
+        notice: notice ? notice.textContent.replace(/\s+/g, ' ').trim() : null,
+        // No `t=` in the fixture URL, so nothing is marked — and the empty line must not
+        // invent one either. Both halves of that are asserted below.
+        marked: document.querySelector('#shd-root .shd-timemenu .selected')?.textContent
+          || null,
+        strip: !!document.querySelector('#shd-root .shd-timemenu'),
+        // The report's actual complaint, in one number: the whole shell went with the
+        // posts. These are the pieces that were missing from the screenshot.
+        chrome: ['#shd-header .shd-themebar', '#shd-root .shd-tabmenu-wrap',
+                 '#shd-root .shd-timemenu', '#shd-sidebar'].filter(vis).length,
+        // Our stylesheet actually resolved: the page ground is the theme's, not Reddit's.
+        ground: getComputedStyle(document.body).backgroundColor
+      };
+    });
+
+    check('an empty feed settles into a rendered page, not a permanent wait',
+      drew && seen.empty === 'reddit-says-empty' && seen.waiting === null,
+      JSON.stringify(seen));
+    /* The answer is in the document Reddit served, so it is available at document_idle
+       and there is no reason to show the reader native Reddit while a timer runs. The
+       threshold sits under gate.js's 1500ms first tick on purpose: the deadline is the
+       BACKSTOP for this case (and the only path for a feed that answers late), so a
+       loose bound here would pass with the boot-time attempt gone and the reader looking
+       at Reddit's page — and Reddit's wording — for a second and a half. */
+    check('...and it does so on the render pass, not on the deadline tick',
+      drewAfter < 1200, `${drewAfter}ms — expected well under gate.js's 1500ms first check`);
+    check('the layout is active and on screen',
+      seen.active && seen.ourPage, JSON.stringify(seen));
+    check('the reader sees OUR page, not Reddit\'s',
+      !seen.nativeVisible && !seen.nativeCopyVisible,
+      `shreddit-app visible=${seen.nativeVisible}, Reddit's empty copy visible=${seen.nativeCopyVisible}`);
+    check('every piece of the shell is there — header, theme bar, tabs, window, sidebar',
+      seen.chrome === 4, `${seen.chrome} of 4`);
+    check('the listing is empty rather than absent',
+      seen.rows === 0 && seen.notice !== null, JSON.stringify(seen));
+    check('the copy blames the time window rather than the community',
+      /time window/i.test(seen.notice || '') &&
+      !/doesn't have any posts yet/i.test(seen.notice || ''), seen.notice);
+    /* The URL carries no `t=`, so the strip marks nothing (Reddit's default window is
+       unverified — see chrome.timeMenu). The line inside the box has to keep the same
+       silence: naming a period here would be that guess in a full sentence, and it would
+       contradict the control sitting directly above it. */
+    check('...and neither the strip nor the line invents a period',
+      seen.strip && seen.marked === null &&
+      !/past hour|past 24 hours|past week|past month|past year|all time/.test(seen.notice || ''),
+      `marked=${seen.marked} notice=${seen.notice}`);
+    check('the theme is painted, which is what the report saw fail',
+      seen.ground && seen.ground !== 'rgba(0, 0, 0, 0)', seen.ground);
+    await pageE.close();
+  }
+
   console.log('\n\x1b[1mPACKED EXTENSION — A POPULATED FEED STILL FAILS LOUDLY\x1b[0m');
   // The counterweight to the two above. Being lenient about an EMPTY feed must not make us
   // lenient about a feed full of markup we cannot read — that is what a redesign renaming

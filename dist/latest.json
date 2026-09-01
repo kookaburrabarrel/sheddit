@@ -1,6 +1,6 @@
 {
-  "version": "0.31.0",
+  "version": "0.32.0",
   "released": "2026-09-01",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.31.0 brings back old reddit's time window on top and controversial — past hour, 24 hours, week, month, year, all time — and makes changing the window a real page change rather than two spans interleaved on one screen."
+  "notes": "0.32.0 renders a listing that came back empty instead of waiting for ever behind Reddit's page: the whole layout stays, and the line on it says the feed is empty of a time window rather than repeating Reddit's \"this community doesn't have any posts yet\"."
 }

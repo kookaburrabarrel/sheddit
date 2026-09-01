@@ -797,6 +797,63 @@ mutate "an empty subreddit is blamed for having no posts" run \
       return [...byTag.values()].some(n => n >= SHELL_ELEMENTS);" \
                    "      return c.querySelectorAll('*').length > SHELL_ELEMENTS;"
 
+# --- bug 94: an empty feed is an ANSWER, not a wait ---
+#
+# Not failing over an empty feed (bug 52, above) was mistaken for a reason to keep waiting
+# for one. Reported from /r/DIYfail/top/, where Reddit's unstated 24-hour window genuinely
+# holds nothing: the page sat at data-shd-waiting="empty-feed" for ever in native Reddit's
+# UI, and told the reader that a twelve-year-old subreddit "doesn't have any posts yet".
+
+# The deadline tick's own attempt. It has to be pinned by a page that answers LATE,
+# because the boot-time attempt below covers every page that answers immediately —
+# two mechanisms, one observable (bug 75).
+mutate "an empty feed goes back to waiting for ever" run \
+  src/core/gate.js "      if (why === 'empty-feed' && engaged && SHD.pipeline?.renderEmpty?.()) return;" ''
+
+# ...and the boot-time attempt, which is what keeps the reader from looking at Reddit's
+# page — and Reddit's wording — for the 1500ms until the first tick. Only the packed suite
+# can see the difference: both paths reach the same rendered page, so only the CLOCK
+# separates them.
+mutate "the empty page waits for the tick instead of the render pass" extension \
+  src/core/pipeline.js "    // ...unless Reddit has already said there is nothing coming, in which case the answer
+    // is in the document we were served and there is no reason to make the reader look at
+    // native Reddit for a deadline tick first. Declines unless it is certain — see
+    // gate.emptyFeedReason.
+    renderEmpty();" ''
+
+# The settle test is a CONTRACT, not a count, and this is why: without Reddit's own
+# no-content panel to go on, "a feed with no posts in it" also describes an age gate that
+# ships bare feed scaffolding — and drawing our empty page over one buries the button the
+# reader has to press. Bug 21's cardinal sin, reached through the new door.
+mutate "any feed with no posts in it is called empty" run \
+  src/core/gate.js "      if (feed.querySelector(SHD.C.FEED_EMPTY)) return 'reddit-says-empty';" \
+                   "      return 'reddit-says-empty';"
+
+# The copy. Saying "there is nothing here" without saying which question was asked is
+# Reddit's own mistake in our own markup.
+mutate "the empty line stops naming the time window" run \
+  src/modules/listing.js "    const why = onProfile ? \`\${where} has nothing on this tab.\`
+      : period ? \`\${where} has no posts from \${period.phrase}.\`
+        : timed ? \`\${where} has no posts in the time window this sort ranks over.\`
+          : \`\${where} has no posts.\`;" \
+                         "    const why = \`\${where} has no posts.\`;"
+
+# ...and the other direction, which is the decision the window strip already defends one
+# file over: with no `t=` in the URL, Reddit's window is UNVERIFIED and neither the strip
+# nor this line may name one. A guess here is the same guess in a full sentence — worse,
+# because a sentence reads as knowledge.
+mutate "the empty line guesses the window Reddit is using" run \
+  src/modules/listing.js "    const period = timed ? R.TIMES.find(t => t.id === R.timeQuery) : null;" \
+                         "    const period = timed ? (R.TIMES.find(t => t.id === R.timeQuery) || R.TIMES[1]) : null;"
+
+# A post arriving after we concluded the feed was empty — a stream, a driven partial, a
+# history traversal. The notice must go, or the page claims to be empty above a list.
+mutate "a late post leaves the empty notice standing" run \
+  src/modules/listing.js "    box.querySelector('.' + EMPTY_CLASS)?.remove();" ''
+
+mutate "a late post leaves the empty state on <html>" run \
+  src/core/pipeline.js "      SHD.gate.notEmpty();" ''
+
 # ------------------------------------------------------------- live testing ------------
 # Comment pagination had never worked live, and the sentinel's own diagnostics finally
 # said why: shdIoTicks 0 — the IntersectionObserver never delivered even its initial

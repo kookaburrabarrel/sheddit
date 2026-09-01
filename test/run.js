@@ -2243,6 +2243,14 @@ async function boot(html, url, setup) {
     check('unhandled routes still fall through',
       ['/search/', '/user/x/comments/abc/xyz/', '/settings/', '/r/aww/wiki/index/']
         .every(p => R.classify(p) === R.OTHER));
+
+    /* A sort that takes a time window but is not a tab we render is a window control on
+       a page the reader can never reach — the same relationship SORTS has with
+       classify(), one level down. THAT the strip appears on exactly those sorts is the
+       time-window section's assertion; this is the list behind it. */
+    check('every sort that takes a time window is a sort we offer',
+      R.TIMED_SORTS.every(s => R.SORTS.includes(s)),
+      R.TIMED_SORTS.filter(s => !R.SORTS.includes(s)).join(', '));
   }
 
   /* User profiles — in scope by project decision 2026-08-21. The profile COMMENT contract
@@ -2660,27 +2668,16 @@ async function boot(html, url, setup) {
       !doc.querySelector('#shd-error'), 'failed too early');
   }
 
-  /* A subreddit Reddit itself says is empty must not get the failure screen.
-     Observed live 2026-08-20 on a quarantined sub, logged out: Reddit serves ZERO posts
-     and renders its own "this community doesn't have any posts yet" panel inside
-     shreddit-feed. That panel is real markup, so the old descendant-count heuristic read
-     it as "a feed full of content we cannot parse" and drew a no-content card over a page
-     that was working exactly as Reddit intended. The decision tree already claimed to
-     handle this case in its own comment. Bug 52. */
+  /* A subreddit Reddit itself says is empty must not get the failure screen — and must
+     not get NATIVE REDDIT either, which is what it got until bug 94. Observed live
+     2026-08-20 on a quarantined sub, logged out: Reddit serves ZERO posts and renders its
+     own "this community doesn't have any posts yet" panel inside shreddit-feed. The
+     original bug here (52) was the failure screen; the second (94) was that not failing
+     was mistaken for a reason to keep waiting. */
   console.log('\n\x1b[1mAN EMPTY SUBREDDIT IS NOT A FAILURE\x1b[0m');
   {
-    const { listingPage: lp } = require('./fixtures');
-    const emptyState = lp().replace(/<shreddit-feed>[\s\S]*<\/shreddit-feed>/, `<shreddit-feed>
-        <!-- The CAPTURED live shape (live testing, r/911truth): one div, children H1/P/A.
-             Different from the first guess at this panel, and the round proved the
-             structure heuristic classifies the real thing correctly — keep it real. -->
-        <div class="mt-[100px] flex justify-center items-center flex-col" id="empty-feed-content">
-          <h1 data-testid="no-content">This community doesn't have any posts yet</h1>
-          <p>Make one and get this feed started.</p>
-          <a href="/r/911truth/submit">Create a post</a>
-        </div>
-      </shreddit-feed>`);
-    const { doc } = await boot(emptyState, 'https://www.reddit.com/r/programming/');
+    const { emptyListingPage } = require('./fixtures');
+    const { doc } = await boot(emptyListingPage(), 'https://www.reddit.com/r/programming/');
     // Long enough to pass FIRST_CHECK_MS (1500ms) — the failure this pins arrived on the
     // deadline, not at boot, so a short wait would pass with the bug still in.
     await hold(2000);
@@ -2688,25 +2685,194 @@ async function boot(html, url, setup) {
     check('an empty subreddit is not accused of failing',
       !doc.querySelector('#shd-error') && !doc.documentElement.hasAttribute('data-shd-fail'),
       doc.documentElement.getAttribute('data-shd-fail') || 'error screen shown');
-    check('it is diagnosed as an empty feed, not as unreadable content',
-      doc.documentElement.getAttribute('data-shd-waiting') === 'empty-feed',
-      doc.documentElement.getAttribute('data-shd-waiting'));
     check('the page is not left blanked', !doc.documentElement.classList.contains('shd-gate'));
     check('and Reddit\'s own empty-state panel is left on the page',
       !!doc.querySelector('shreddit-feed #empty-feed-content'));
   }
+
+  /* ================================================================== *
+   * AN EMPTY FEED IS AN ANSWER, NOT A WAIT — bug 94
+   *
+   * Reported 2026-09-01 with the DOM state attached. /r/DIYfail/top/ — Reddit's default
+   * 24-hour window on a sub that has been quiet for years — came up in NATIVE Reddit,
+   * dark UI and all, with `data-shd-waiting="empty-feed"` on <html> and no shd-active.
+   * Not a broken render: no render. The only test for "is this page ours" was whether a
+   * ROW had been drawn, so a page whose correct content is zero rows could never satisfy
+   * it, and the reader lost the whole shell — header, tabs, theme — over a listing that
+   * was working exactly as Reddit intended. And they were then told, in Reddit's words,
+   * that a twelve-year-old subreddit "doesn't have any posts yet".
+   * ================================================================== */
+  console.log('\n\x1b[1mAN EMPTY FEED IS AN ANSWER, NOT A WAIT\x1b[0m');
   {
-    // The counterweight, and the reason the heuristic cannot simply be loosened: a feed
-    // genuinely FULL of post-shaped markup we no longer recognise must still fail loudly.
-    // /r/renamed/'s shape — article wrappers with an unrecognised element inside.
-    const { listingPage: lp } = require('./fixtures');
-    const renamed = lp().replace(/<shreddit-post(?=[\s>])/g, '<shreddit-postx')
-                        .replace(/<\/shreddit-post>/g, '</shreddit-postx>');
-    const { doc } = await boot(renamed, 'https://www.reddit.com/r/renamed/');
-    await waitFor(() => doc.querySelector('#shd-error'), { timeout: 14000 });
-    check('a feed full of markup we cannot read still fails loudly',
-      !!doc.querySelector('#shd-error'),
-      doc.documentElement.getAttribute('data-shd-waiting') || 'no error screen');
+    const { emptyListingPage } = require('./fixtures');
+    const { doc } = await boot(emptyListingPage(), 'https://www.reddit.com/r/programming/');
+    const rendered = await waitFor(() => doc.querySelector('#shd-root .shd-empty'),
+      { timeout: 4000 });
+
+    check('an empty feed is rendered rather than waited on',
+      rendered, `data-shd-waiting=${doc.documentElement.getAttribute('data-shd-waiting')}`
+        + ' — the page was handed back to native Reddit');
+    check('...so the layout is ACTIVE, which is what carries the theme',
+      doc.documentElement.classList.contains('shd-active'),
+      doc.documentElement.className);
+    check('...and nothing is left waiting for content that is not coming',
+      !doc.documentElement.hasAttribute('data-shd-waiting'),
+      doc.documentElement.getAttribute('data-shd-waiting'));
+    check('the reason it settled is recorded for a report',
+      doc.documentElement.getAttribute('data-shd-empty') === 'reddit-says-empty',
+      doc.documentElement.getAttribute('data-shd-empty'));
+
+    // The whole shell, not just the list: this is the half of the report that was easy to
+    // miss, because "no posts" sounds like it should cost you the posts.
+    check('the header is built', !!doc.querySelector('#shd-header'));
+    check('the theme bar is built', !!doc.querySelector('#shd-header .shd-themebar'));
+    check('the sort tabs are built', !!doc.querySelector('#shd-root .shd-tabmenu-wrap .tabmenu'));
+    check('the sidebar is built', !!doc.querySelector('#shd-sidebar'));
+    check('the listing container exists and is empty',
+      !!doc.querySelector('#siteTable') && doc.querySelectorAll('#shd-root .thing').length === 0,
+      `${doc.querySelectorAll('#shd-root .thing').length} rows`);
+
+    // The copy. Reddit's own line is in the DOM the whole time (suppressed, not deleted);
+    // ours is the one on screen, and it must not repeat Reddit's claim.
+    const notice = doc.querySelector('#siteTable .shd-empty');
+    const why = notice?.querySelector('.shd-empty-why')?.textContent || '';
+    check('we say there is nothing HERE, in old reddit\'s own words',
+      notice?.querySelector('.shd-empty-line')?.textContent
+        === "there doesn't seem to be anything here",
+      notice?.querySelector('.shd-empty-line')?.textContent);
+    check('the line names the community rather than passing judgement on it',
+      /r\/programming/.test(why), why);
+    check('we never repeat Reddit\'s claim that the community has no posts at all',
+      !/doesn't have any posts yet/i.test(notice?.textContent || ''),
+      notice?.textContent);
+    check('Reddit\'s own panel is left in the page, merely suppressed',
+      !!doc.querySelector('shreddit-feed #empty-feed-content'));
+  }
+
+  {
+    /* The shape that was actually reported: the feed is empty because of a TIME WINDOW,
+       and the URL does not mention it. Naming the window is the difference between "your
+       extension is broken" and "there is nothing in this span".
+
+       With no `t=` we do NOT name a period. route.js reports '' there and the strip marks
+       nothing, because Reddit's default window is unverified — so a line reading "no posts
+       from the past 24 hours" would be that same guess in a full sentence. Naming the
+       MECHANISM still answers the reader's question. */
+    const { emptyListingPage } = require('./fixtures');
+    const { doc } = await boot(emptyListingPage(), 'https://www.reddit.com/r/DIYfail/top/');
+    await waitFor(() => doc.querySelector('#shd-root .shd-empty'), { timeout: 4000 });
+    const notice = doc.querySelector('#siteTable .shd-empty');
+    const why = notice?.querySelector('.shd-empty-why')?.textContent || '';
+
+    /* The one page type with no preview until now. `npm run preview` renders these
+       standalone, and an empty listing is exactly the kind of page a screenshot settles
+       faster than an assertion — it is mostly whitespace, and whitespace is where a
+       layout looks abandoned rather than deliberate. */
+    fs.writeFileSync(path.join(__dirname, 'out.empty.html'), doc.documentElement.outerHTML);
+
+    const hint = notice?.querySelector('.shd-empty-hint')?.textContent || '';
+    check('an empty `top` blames the time window, not the community',
+      /time window/i.test(why), why);
+    check('...and says which community it is the top of', /r\/DIYfail/.test(why), why);
+    check('...and does not invent the period Reddit is using',
+      !/past hour|past 24 hours|past week|past month|past year|all time/.test(why), why);
+    check('...and points at the control that makes it explicit',
+      /pick a window above/i.test(hint), hint);
+  }
+
+  {
+    /* ...and with a period in the URL there is no guessing to do, so it is named. */
+    const { emptyListingPage } = require('./fixtures');
+    const { doc } = await boot(emptyListingPage(),
+      'https://www.reddit.com/r/DIYfail/top/?t=week');
+    await waitFor(() => doc.querySelector('#shd-root .shd-empty'), { timeout: 4000 });
+    const notice = doc.querySelector('#siteTable .shd-empty');
+    const why = notice?.querySelector('.shd-empty-why')?.textContent || '';
+
+    check('an empty `top` with a period names it, in a sentence',
+      /no posts from the past week/.test(why), why);
+    check('...and the strip above the box agrees with the line inside it',
+      doc.querySelector('#shd-root .shd-timemenu .selected')?.textContent === 'past week',
+      doc.querySelector('#shd-root .shd-timemenu .selected')?.textContent);
+    check('...and offers a wider one to try',
+      /widen the window/i.test(notice?.querySelector('.shd-empty-hint')?.textContent || ''),
+      notice?.querySelector('.shd-empty-hint')?.textContent);
+  }
+
+  {
+    /* A post arriving after we have concluded the feed is empty. Streamed markup, a
+       driven partial and a history traversal all produce this, and the row has to win —
+       "there doesn't seem to be anything here" above a list of posts would be a worse
+       lie than the copy it replaced. */
+    const { emptyListingPage } = require('./fixtures');
+    const { doc } = await boot(emptyListingPage(), 'https://www.reddit.com/r/programming/');
+    await waitFor(() => doc.querySelector('#shd-root .shd-empty'), { timeout: 4000 });
+
+    doc.querySelector('shreddit-feed').insertAdjacentHTML('beforeend',
+      '<article><shreddit-post id="t3_late" post-title="Arrived after we gave up" ' +
+      'permalink="/r/programming/comments/l/p/" content-href="https://e.com/l" ' +
+      'post-type="link" score="5" comment-count="1" ' +
+      'created-timestamp="2026-08-12T00:00:00+0000" domain="e.com" author="a" ' +
+      'subreddit-name="programming" subreddit-prefixed-name="r/programming">' +
+      '</shreddit-post></article>');
+    const late = await waitFor(() => doc.querySelector('[data-fullname="t3_late"]'),
+      { timeout: 3000 });
+
+    check('a post arriving late is still rendered', late);
+    check('...and it retires the empty notice', !doc.querySelector('#siteTable .shd-empty'),
+      'the listing claims to be empty above a row');
+    check('...and the empty state comes off <html> with it',
+      !doc.documentElement.hasAttribute('data-shd-empty'),
+      doc.documentElement.getAttribute('data-shd-empty'));
+  }
+
+  {
+    /* The feed that arrives empty LATE, which is the only case the deadline tick can
+       settle: at onRoute there was nothing to conclude from, so the answer has to be
+       picked up on a later look. This is also the mid-session shape — a range or sort
+       click, where onRoute runs PRE-COMMIT with the outgoing page's posts still in the
+       DOM and must decline. Without the tick's own attempt this page waits for ever,
+       which is precisely what was reported.
+
+       Deliberately a separate fixture from the one above: when two mechanisms produce
+       one observable, asserting the observable proves nothing about either (bug 75), and
+       the boot-time attempt would cover for a missing tick on every other page here. */
+    const bareFeed = listingPage().replace(/<shreddit-feed>[\s\S]*<\/shreddit-feed>/,
+      '<shreddit-feed></shreddit-feed>');
+    const { doc } = await boot(bareFeed, 'https://www.reddit.com/r/programming/top/');
+    check('a feed that has not answered yet is not called empty',
+      !doc.querySelector('.shd-empty'), 'concluded empty before Reddit said anything');
+
+    const { EMPTY_FEED_PANEL } = require('./fixtures');
+    doc.querySelector('shreddit-feed').innerHTML = EMPTY_FEED_PANEL;
+    const settled = await waitFor(() => doc.querySelector('#shd-root .shd-empty'),
+      { timeout: 6000 });
+    check('an answer arriving after the first look is still acted on', settled,
+      `data-shd-waiting=${doc.documentElement.getAttribute('data-shd-waiting')}`);
+    check('...and it names the window, same as one that was there from the start',
+      /time window/i.test(doc.querySelector('.shd-empty-why')?.textContent || ''),
+      doc.querySelector('.shd-empty-why')?.textContent);
+  }
+
+  {
+    /* The counterweight, and the reason the settle test is a CONTRACT rather than a
+       count. An age gate that ships bare feed scaffolding (`<shreddit-feed></shreddit-feed>`
+       with no panel inside it) must not get our empty page drawn over it — that is bug
+       21, where #shd-error landed on the "Yes, I am over 18" button, arriving by a new
+       door. Nothing in that page says the feed has loaded, so we stand aside. */
+    const bareFeed = listingPage().replace(/<shreddit-feed>[\s\S]*<\/shreddit-feed>/,
+      '<shreddit-feed></shreddit-feed>');
+    const { doc } = await boot(bareFeed, 'https://www.reddit.com/r/gated/');
+    await hold(2000);
+
+    check('a bare feed shell is not mistaken for a feed that came back empty',
+      !doc.querySelector('.shd-empty'),
+      'our empty page was drawn over a page we have no answer about');
+    check('...it is still recorded as waiting, and still un-blanked',
+      doc.documentElement.getAttribute('data-shd-waiting') === 'empty-feed' &&
+      !doc.documentElement.classList.contains('shd-gate'),
+      doc.documentElement.getAttribute('data-shd-waiting'));
+    check('...and it is not accused of failing', !doc.querySelector('#shd-error'));
   }
 
   console.log('\n\x1b[1mLOGGED-OUT SCOPE\x1b[0m');
