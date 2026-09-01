@@ -368,20 +368,30 @@ SHD.comments = (() => {
   function videoPlayer(m) {
     if (m.type !== 'video' || !SHD.settings.inlineVideo) return null;
 
-    /* The one picture we can show without fetching anything: the post's own thumbnail, as
-       the poster while a source is in flight and as the whole frame once nothing will play.
-       GATED, from 0.30.0, exactly as postImage and the listing thumbnail are — the reason
-       that gate exists is that this extension renders its own image from a URL it read off
-       the page, which walks straight past the blur Reddit applies for logged-out readers
-       (bug 41), and a poster is that same bypass at player size. It shipped ungated because
-       the poster was written as a loading state rather than as a picture; it is both. */
-    const still = (m.nsfw && !SHD.settings.showNsfwThumbnails) ? null : (m.thumbnail || null);
+    /* The post's own thumbnail: the poster while a source is in flight, and the whole frame
+       once nothing will play. */
+    const still = m.thumbnail || null;
+
+    /* ADULT CONTENT, AND WHY THIS IS A BLUR RATHER THAN A PLACEHOLDER (project decision,
+       2026-09-01, asked and answered directly).
+       Everywhere else the adult opt-in is binary, because old reddit's was: a flagged
+       picture is a placeholder tile until the reader says otherwise. A player is not a tile.
+       Replacing it with one would hide a video the reader chose to open, on a page they
+       navigated to on purpose, and the toggle's own name — SHOW adult THUMBNAILS — is about
+       what is drawn, not about what may be watched. So the frame is blurred and the video is
+       one click away, which is also what Reddit itself does to a logged-out reader: bug 41
+       is the record that Reddit BLURS rather than withholds, and that drawing our own
+       picture is what walks past it. This draws the blur instead.
+       NOTHING BUT THE POSTER LOADS while it stands: `preload: none` and no source is mounted
+       until the click, so a scrolled-past adult post costs one thumbnail — the same picture
+       the listing row would have shown — and not a video. */
+    const gated = !!m.nsfw && !SHD.settings.showNsfwThumbnails;
 
     const video = h('video.shd-video-el', {
-      controls: true, preload: 'metadata', playsinline: '',
+      controls: true, preload: gated ? 'none' : 'metadata', playsinline: '',
       poster: still
     });
-    const box = h('div.shd-video', null, video);
+    const box = h('div.shd-video', { class: gated ? 'shd-video-gated' : null }, video);
 
     /* What the current attempt put on the page, so the next one starts from a clean
        element. Two soundtracks over one picture is what happens without this. */
@@ -606,7 +616,27 @@ SHD.comments = (() => {
          been asked to load yet, so advancing would silently spend a source. */
       if (tried.length && box.isConnected) advance();
     });
-    advance();
+
+    /**
+     * The one control the blur needs: a real <button> over the frame, so it is reachable by
+     * keyboard and announced as the action it is. Pressing it is what starts the source
+     * list — before that no video, no manifest and no request of any kind has happened.
+     */
+    if (gated) {
+      const show = h('button.shd-video-reveal', {
+        type: 'button',
+        text: 'adult content — click to play',
+        onclick: () => {
+          box.classList.remove('shd-video-gated');
+          show.remove();
+          video.preload = 'metadata';
+          advance();
+        }
+      });
+      box.appendChild(show);
+    } else {
+      advance();
+    }
 
     return box;
   }

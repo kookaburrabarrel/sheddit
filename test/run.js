@@ -646,25 +646,59 @@ async function boot(html, url, setup) {
     }
 
     {
-      /* The adult-content gate, which the poster walked straight past until 0.30.0: this
-         extension renders its own image from a URL it read off the page, and that is the
-         bypass bug 41 is about. A poster is that bypass at player size, and the still the
-         failure note leaves behind is the same picture again. */
-      const nsfwDead = commentsPage({ deadLinkPost: true }).replace(
+      /* ADULT CONTENT: blurred, then one click away. Old reddit's answer everywhere else is
+         a placeholder tile, and a player is not a tile — hiding a video the reader opened on
+         purpose is a different act from not drawing a thumbnail they scrolled past. What the
+         gate must still guarantee is that nothing loads while it stands. */
+      const nsfw = commentsPage({ deadLinkPost: true }).replace(
         'post-type="video"', 'post-type="video" nsfw=""');
-      const { doc } = await bootWithFetch(nsfwDead,
-        'https://www.reddit.com/r/funny/comments/dead1/expired/');
+      const URL_ = 'https://www.reddit.com/r/funny/comments/dead1/expired/';
+      const { doc, calls } = await bootWithFetch(nsfw, URL_);
       const v = await waitFor(() => doc.querySelector('.shd-selfpost video.shd-video-el'));
-      check('an adult video post gets no poster with adult thumbnails off',
-        v && !doc.querySelector('.shd-selfpost video.shd-video-el').hasAttribute('poster'),
-        doc.querySelector('.shd-selfpost video.shd-video-el')?.getAttribute('poster'));
+      const el = doc.querySelector('.shd-selfpost video.shd-video-el');
+      check('an adult video post renders its player blurred, not replaced', v &&
+        !!doc.querySelector('.shd-selfpost .shd-video.shd-video-gated'));
+      check('...still showing the frame, because a blur with nothing under it is a black box',
+        el?.getAttribute('poster') === 'https://preview.redd.it/dead-poster.jpg',
+        el?.getAttribute('poster'));
+      /* The part that matters more than the blur: a blurred <video> that had already
+         fetched its media would be CSS over a completed download. */
+      check('...having loaded no video and spent no request at all',
+        !el?.hasAttribute('src') && el?.getAttribute('preload') === 'none' && calls.length === 0,
+        `src=${el?.getAttribute('src')} preload=${el?.getAttribute('preload')} calls=${calls.length}`);
+      const btn = doc.querySelector('.shd-selfpost button.shd-video-reveal');
+      check('...offering a real button, so the reveal is reachable by keyboard',
+        btn?.tagName === 'BUTTON' && /adult content/i.test(btn?.textContent || ''),
+        btn?.outerHTML);
+
+      btn.dispatchEvent(new doc.defaultView.MouseEvent('click', { bubbles: true }));
+      const played = await waitFor(() =>
+        doc.querySelector('.shd-selfpost video.shd-video-el[src]'));
+      check('pressing it unblurs the player and starts the sources, not before',
+        played && !doc.querySelector('.shd-selfpost .shd-video-gated') &&
+        !doc.querySelector('.shd-selfpost button.shd-video-reveal'),
+        doc.querySelector('.shd-selfpost .shd-video')?.className);
+      check('...spending the manifest request only now that a reader asked for the video',
+        calls.length === 1 && /DASHPlaylist\.mpd$/.test(calls[0]), JSON.stringify(calls));
+    }
+
+    {
+      /* With the opt-in given, an adult post is an ordinary one — no blur, no button, and
+         the poster and the still it may leave behind are drawn like any other post's. */
+      const nsfw = commentsPage({ deadLinkPost: true }).replace(
+        'post-type="video"', 'post-type="video" nsfw=""');
+      const { doc } = await bootWithFetch(nsfw,
+        'https://www.reddit.com/r/funny/comments/dead1/expired/',
+        { settings: { showNsfwThumbnails: true, inlineVideo: true, autoPaginate: false } });
+      await waitFor(() => doc.querySelector('.shd-selfpost video.shd-video-el[src]'));
+      check('with adult pictures opted in, the player is not blurred and needs no click',
+        !doc.querySelector('.shd-selfpost .shd-video-gated') &&
+        !doc.querySelector('.shd-selfpost button.shd-video-reveal'));
       doc.querySelector('.shd-selfpost video.shd-video-el')
         .dispatchEvent(new doc.defaultView.Event('error'));
       await waitFor(() => doc.querySelector('.shd-selfpost .shd-video-fail'));
-      check('...and no still when it fails either — the same picture, the same gate',
-        !doc.querySelector('.shd-selfpost img.shd-video-still'));
-      check('...but it is still told what happened',
-        !!doc.querySelector('.shd-selfpost .shd-video-fail'));
+      check('...and the still left behind when it fails is drawn like any other picture',
+        !!doc.querySelector('.shd-selfpost img.shd-video-still'));
     }
   }
 

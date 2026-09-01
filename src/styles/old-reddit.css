@@ -551,7 +551,38 @@ html.shd-active body {
 .expando[hidden] { display: none; }
 .shd-expando-img { display: block; width: auto; max-width: 100%; height: auto; }
 
-.shd-selfpost .shd-video { margin: 5px 0; max-width: var(--shd-video-max); }
+/* `position: relative` is load-bearing, not decoration: the reveal button below is
+   absolutely positioned over the frame and would escape to the viewport without it. */
+.shd-selfpost .shd-video { margin: 5px 0; max-width: var(--shd-video-max); position: relative; }
+/* ADULT CONTENT, UNTIL THE READER ASKS. The frame is blurred rather than replaced by old
+   reddit's placeholder tile, because a player is not a thumbnail — see comments.js. The
+   blur is on the ELEMENT, and the element is carrying nothing but its poster: no source is
+   mounted until the button is pressed, so this is one thumbnail's worth of picture with a
+   heavy blur over it, not a video hidden with CSS.
+   `scale` closes the transparent border a blur leaves at the edges of its own box. */
+.shd-selfpost .shd-video-gated .shd-video-el {
+  filter: blur(24px);
+  transform: scale(1.06);
+  pointer-events: none;         /* the controls are behind the blur; the button is the control */
+}
+/* The blur must not bleed outside the player's box. */
+.shd-selfpost .shd-video-gated { overflow: hidden; }
+.shd-selfpost .shd-video-reveal {
+  position: absolute;
+  /* Centred over the frame, and sized to its text rather than stretched across it: the
+     reader should see that the picture underneath is blurred, not covered. */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font: inherit;
+  font-size: small;
+  color: var(--shd-text);
+  background: var(--shd-bg);
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+  padding: 4px 8px;
+  cursor: pointer;
+}
 .shd-selfpost .shd-video-el {
   display: block;
   width: 100%;

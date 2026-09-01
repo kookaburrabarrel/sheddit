@@ -174,11 +174,17 @@ function serveFixtures() {
     // An image submission, for the browser suites: the picture's box is layout, and layout
     // is the one thing jsdom cannot answer for.
     const wantsImage = /\/image1\//.test(pathname);
+    /* An ADULT video submission, for the browser suites. The blur gate puts an absolutely
+       positioned button over the player, and "does the control stay inside the box it is
+       centred on" is a layout question — the one class of bug css-lint reads one
+       declaration at a time and cannot answer. */
+    const wantsNsfwVideo = /\/dead1\//.test(pathname);
     let body = /\/comments\//.test(pathname)
       // A thread that ships a slice and lazy-loads the rest, which is what a real one does.
       ? commentsPage(wantsBranches ? { deliver: COMMENT_SLICE, branchPager: true }
         : wantsImage ? { imagePost: true }
-          : wantsPager ? { deliver: COMMENT_SLICE, pager: true } : {})
+          : wantsNsfwVideo ? { deadLinkPost: true }
+            : wantsPager ? { deliver: COMMENT_SLICE, pager: true } : {})
       : listingPage({ pager: wantsPager });
     // /r/paintprobe/ samples the page's computed state at the EARLIEST moment body
     // content exists — a parser-inserted script right after <body> opens, which runs
@@ -186,6 +192,9 @@ function serveFixtures() {
     // already computed at that instant, the native feed that follows can flash before
     // the extension's CSS lands. This is the only way to put eyes on document_start CSS
     // timing from inside a suite: the flash itself is over before WebDriver returns.
+    // The same post, flagged: the fixture is shared with run.js, and the flag is what the
+    // blur gate keys on.
+    if (wantsNsfwVideo) body = body.replace('post-type="video"', 'post-type="video" nsfw=""');
     if (/\/r\/paintprobe\//.test(pathname)) {
       body = body.replace('<body>', `<body><script>
         window.__shdPaint = {
@@ -494,6 +503,7 @@ const PATHS = {
   subreddit: '/r/programming/',
   comments: '/r/programming/comments/link1/nasa/',
   imageComments: '/r/aww/comments/image1/a_very_good_dog/',   // an image submission
+  nsfwVideoComments: '/r/funny/comments/dead1/expired/',      // an ADULT video submission
   broken: '/r/broken/',         // posts missing a required attribute -> real render failure
   pager: '/r/pager/',           // faceplate-partial with a working loadContent()
   spa: '/r/spa/',               // page-world router intercepts sort navs like live Reddit

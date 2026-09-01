@@ -333,9 +333,12 @@ against. What follows from that, stated plainly:
   had — reachable from the header's *nsfw thumbnails* button as well as the options page.
   See the note on adult thumbnails under *How it's tested* for the reasoning. It covers
   pictures: thumbnails, the `[+]` expando and full-size images on a comments page. A
-  flagged **video** still plays wherever inline video is on — what the opt-in covers there
-  is the still: since 0.30.0 the player's poster frame, and the frame left behind when a
-  video will not play, are gated like every other picture Sheddit draws.
+  flagged **video** gets a different answer, new in 0.30.0: its player is **blurred with a
+  *click to play* button over it** rather than replaced by a placeholder — a player is not a
+  thumbnail, and hiding a video you opened on purpose is not the same act as not drawing one
+  you scrolled past. Nothing but the poster frame loads until you press it: no video, no
+  manifest, no request of any kind. With the opt-in on, an adult video post is an ordinary
+  one.
 - **Pages with no feed are handed straight back.** Age gates, private communities and
   rate-limit pages are recognised and left alone, immediately. Putting an error screen over
   an age gate would cover the button you need to press.
