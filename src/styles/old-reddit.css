@@ -264,6 +264,67 @@ html.shd-active body {
   padding: 4px 10px 0;
 }
 
+/* ---------- "links from:" — the time range on top / controversial ---------- */
+/* Old reddit put this directly under the tabs, inside the same blue strip, because the
+   range is part of what the selected tab MEANS: `top` without one is not a question. It
+   sits in the strip rather than over the listing for that reason — it is chrome, not
+   content. */
+.shd-timebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0 4px;
+  font-size: 11px;
+  color: var(--shd-topbar-text);
+}
+.shd-timelist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.shd-timelist li a {
+  color: var(--shd-accent);
+  text-decoration: none;
+}
+.shd-timelist li a:hover { text-decoration: underline; }
+/* The one in force is stated, not linked: a link to the page you are already on is the
+   "control that ignores a click" failure (bug 62) in its smallest form. */
+.shd-timelist li.selected a {
+  color: var(--shd-text);
+  font-weight: bold;
+  text-decoration: none;
+  cursor: default;
+}
+
+/* ---------- a listing with nothing in it ---------- */
+/* Deliberately quiet and deliberately present. The page it sits on is a WORKING page —
+   the feed arrived and the answer was zero — so this is a sentence in the layout, not an
+   error card. It has the same left inset as a row, so it reads as the first thing in the
+   listing rather than as furniture. */
+.shd-empty {
+  padding: 24px 10px 30px;
+  max-width: 44em;
+}
+.shd-empty .shd-empty-line {
+  margin: 0;
+  font-size: 16px;
+  color: var(--shd-text);
+}
+.shd-empty .shd-empty-why {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--shd-text);
+}
+.shd-empty .shd-empty-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--shd-meta);
+}
+
 /* ---------- page frame ---------- */
 #shd-root {
   background: var(--shd-bg);

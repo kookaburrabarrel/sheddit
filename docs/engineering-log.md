@@ -1306,6 +1306,64 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     challenge), so the fixtures are built from the report's audit and cover BOTH
     spellings on one page rather than betting on either.
 
+94. **A subreddit with twelve years of posts came up as native Reddit, and told the
+    reader it had never had one.** Reported 2026-09-01 with both halves of the DOM
+    state attached, which is why this is two bugs and not one. `/r/DIYfail/top/`
+    rendered in Reddit's own dark UI: `<html class="theme-beta theme-dark">` with no
+    `shd-active`, `data-shd-waiting="empty-feed"`, 0 `shreddit-post`, 0 `shd-`
+    elements. The same URL at `?t=all` was `shd-active`, 27 posts, 23 shd- elements,
+    27 rows. **Nothing was broken.** `/top/` with no `t=` is `t=day`, and the sub
+    genuinely had nothing in the last day — measured across the windows: today 0, this
+    week 1, this month 1, this year 10+, all time 10+.
+
+    **The renderer never activated, because the only test for "this page is ours" was
+    whether a ROW had been drawn.** `gate.nothingToRender()` was right that an empty
+    feed is not a failure (bug 52) — and that verdict was then treated as a reason to
+    keep WAITING. `waiting` means "the feed has not arrived", which is the correct
+    posture for a feed still streaming in; a Top/Today window with nothing in it HAS
+    arrived, and its answer is zero. A check that counts posts cannot tell those apart,
+    so the page waited for something that was never coming: no timeout, no terminal
+    state, `data-shd-waiting="empty-feed"` sitting there indefinitely with no signal of
+    any kind. The same infinite-wait-where-a-terminal-state-belonged as the video bug
+    two rounds earlier.
+
+    The cost was not the post list. The chrome and the listing are built in ONE pass
+    (`flush`'s `rendered > 0`), so an empty feed cost the entire shell — header, tab
+    menu, theme bar, sidebar — which is why the page came up in Reddit's dark UI even
+    though `data-shd-theme="night"` was set and correct the whole time. The theme
+    survived; the renderer that applies it never ran.
+
+    The split is a CONTRACT, not a looser count, and that distinction is the whole fix:
+    `C.FEED_EMPTY` is Reddit's own no-content panel inside the feed, which is Reddit
+    stating the answer. Without it, "a feed with no posts in it" also describes an age
+    gate shipping bare feed scaffolding, and drawing our empty page over one buries the
+    button the reader has to press — bug 21 through a new door. So the panel settles it
+    immediately; absent the panel there is an inference (document complete, no pending
+    partial, markup inside the feed, no native modal, and the full patience window
+    elapsed) that fires at the deadline and is deliberately the last resort. Either way
+    the page then gets the whole shell and an empty `#siteTable`.
+
+    **And the copy was Reddit's, which is the half the reader actually met.** Reddit's
+    panel says "This community doesn't have any posts yet" — the message for a brand new
+    community — for every reason a feed can come back empty, including a time-filtered
+    window on a twelve-year-old sub. Read as a data failure, which is exactly what that
+    wording invites. Ours says `there doesn't seem to be anything here` (old reddit's own
+    line, and "here" is the honest scope) over a line naming the community and the range
+    in force. It never asserts what we cannot see: nothing about whether the community
+    has posts at all.
+
+    Naming the range meant admitting the range exists. `t=` is ABSENT from the URL when
+    Reddit uses the default, so `/r/x/top/` and `/r/x/top/?t=day` are one page whose
+    meaning is invisible — and a captured `top` page silently means something different
+    depending on when it is replayed. `route.timeOf()` normalises the absent parameter to
+    `day` rather than reporting "no filter", which is the difference between describing
+    the page and repeating the URL. It is also half of the route KEY: without that,
+    `?t=week` is a query-only navigation route.js concludes never happened, and Reddit
+    swaps its feed under a render nobody tore down (bug 87's shape, from the listing
+    side). Old reddit's "links from:" row is back with it, on `top` and `controversial`
+    only — a reader told there is nothing in the past 24 hours needs the control that
+    widens it, and a range control on `hot` would imply a filter that is not applied.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

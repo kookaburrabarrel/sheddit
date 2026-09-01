@@ -504,6 +504,89 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   // bottom visits this author's profile, and by then the page is a comment thread.
   const postAuthorForProfile = await page.evaluate((C) =>
     document.querySelector(C.POST)?.getAttribute(C.POST_ATTR.author), C);
+  /* ---------------- the time range on `top` ----------------
+   *
+   * Two claims this extension now makes on screen, both of which are Reddit's behaviour
+   * rather than ours, and both of which fail SILENTLY if they stop being true.
+   *
+   * `route.DEFAULT_TIME` says a `top` URL with no `t=` means the past 24 hours. That is
+   * measured, not documented by Reddit — from the 2026-09-01 report (/r/DIYfail: 0 posts
+   * today, 1 this week, 10+ this year) — and it is printed to the reader twice: in the
+   * "links from:" row and in the empty-state line. If Reddit changes the default, nothing
+   * breaks and nothing errors; we simply tell the reader the wrong thing. So the check is
+   * that a bare `/top/` and `?t=day` are the SAME PAGE, and that the range is honoured at
+   * all (`?t=all` differs).
+   *
+   * `C.FEED_EMPTY` is the panel that settles "the feed arrived and holds nothing" (bug
+   * 94). Losing it does not error either — an empty listing would go back to waiting for
+   * ever behind native Reddit, which is exactly the reported symptom. `?t=hour` is the
+   * cheapest way to ask for a window that is usually empty; on a very busy subreddit it
+   * will not be, and that is INCONCLUSIVE rather than a pass.
+   *
+   * Ids are compared as SETS with an overlap threshold, not as ordered lists: `top` is
+   * ordered by a score that moves between two page loads, so demanding an identical
+   * sequence would report a Reddit change every time a vote landed mid-run.
+   */
+  console.log(`\n\x1b[1mLIVE CONTRACTS — THE TIME RANGE ON /r/${SUB}/top/\x1b[0m`);
+  {
+    const load = async (query) => {
+      await page.goto(`https://www.reddit.com/r/${SUB}/top/${query}`,
+        { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.waitForSelector(C.FEED, { timeout: 30000 }).catch(() => null);
+      await new Promise(r => setTimeout(r, 3000));        // let the feed hydrate
+      return page.evaluate((C) => ({
+        ids: [...document.querySelectorAll(C.POST)]
+          .map(p => p.getAttribute(C.POST_ATTR.id)).filter(Boolean),
+        feed: !!document.querySelector(C.FEED),
+        panel: !!document.querySelector(`${C.FEED} ${C.FEED_EMPTY}`)
+      }), C);
+    };
+    const overlap = (a, b) => {
+      const A = new Set(a), B = new Set(b);
+      const shared = [...A].filter(id => B.has(id)).length;
+      return shared / Math.max(1, Math.min(A.size, B.size));
+    };
+
+    const bare = await load('');
+    const day = await load('?t=day');
+    const all = await load('?t=all');
+    const hour = await load('?t=hour');
+    console.log(`  \x1b[2mposts: bare=${bare.ids.length} t=day=${day.ids.length} ` +
+                `t=all=${all.ids.length} t=hour=${hour.ids.length}\x1b[0m`);
+
+    if (!bare.ids.length && !day.ids.length) {
+      console.log('  \x1b[33mINCONCLUSIVE: neither /top/ nor ?t=day delivered a post — ' +
+        'two empty pages match trivially, and that is also what a broken C.POST looks ' +
+        'like. Rerun with --sub=<a busier subreddit>.\x1b[0m');
+    } else {
+      check('a bare /top/ is the same page as ?t=day (the default we state on screen)',
+        overlap(bare.ids, day.ids) >= 0.8,
+        `overlap ${(overlap(bare.ids, day.ids) * 100).toFixed(0)}% — if this is near zero, ` +
+        "Reddit's default range for `top` has moved and route.DEFAULT_TIME is now telling " +
+        'readers the wrong window; find the new default and change it there');
+      check('the range parameter is honoured at all (?t=all is not ?t=day)',
+        overlap(all.ids, day.ids) < 0.9 || all.ids.length !== day.ids.length,
+        'all-time and today delivered the same posts — either this subreddit is too young ' +
+        'to tell them apart (rerun elsewhere) or `t=` is being ignored, which would make ' +
+        "the whole \"links from:\" row a control that does nothing");
+    }
+
+    if (hour.ids.length) {
+      console.log('  \x1b[33mINCONCLUSIVE: ?t=hour still had posts, so nothing here says ' +
+        'whether C.FEED_EMPTY still matches. Rerun with --sub=<a quiet subreddit>.\x1b[0m');
+    } else if (!hour.feed) {
+      console.log('  \x1b[33mINCONCLUSIVE: ?t=hour served no feed element at all — that is ' +
+        'a different page shape (an interstitial?), not an empty listing.\x1b[0m');
+    } else {
+      check("Reddit's own no-content panel is inside the empty feed (C.FEED_EMPTY)",
+        hour.panel,
+        'zero posts and no panel we recognise: an empty listing can no longer be told ' +
+        'apart from a feed that has not arrived, so it will wait behind native Reddit ' +
+        'instead of rendering (bug 94). Capture what shreddit-feed holds on this page ' +
+        'and update C.FEED_EMPTY from it');
+    }
+  }
+
   console.log(`\n\x1b[1mLIVE CONTRACTS — ${permalink}\x1b[0m`);
   await page.goto('https://www.reddit.com' + permalink, { waitUntil: 'networkidle2', timeout: 60000 });
   await page.waitForSelector(C.COMMENT, { timeout: 30000 }).catch(() => {});

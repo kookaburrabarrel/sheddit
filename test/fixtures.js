@@ -425,6 +425,34 @@ function listingPage(opts = {}) {
   </shreddit-app></body></html>`;
 }
 
+/**
+ * A listing whose feed came back EMPTY, carrying Reddit's own no-content panel.
+ *
+ * The CAPTURED live shape (2026-08-20, r/911truth, logged out): one wrapper div whose
+ * children are an `<h1 data-testid="no-content">`, a paragraph and a link. Two things
+ * about it are load-bearing and neither is decoration:
+ *
+ *   - the testid, because that is the contract (C.FEED_EMPTY) — the only affirmative
+ *     signal Reddit gives that the feed has ARRIVED and holds nothing, as opposed to
+ *     being late. Bug 94 is what happens without it.
+ *   - the copy, verbatim, because the copy is the bug the reader met: it says the
+ *     community has no posts at all while describing a time-filtered window that has
+ *     none, and asserting that we replace it is the point of the empty-listing tests.
+ *
+ * The panel is chunky on purpose (heading, paragraph, link, wrapper). A thin one would
+ * pass the old descendant-count heuristic too, and prove nothing about bug 52.
+ */
+const EMPTY_FEED_PANEL = `
+        <div class="mt-[100px] flex justify-center items-center flex-col" id="empty-feed-content">
+          <h1 data-testid="no-content">This community doesn't have any posts yet</h1>
+          <p>Make one and get this feed started.</p>
+          <a href="/r/911truth/submit">Create a post</a>
+        </div>`;
+
+const emptyListingPage = () =>
+  listingPage().replace(/<shreddit-feed>[\s\S]*<\/shreddit-feed>/,
+    `<shreddit-feed>${EMPTY_FEED_PANEL}</shreddit-feed>`);
+
 /* ------------------------------------------------------------------ user profiles --- */
 
 /**
@@ -890,7 +918,7 @@ function commentsPage(opts = {}) {
   </shreddit-app></body></html>`;
 }
 
-module.exports = { POSTS, SELF_POST, CMAF_POST, DEAD_LINK_POST, VIDEO_MPD, LIVE_E, DEAD_E, COMMENT_DEPTHS, listingPage, commentsPage, nestedCommentsHtml,
+module.exports = { POSTS, SELF_POST, EMPTY_FEED_PANEL, emptyListingPage, CMAF_POST, DEAD_LINK_POST, VIDEO_MPD, LIVE_E, DEAD_E, COMMENT_DEPTHS, listingPage, commentsPage, nestedCommentsHtml,
                    profilePage, PROFILE_COMMENT_COUNT, PROFILE_LINKED_SUB, PROFILE_LINKED_TITLE,
                    PAGER_SCRIPT, PAGER_PAGE_SIZE,
                    COMMENT_PAGER_SCRIPT, COMMENT_PAGER_BATCH,

@@ -46,6 +46,43 @@ SHD.route = (() => {
   const EXTRA_SORTS = ['best'];
   const SORT_RE = [...SORTS, ...EXTRA_SORTS].join('|');
 
+  /**
+   * The time range, which is HALF of what `top` and `controversial` mean.
+   *
+   * Reported 2026-09-01: a reader opened /r/DIYfail/top/, saw an empty page, and concluded
+   * the extension had broken — the sub is twelve years old and full of posts. It had not.
+   * Reddit applies a time range to those two sorts whether or not the URL says so, and the
+   * range it picks when the URL is silent is `day`. Measured on that sub the same day:
+   * today 0 posts, this week 1, this month 1, this year 10+, all time 10+. The feed was
+   * right; nothing on screen said WHICH twenty-four hours it was the top of.
+   *
+   * So the default is written down rather than left implicit. `/r/x/top/` and
+   * `/r/x/top/?t=day` are the same page, and every part of this extension that names the
+   * range — the "links from:" row, the empty-state line — says `past 24 hours` on both
+   * instead of saying nothing on one of them. It also makes a captured page replayable:
+   * a saved `top` URL with no `t=` means something different depending on when it is
+   * opened, and normalising it here is what pins it.
+   *
+   * `phrase` is the sentence form. Old reddit's dropdown reads "links from: past 24
+   * hours"; a sentence needs "from the past 24 hours", and neither is derivable from the
+   * other without a rule per row, so both are written out.
+   */
+  const TIMES = [
+    { id: 'hour',  label: 'past hour',     phrase: 'the past hour' },
+    { id: 'day',   label: 'past 24 hours', phrase: 'the past 24 hours' },
+    { id: 'week',  label: 'past week',     phrase: 'the past week' },
+    { id: 'month', label: 'past month',    phrase: 'the past month' },
+    { id: 'year',  label: 'past year',     phrase: 'the past year' },
+    { id: 'all',   label: 'all time',      phrase: 'all time' }
+  ];
+  /* The two sorts a range applies to — old reddit offered the dropdown on exactly these,
+     and Reddit still does. `hot`, `new` and `rising` carry no range at all, so a `t=` on
+     one of them is inert and must not be treated as part of the route (see timeOf). The
+     default above was measured on `top`; `controversial` is the same query with the
+     comparison reversed and is assumed to share it. */
+  const TIMED_SORTS = ['top', 'controversial'];
+  const DEFAULT_TIME = 'day';
+
   /* The one profile tab list, owned here for the same reason SORTS is: chrome.js renders
      tabs from it, and every href those tabs carry must classify back to PROFILE — a tab
      that routes to OTHER drops the reader out of the extension (bug 10). `path` is the
@@ -123,6 +160,46 @@ SHD.route = (() => {
     return m ? m[1] : '';
   };
 
+  const timeParamOf = (search) => {
+    const m = /[?&]t=([^&#]*)/.exec(search || '');
+    return m ? m[1] : '';
+  };
+
+  /**
+   * The time range in force on this listing — NORMALISED, so "absent" comes back as
+   * `day` rather than as nothing at all. Null when the sort takes no range.
+   *
+   * The normalisation is the point (see TIMES): Reddit filters `top` and `controversial`
+   * by day whether or not the URL says so, so a caller that reported "no range" for
+   * `/r/x/top/` would be repeating the URL rather than describing the page — which is
+   * exactly the gap the reader fell into. An unrecognised value falls back the same way:
+   * `?t=fortnight` is not a range Reddit serves, and claiming it on screen would put a
+   * word under the reader's eyes that no part of the feed corresponds to.
+   *
+   * It is also half of the route KEY (see emit): `/r/x/top/?t=week` is a different page
+   * from `/r/x/top/` with the same pathname, so without it a range change is a
+   * query-only navigation that this module concludes never happened — bug 87's shape,
+   * where Reddit swaps its feed under a render we never tore down. Non-timed sorts
+   * return null, so a stale `t=` riding along on `/r/x/new/` cannot tear the page down
+   * for nothing.
+   *
+   * `search` defaults to the SENTINEL null, meaning "the query we last emitted for",
+   * under the emitPath() rule: anything decorating the render must agree with the
+   * navigation that produced it, not with a location one commit behind or ahead. An
+   * empty string is a real answer (a URL with no query) and is not the sentinel.
+   */
+  function timeOf(path = emitPath(), search = null) {
+    if (classify(path) !== LISTING) return null;
+    if (!TIMED_SORTS.includes(sortOf(path))) return null;
+    const raw = search === null ? (emit.lastTime || '') : timeParamOf(search);
+    return TIMES.some(t => t.id === raw) ? raw : DEFAULT_TIME;
+  }
+
+  /** The row for a range id — `null` for a range we do not offer. */
+  const timeSpec = (id) => TIMES.find(t => t.id === id) || null;
+  /** "the past 24 hours", for a sentence. */
+  const timePhrase = (id = timeOf()) => timeSpec(id)?.phrase || '';
+
   /**
    * Fire listeners when the route changes.
    *
@@ -139,10 +216,16 @@ SHD.route = (() => {
   function emit(path = location.pathname, search = location.search) {
     const next = classify(path);
     const sort = sortParamOf(search);
-    if (next === current && emit.lastPath === path && emit.lastSort === sort) return;
+    /* NORMALISED, not raw: `/r/x/top/` and `/r/x/top/?t=day` are one page and must not
+       tear each other down, while `t=` on a sort that has no range is inert. timeOf()
+       owns both rules; keying on the raw parameter would get both wrong. */
+    const time = timeOf(path, search);
+    if (next === current && emit.lastPath === path && emit.lastSort === sort
+        && emit.lastTime === time) return;
     current = next;
     emit.lastPath = path;
     emit.lastSort = sort;
+    emit.lastTime = time;
     listeners.forEach(fn => { try { fn(current, path); } catch (e) { SHD.gate.reportError(e); } });
   }
 
@@ -197,8 +280,9 @@ SHD.route = (() => {
     emit(location.pathname);
   }
 
-  return { LISTING, COMMENTS, PROFILE, OTHER, SORTS, PROFILE_TABS,
+  return { LISTING, COMMENTS, PROFILE, OTHER, SORTS, PROFILE_TABS, TIMES, TIMED_SORTS,
            classify, subredditOf, sortOf, usernameOf, profileTabOf, onChange, start,
+           timeOf, timePhrase,
            get current() { return current; },
            get path() { return emitPath(); },
            /* The `?sort=` value this module last emitted for — the emitPath() rule

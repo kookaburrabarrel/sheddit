@@ -32,6 +32,89 @@ SHD.listing = (() => {
 
   function reset() { container = null; rank = 0; }
 
+  /* ------------------------------------------------------------------ *
+   * the empty listing
+   * ------------------------------------------------------------------ */
+
+  const EMPTY_CLASS = 'shd-empty';
+
+  /**
+   * What a listing with no posts in it says.
+   *
+   * Reddit's own line for this is "This community doesn't have any posts yet" and it is
+   * shown for every reason a feed can come back empty — including the one that prompted
+   * bug 94, where a twelve-year-old subreddit had nothing in the default 24-hour window of
+   * `top`. That sentence describes a brand new community, so a reader who is looking at a
+   * time-filtered range reads it as the renderer having failed. The fix is not to soften
+   * it, it is to say which question was actually asked.
+   *
+   * So the second line NAMES THE FILTER IN FORCE, and the range comes from
+   * route.timeOf(), which normalises the absent `t=` rather than reporting nothing —
+   * `/r/x/top/` is `?t=day` and the line has to say so, because that URL is precisely the
+   * one whose meaning is invisible. The first line is old reddit's own wording for an
+   * empty listing, kept verbatim: it says "here", which is the honest scope, and it is
+   * what this extension exists to put back.
+   *
+   * We never claim more than we know. Nothing here says the community is empty, has been
+   * banned or has no posts of any kind — we cannot see any of that from a feed of zero,
+   * and Reddit's copy asserting it is the whole bug.
+   */
+  function emptyNotice() {
+    const R = SHD.route;
+    const sub = R.subredditOf();
+    const user = R.usernameOf();
+    const onProfile = R.current === R.PROFILE;
+    /* Null on a profile and on every sort that carries no range — timeOf() owns that
+       rule, so this line cannot drift from the "links from:" row above the box. */
+    const range = R.timeOf();
+    const where = sub ? `r/${sub}` : user ? `u/${user}` : 'the front page';
+    const what = onProfile ? 'nothing on this tab' : 'no posts';
+    return h('div.' + EMPTY_CLASS, null, [
+      h('p.shd-empty-line', { text: "there doesn't seem to be anything here" }),
+      h('p.shd-empty-why', {
+        text: range
+          ? `${where} has no posts from ${R.timePhrase(range)}.`
+          : `${where} has ${what}.`
+      }),
+      /* Only where there is a control to point at: the "links from:" row is rendered by
+         the same tab menu that sits directly above this box, so a reader told to widen
+         the range can do it without leaving the page. A hint with nothing behind it would
+         be the "control that ignores a click" failure in prose (bug 62). */
+      range
+        ? h('p.shd-empty-hint', {
+            text: 'This sort always applies a time range. Widen it above to look further back.'
+          })
+        : null
+    ]);
+  }
+
+  /**
+   * Mount the listing itself for an empty feed: #shd-root, the tab bar (with its "links
+   * from:" row) and an empty #siteTable carrying the notice. The header and sidebar are
+   * the pipeline's, exactly as they are for a page with rows in it.
+   *
+   * Idempotent — the gate may ask more than once while the page settles.
+   */
+  function renderEmpty() {
+    const box = ensureContainer();
+    if (box.querySelector('.' + EMPTY_CLASS)) return;
+    box.appendChild(emptyNotice());
+  }
+
+  /**
+   * Add a row, retiring the empty notice if one is standing.
+   *
+   * A feed can be empty when we ask and carry posts a second later — a slow stream, a
+   * partial we drove, a history traversal restoring cached elements. The row wins: leaving
+   * "there doesn't seem to be anything here" above a list of posts would be a worse lie
+   * than the copy this replaced.
+   */
+  function place(node) {
+    const box = ensureContainer();
+    box.querySelector('.' + EMPTY_CLASS)?.remove();
+    box.appendChild(node);
+  }
+
   /* A miss is either "not hydrated yet" (retry works) or "contracts.js is stale"
      (retry never works). The first cut logged console.debug for both, which made a
      permanent break indistinguishable from a timing miss. Warn once, with the evidence
@@ -248,7 +331,7 @@ SHD.listing = (() => {
     if (el.closest(C.AD_POST)) return false;         // never render ads
     const m = SHD.model.post(el);
     if (!m) return false;
-    ensureContainer().appendChild(render(m));
+    place(render(m));
     return true;
   }
 
@@ -356,10 +439,10 @@ SHD.listing = (() => {
     const m = SHD.model.profileComment(el);
     if (!m) return false;
     const thing = renderProfileComment(m);
-    ensureContainer().appendChild(thing);
+    place(thing);
     armLateTime(thing, m);
     return true;
   }
 
-  return { consume, consumeProfileComment, render, reset };
+  return { consume, consumeProfileComment, render, renderEmpty, reset };
 })();

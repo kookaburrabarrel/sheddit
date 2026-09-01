@@ -1,6 +1,6 @@
 {
-  "version": "0.30.0",
+  "version": "0.31.0",
   "released": "2026-09-01",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.30.0 fixes video posts that showed nothing: an expired rendition is passed over rather than played, a source that fails falls through to the next one, a video that will not play says why, and adult posts are blurred behind a click-to-view instead of drawn as nothing."
+  "notes": "0.31.0 renders a listing that came back empty instead of waiting for ever on it: an empty top/controversial page keeps the whole layout and says which time range it is empty of, and old Reddit's \"links from:\" range control is back."
 }

@@ -25,6 +25,19 @@ SHD.C = {
      POST excludes them for free. Verified: 28 posts scraped, 0 ads captured. */
   AD_POST: 'shreddit-ad-post',
   FEED_SEPARATOR: 'shreddit-feed > hr',
+  /* Reddit's own "there is nothing here" panel, which it renders INSIDE the feed in
+     place of posts. Captured live 2026-08-20 (r/911truth, logged out): one wrapper div
+     whose children are an `<h1 data-testid="no-content">`, a paragraph and a link.
+
+     It is the only affirmative "the feed has loaded and the answer is zero" signal
+     Reddit gives us, and that distinction is the whole reason it is a contract rather
+     than a heuristic: a feed with no posts in it is either an answer or a page that has
+     not arrived yet, and counting posts cannot tell those apart — it just keeps waiting
+     (bug 94). The testid is what is matched, not the copy: the wording is Reddit's and
+     has already been observed to be wrong for the case it is shown in (it claims the
+     community has never had a post while describing a time-filtered range with none),
+     so the copy is exactly the thing we replace. */
+  FEED_EMPTY: '[data-testid="no-content"]',
 
   /* Pagination. The trailing partial carries loading="programmatic" — it does NOT
      self-trigger on scroll; Reddit's feed JS calls it. We call it ourselves via its

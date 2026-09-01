@@ -185,10 +185,45 @@ SHD.chrome = (() => {
     const sub = SHD.route.subredditOf();
     const active = SHD.route.sortOf();
     const base = sub ? `/r/${sub}` : '';
-    return h('div.shd-tabmenu-wrap', null,
+    return h('div.shd-tabmenu-wrap', null, [
       h('ul.tabmenu', null, SORTS.map(s =>
         h('li' + (s === active ? '.selected' : ''), null,
-          h('a', { href: `${base}/${s}/`, text: s })))));
+          h('a', { href: `${base}/${s}/`, text: s })))),
+      timeBar()
+    ]);
+  }
+
+  /**
+   * Old reddit's "links from:" row — the time range, on the two sorts that take one.
+   *
+   * It is not decoration. `top` and `controversial` are filtered by time whether or not
+   * the URL says so, and Reddit's page shows the range in a control we suppress along with
+   * the rest of its chrome — so without this the reader is looking at ONE DAY of a
+   * subreddit with nothing on screen saying so. That is bug 94 as the reader met it: an
+   * empty /r/DIYfail/top/ read as a broken extension, on a sub with twelve years of posts
+   * behind a range nobody could see or change.
+   *
+   * Rendered from route.TIMES for the same reason the sort tabs are rendered from
+   * route.SORTS: every href here has to classify back to LISTING and carry a range
+   * route.timeOf() recognises, or our own control drops the reader out of the extension
+   * (bug 10). Links rather than a <select>, so middle-click and open-in-new-tab work the
+   * way every other tab in this layout does.
+   *
+   * Null on hot/new/rising, where a range means nothing — offering one there would imply
+   * a filter that is not applied.
+   */
+  function timeBar() {
+    const active = SHD.route.timeOf();
+    if (!active) return null;
+    const sub = SHD.route.subredditOf();
+    const base = sub ? `/r/${sub}` : '';
+    const sort = SHD.route.sortOf();
+    return h('div.shd-timebar', null, [
+      h('span.shd-timelabel', { text: 'links from:' }),
+      h('ul.shd-timelist', null, SHD.route.TIMES.map(t =>
+        h('li' + (t.id === active ? '.selected' : ''), null,
+          h('a', { href: `${base}/${sort}/?t=${t.id}`, text: t.label }))))
+    ]);
   }
 
   /* route.js owns PROFILE_TABS the way it owns SORTS, and for the same reason: every href
@@ -241,5 +276,5 @@ SHD.chrome = (() => {
     document.querySelector('#shd-header')?.remove();
   }
 
-  return { header, tabMenu, themeBar, nsfwToggle, updateControl, sidebar, reset };
+  return { header, tabMenu, timeBar, themeBar, nsfwToggle, updateControl, sidebar, reset };
 })();
