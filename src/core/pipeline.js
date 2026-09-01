@@ -232,6 +232,10 @@ globalThis.SHD = globalThis.SHD || {};
     // navigation — so gating here meant they were removed once and never rebuilt. Both
     // builders are no-ops when their element is already present, so this is cheap.
     if (rendered > 0) {
+      // A feed that was empty when we asked and streams a post afterwards is an ordinary
+      // page. listing.js takes the notice out of the listing; this takes the state off
+      // <html>, so the two cannot disagree about whether this page has content.
+      SHD.gate.notEmpty();
       if (SHD.settings.chrome) { SHD.chrome.header(); SHD.chrome.sidebar(); }
       SHD.gate.reveal();
     }
@@ -252,6 +256,48 @@ globalThis.SHD = globalThis.SHD || {};
         SHD.paginator.attach(anchor);
       }
     }
+  }
+
+  /**
+   * Draw the page for a feed that arrived EMPTY.
+   *
+   * Reported 2026-09-01 (bug 94): /r/DIYfail/top/ — Reddit's default 24-hour window on a
+   * dormant sub — rendered as native Reddit. Not a broken render: no render at all. The
+   * gate held at data-shd-waiting="empty-feed" because the only test for "is this page
+   * ours" was whether we had drawn a ROW, so a page whose correct content is zero rows
+   * could never satisfy it, and the reader lost the entire shell — header, tab bar, theme
+   * — over a listing that was working exactly as Reddit intended.
+   *
+   * The chrome and the listing are built in one pass (see flush), which is why the whole
+   * page went with the posts. So an empty feed builds the same furniture and an empty
+   * #siteTable carrying our own empty-state line. Reddit's copy for this case reads "this
+   * community doesn't have any posts yet" whatever the reason — the message for a brand
+   * new community, shown for a time-filtered window with nothing in it — and inheriting it
+   * is what invited the reader to read a working page as a data failure.
+   *
+   * Called from two places, for two different moments:
+   *   - onRoute, which catches the ordinary case where Reddit's no-content panel is in the
+   *     document we were served, so the shell goes up without ever showing Reddit's;
+   *   - gate.js's deadline tick, which catches the same page arriving late and the
+   *     mid-session case, where onRoute runs PRE-COMMIT and the outgoing page's posts are
+   *     still in the DOM (so it declines, correctly, and the tick settles it 1500ms later
+   *     behind the loading line).
+   *
+   * @returns {boolean} true when the page is now ours and nothing is left to wait for.
+   */
+  function renderEmpty() {
+    if (SHD.gate.stopped || SHD.gate.revealed) return false;
+    // LISTING and PROFILE only. A COMMENTS route has no feed to be empty of — a thread
+    // with no replies still carries the post, so it renders by the ordinary path.
+    if (mode !== R.LISTING && mode !== R.PROFILE) return false;
+    if (!enabledFor(mode)) return false;
+    if (queue.size) return false;                  // work in hand: it is not empty yet
+    const reason = SHD.gate.emptyFeedReason();
+    if (!reason) return false;
+    SHD.listing.renderEmpty();
+    if (SHD.settings.chrome) { SHD.chrome.header(); SHD.chrome.sidebar(); }
+    SHD.gate.empty(reason);
+    return true;
   }
 
   function observe() {
@@ -337,6 +383,11 @@ globalThis.SHD = globalThis.SHD || {};
     collect(document.body);
     // Nothing on the page yet is normal (streamed content); the observer will catch up.
     schedule();
+    // ...unless Reddit has already said there is nothing coming, in which case the answer
+    // is in the document we were served and there is no reason to make the reader look at
+    // native Reddit for a deadline tick first. Declines unless it is certain — see
+    // gate.emptyFeedReason.
+    renderEmpty();
   }
 
   async function loadSettings() {
@@ -440,7 +491,7 @@ globalThis.SHD = globalThis.SHD || {};
     }
   }
 
-  SHD.pipeline = { kick() { if (queue.size) flush(); }, setSetting };
+  SHD.pipeline = { kick() { if (queue.size) flush(); }, setSetting, renderEmpty };
 
   (async function boot() {
     await loadSettings();
