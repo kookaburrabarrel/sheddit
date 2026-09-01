@@ -144,7 +144,7 @@ sheddit/
 │   │   ├── pipeline.js         MutationObserver → rAF-batched work queue
 │   │   ├── paginator.js        drives faceplate-partial.loadContent() off its own sentinel
 │   │   ├── model.js            shreddit-* element → plain JS model object
-│   │   ├── media.js            DASH-manifest resolution + video/audio pairing (0.16–0.17)
+│   │   ├── media.js            DASH-manifest resolution + video/audio pairing (0.16–0.30)
 │   │   ├── update.js           build-age nudge + the click-only version check (0.29.0)
 │   │   └── dom.js              tiny h() builder, escaping, number/time formatting
 │   ├── modules/

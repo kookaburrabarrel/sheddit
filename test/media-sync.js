@@ -92,7 +92,7 @@ const ARGS = [...LAUNCH_ARGS, '--autoplay-policy=no-user-gesture-required'];
         ? null : new Promise(res => el.addEventListener('loadedmetadata', res, { once: true }))));
 
       const out = { slop: 0.12 };
-      SHD.media.pair(video, audio);
+      const paired = SHD.media.pair(video, audio);
 
       // pair() must start the audio off the video's own play event — nobody calls it.
       await video.play();
@@ -128,6 +128,19 @@ const ARGS = [...LAUNCH_ARGS, '--autoplay-policy=no-user-gesture-required'];
       video.pause();
       await ms(200);
       out.audioPausedWithVideo = audio.paused;
+
+      /* THE UNHOOK, which is what a player falling back to another source depends on. A
+         pairing left attached to an audio element that is no longer on the page keeps
+         driving it, and the next pairing stacks a second set of listeners on the same
+         video — two soundtracks, one picture. So stop() has to actually let go: after it,
+         the video's own play event must move nothing. */
+      paired.stop();
+      audio.currentTime = 0;
+      video.currentTime = 2.0;
+      await video.play();
+      await ms(500);
+      out.stoppedAudioStayedPut = audio.paused && audio.currentTime < 0.5;
+      video.pause();
       return out;
     });
 
@@ -142,6 +155,8 @@ const ARGS = [...LAUNCH_ARGS, '--autoplay-policy=no-user-gesture-required'];
     check('volume mirrors from the video, which owns it', r.volumeMirrored);
     check('mute mirrors too, so the control is never a lie', r.muteMirrored);
     check('pausing the video pauses the sound', r.audioPausedWithVideo);
+    check('stop() lets go completely, so a fallback source cannot inherit the old pairing',
+      r.stoppedAudioStayedPut);
   } finally {
     await browser.close();
   }

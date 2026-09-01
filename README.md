@@ -19,13 +19,13 @@ Stay logged out, unprofiled, un-manipulated.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
 
-[![version 0.29.0](https://img.shields.io/badge/version-0.29.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.30.0](https://img.shields.io/badge/version-0.30.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.29.0 is out — everyone is welcome to try it
+### Beta 0.30.0 is out — everyone is welcome to try it
 
 If Sheddit improves your browsing experience, please help spread the word — share it with
 friends, on social media, or on Reddit itself (if you still have an account ;)
@@ -155,7 +155,7 @@ than Reddit's — which is why those thumbnails fall back to old Reddit's placeh
 
 ## Install
 
-> ### Current version: **0.29.0** — beta, open to everyone
+> ### Current version: **0.30.0** — beta, open to everyone
 > Both downloads below are this version. It is a beta in the honest sense: it works, it
 > is tested on both browsers — Chrome the more thoroughly of the two — and Reddit can
 > still change something tomorrow that breaks it. If that happens,
@@ -332,8 +332,10 @@ against. What follows from that, stated plainly:
 - **Adult thumbnails show old Reddit's `nsfw` placeholder**, with the same opt-in old Reddit
   had — reachable from the header's *nsfw thumbnails* button as well as the options page.
   See the note on adult thumbnails under *How it's tested* for the reasoning. It covers
-  pictures: thumbnails, the `[+]` expando and full-size images on a comments page. Video
-  is unaffected — a flagged post plays wherever inline video is on.
+  pictures: thumbnails, the `[+]` expando and full-size images on a comments page. A
+  flagged **video** still plays wherever inline video is on — what the opt-in covers there
+  is the still: since 0.30.0 the player's poster frame, and the frame left behind when a
+  video will not play, are gated like every other picture Sheddit draws.
 - **Pages with no feed are handed straight back.** Age gates, private communities and
   rate-limit pages are recognised and left alone, immediately. Putting an error screen over
   an age gate would cover the button you need to press.
@@ -373,9 +375,11 @@ video's manifest from Reddit's media server so Sheddit knows which files to hand
 player. A plain request for a static file, sent without cookies, and the same file your
 browser would read to play the video on Reddit itself. The video and its sound are then
 loaded by the player — Reddit ships newer videos with the audio in a separate file, so the
-two are played together. Untick *"Play video on the comments page"* and none of it happens.
-Counted by the tests: one per video post opened, none anywhere else, none with the setting
-off.
+two are played together. A post that still carries its own combined rendition needs no
+manifest at all; since 0.30.0 one whose rendition turns out not to play falls back to the
+manifest, which is the same single request arriving later rather than a second one. Untick
+*"Play video on the comments page"* and none of it happens. Counted by the tests: at most
+one per video post opened, none anywhere else, none with the setting off.
 
 **A version number, if you press the button that asks.** The **updates** control in the
 header reads one static file from this repository stating the current version. It is sent

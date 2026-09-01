@@ -47,6 +47,36 @@ SHD.model = (() => {
     return [...tally].map(([k, n]) => k.replace(' missing', ` x${n} missing`)).join('; ');
   }
 
+  /* How much life a signed URL needs left before it is worth handing to a player. A
+     rendition that expires in the next few seconds is one the element will start and lose
+     partway through, which reads on screen as a video that broke rather than one that was
+     never offered. */
+  const EXPIRY_SLOP_MS = 30000;
+
+  /**
+   * Has this media URL's signature already run out?
+   *
+   * Reddit signs every `packaged-media.redd.it` rendition and stamps it with `e=<unix
+   * seconds>`. Measured 2026-09-01, from a report of a player that showed nothing at all:
+   * the expiry sits about four hours out, and a URL past it does not fail politely — the
+   * CDN answers 403 and the <video> reports `error.code 4` (SRC_NOT_SUPPORTED) with zero
+   * bytes buffered, which is indistinguishable on screen from a codec the browser cannot
+   * decode. So the deadline has to be read here, where the URL is chosen, rather than
+   * discovered by the element that fails on it.
+   *
+   * The manifest's `CMAF_*.mp4` files carry no signature and no expiry at all, so a stale
+   * packaged rendition is never the best available — dropping it is what lets every caller
+   * fall through to media.js instead of mounting a file that cannot play.
+   *
+   * @returns {boolean} false for a URL that states no deadline. Unsigned is not expired.
+   */
+  function expired(url, now = Date.now()) {
+    const hit = /[?&]e=(\d+)(?:&|$)/.exec(String(url || ''));
+    if (!hit) return false;
+    const at = Number(hit[1]) * 1000;
+    return isFinite(at) && at > 0 && at - EXPIRY_SLOP_MS <= now;
+  }
+
   /**
    * The highest-quality mp4 out of a video post's packaged-media JSON.
    *
@@ -61,7 +91,14 @@ SHD.model = (() => {
    * filename scan is trying to recover, so reading it settles the ties the scan cannot
    * see — see the comments on the sort below.
    */
-  function mp4Of(el) {
+  /**
+   * @param {Element} el  the post
+   * @param {{stale?: boolean}} [opts]  stale:true keeps EXPIRED renditions in the running.
+   *   Nothing plays one — comments.js asks with it set purely to tell "Reddit offered no
+   *   packaged rendition" apart from "the one it offered had already died", which are
+   *   different sentences to put in front of a reader.
+   */
+  function mp4Of(el, opts) {
     try {
       /* QUERIED, not read: the attribute lives on a nested <shreddit-player>, not on the
          post (captured live). Scoped to this post so a crosspost cannot lend us
@@ -88,6 +125,12 @@ SHD.model = (() => {
         }
       };
       walk(JSON.parse(raw), null);
+      /* Dead on arrival, dropped before ranking: an expired rendition that outranks a live
+         one would win the sort and then 403, and the caller would have no way to tell that
+         from Reddit offering nothing at all. See expired() above. */
+      if (!(opts && opts.stale)) {
+        for (const url of [...found.keys()]) if (expired(url)) found.delete(url);
+      }
       if (!found.size) return null;
       /* The fallback, for renditions that state no dimensions: the largest number in the
          FILENAME, whichever spelling Reddit uses — `m2-res_1920p.mp4` (live) and
@@ -568,5 +611,6 @@ SHD.model = (() => {
      carousel's lazy <img>s are srcless at consume time and grow their src afterwards
      (bug 91) — so the consumer re-reads the source element after render, exactly as the
      watch link re-resolves the mp4 at click time. */
-  return { post, comment, profileComment, mp4Of, imagesOf, rejects, rejectSummary, clearRejects };
+  return { post, comment, profileComment, mp4Of, expired, imagesOf,
+           rejects, rejectSummary, clearRejects };
 })();

@@ -317,33 +317,6 @@ SHD.comments = (() => {
   }
 
   /**
-   * The inline player for a video post — the thing that makes a video post watchable
-   * inside this layout rather than only linkable out of it.
-   *
-   * WHY IT IS HERE AND NOT ON A LISTING ROW. One video post opened is one manifest
-   * request; a listing of twenty video posts scrolled past would be twenty, for videos
-   * nobody asked to watch. The comments page is where a reader has already chosen this
-   * post, so it is the one place the request is clearly worth making. The `watch` link on
-   * listing rows is unchanged — and its fallback to the permalink stops being a dead end,
-   * because the permalink now plays.
-   *
-   * TWO SOURCES, IN THIS ORDER, AND THE ORDER IS ABOUT SOUND.
-   *   1. `packaged-media-json` (model.mp4Of), when Reddit still offers it: a single
-   *      combined file, so it keeps its audio.
-   *   2. Failing that, the DASH manifest (media.resolve): CMAF, which splits audio into a
-   *      separate file and offers nothing combined — so both are taken from the manifest and
-   *      played as a pair. Sound either way; the combined file is simply the cheaper route
-   *      to it, needing no second element and no clock to keep.
-   * The JSON hydrates late — 3 of 4 posts had none at first paint — so (1) is
-   * tried again when (2) comes back, by which time it usually has. Without that recheck a
-   * legacy post whose player was merely slow would be served a silent file when a
-   * perfectly good combined one existed.
-   *
-   * A reader who hears nothing must be told why, or the honest conclusion is that this
-   * extension broke their sound. Hence the note, which is rendered from what the resolver
-   * states rather than from an assumption about the URL.
-   */
-  /**
    * The post's own picture, on its comments page, where old reddit put the open expando.
    *
    * The adult-content gate is not optional here, and it is the same one the thumbnail
@@ -373,18 +346,55 @@ SHD.comments = (() => {
       h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' })));
   }
 
+  /**
+   * The inline player for a video post — the thing that makes a video post watchable
+   * inside this layout rather than only linkable out of it.
+   *
+   * WHY IT IS HERE AND NOT ON A LISTING ROW. One video post opened is one manifest
+   * request; a listing of twenty video posts scrolled past would be twenty, for videos
+   * nobody asked to watch. The comments page is where a reader has already chosen this
+   * post, so it is the one place the request is clearly worth making. The `watch` link on
+   * listing rows is unchanged — and its fallback to the permalink stops being a dead end,
+   * because the permalink now plays.
+   *
+   * THE SOURCES ARE A LIST, TRIED IN ORDER, AND THE ORDER IS ABOUT SOUND — see `sources`
+   * below for what is in it and why falling through it is the whole point.
+   *
+   * A reader who hears nothing must be told why, or the honest conclusion is that this
+   * extension broke their sound. Same for a reader who SEES nothing: the note dead() writes
+   * is the visible half of that principle, and it is rendered from what was actually tried
+   * rather than from an assumption about why it failed.
+   */
   function videoPlayer(m) {
     if (m.type !== 'video' || !SHD.settings.inlineVideo) return null;
 
+    /* The one picture we can show without fetching anything: the post's own thumbnail, as
+       the poster while a source is in flight and as the whole frame once nothing will play.
+       GATED, from 0.30.0, exactly as postImage and the listing thumbnail are — the reason
+       that gate exists is that this extension renders its own image from a URL it read off
+       the page, which walks straight past the blur Reddit applies for logged-out readers
+       (bug 41), and a poster is that same bypass at player size. It shipped ungated because
+       the poster was written as a loading state rather than as a picture; it is both. */
+    const still = (m.nsfw && !SHD.settings.showNsfwThumbnails) ? null : (m.thumbnail || null);
+
     const video = h('video.shd-video-el', {
       controls: true, preload: 'metadata', playsinline: '',
-      /* The thumbnail we already have, so the box shows the post instead of black while
-         the manifest is in flight. */
-      poster: m.thumbnail || null
+      poster: still
     });
     const box = h('div.shd-video', null, video);
 
+    /* What the current attempt put on the page, so the next one starts from a clean
+       element. Two soundtracks over one picture is what happens without this. */
+    let attached = null;                 // { audio, stop } from media.pair()
+    /* The manifest's answer, once we have asked for it: the difference between "Reddit
+       still lists this video and its files are gone" and "Reddit told us nothing", which is
+       the difference between two failures a reader can act on differently. */
+    let manifestSeen = null;
+    let manifestAsked = false;
+    const tried = [];                    // every URL actually mounted, in order
+
     const mount = (url, info) => {
+      tried.push(url);
       video.src = url;
       /* Stated dimensions become an aspect ratio, so the box does not jump when metadata
          lands. Absent ones are simply not set — the element sizes itself once it loads. */
@@ -412,7 +422,7 @@ SHD.comments = (() => {
     function attachAudio(audioUrl) {
       const audio = h('audio.shd-video-audio', { src: audioUrl, preload: 'metadata' });
       box.appendChild(audio);
-      SHD.media.pair(video, audio);
+      attached = { audio, stop: SHD.media.pair(video, audio).stop };
 
       const mute = h('button.shd-video-mute', {
         type: 'button', text: 'mute', 'aria-pressed': 'false',
@@ -428,31 +438,175 @@ SHD.comments = (() => {
         oninput: () => { video.volume = Number(vol.value); video.muted = false;
                          mute.textContent = 'mute'; mute.setAttribute('aria-pressed', 'false'); }
       });
-      box.appendChild(h('p.shd-video-note', null, [
+      const row = h('p.shd-video-note', null, [
         mute, vol,
         h('span', { text: 'sound is a separate track — Reddit ships it that way' })
+      ]);
+      box.appendChild(row);
+
+      /* The half of the CMAF pair that can die on its own. A picture that plays with no
+         sound and a row underneath it still offering a volume slider is the same silence
+         the "no audio track" note exists to prevent, one layer down — so the row says what
+         happened instead of standing there being useless. The video is left alone: it is
+         playing, and a reader watching it should not lose the picture over the sound. */
+      audio.addEventListener('error', () => {
+        if (!audio.isConnected) return;          // torn down by a fallback; not a failure
+        row.replaceChildren(h('span', { text:
+          'No sound — Reddit\'s media server refused this video\'s audio track.' }));
+      });
+    }
+
+    /** Undo the last attempt: its audio half, its listeners, and anything it said on screen. */
+    function clear() {
+      if (attached) { attached.stop(); attached.audio.remove(); attached = null; }
+      for (const n of [...box.querySelectorAll('.shd-video-note')]) n.remove();
+    }
+
+    /* The manifest, asked for at most once per asset (media.js memoises by asset, so the
+       second caller here costs no second request) and remembered for the failure note. */
+    const manifest = () => SHD.media.resolve(m).then(res => {
+      manifestAsked = true;
+      if (res) manifestSeen = res;
+      return res;
+    });
+    const fromManifest = (res) => (res ? { url: res.url, info: res } : null);
+    /* Re-read each time it is asked for, never cached: the JSON hydrates late — 3 of 4
+       posts had none at first paint — so a null here is "not yet", not "never". */
+    const packaged = () => {
+      const u = SHD.model.mp4Of(m.source);
+      return u ? { url: u, info: null } : null;
+    };
+
+    /**
+     * THE SOURCES, IN ORDER, AND WHY THERE IS MORE THAN ONE OF THEM NOW.
+     *
+     *   1. `packaged-media-json` (model.mp4Of), when Reddit still offers a live one: a
+     *      single combined file, so it keeps its audio and costs no request of ours.
+     *   2. The DASH manifest (media.resolve): CMAF, which splits audio into a separate file
+     *      and offers nothing combined — so both are taken from the manifest and played as a
+     *      pair. The packaged JSON is re-read first, because it hydrates late and a combined
+     *      file is the cheaper route to the same sound.
+     *   3. The manifest again, for the case where (2) chose a late-hydrated packaged file
+     *      and THAT failed to load. Already-mounted URLs are skipped, so this is a real
+     *      third source or it is nothing.
+     *
+     * WHAT IS NEW IN 0.30.0 IS THE FALLING THROUGH. Until now source 1 was mounted and that
+     * was the end of it: a URL that resolved was assumed to play. Reported 2026-09-01 with a
+     * full diagnosis attached — a packaged rendition answering 403, `error.code 4`
+     * (SRC_NOT_SUPPORTED), `networkState 3`, zero bytes buffered, and a player that sat
+     * there spinning with nothing on screen to say why. Resolving a URL and playing it are
+     * different claims, and only the element that loads it knows which one held. So the
+     * element's own `error` is what advances this list, and running out of list is a
+     * sentence on screen rather than a silence.
+     */
+    const sources = [
+      packaged,
+      () => manifest().then(res => packaged() || fromManifest(res)),
+      () => manifest().then(fromManifest)
+    ];
+    let next = 0;
+
+    /**
+     * Take what a source handed back and either mount it or move on.
+     *
+     * @param {{url:string,info:object|null}|null} c
+     * @param {boolean} sync  true when the source answered without a promise, and therefore
+     *   BEFORE consumePost has put this box in the page. The liveness guard must not run on
+     *   that path: it rejects the good URL every time and leaves a permanently empty player.
+     *   That shipped for about ten minutes in 0.16.0 and the suite caught it — a legacy post
+     *   rendering a <video> with no src at all.
+     */
+    function land(c, sync) {
+      if (!sync && !box.isConnected) return;   // the row went away mid-flight
+      /* A source that hands back something already tried is not a source. Without this, 2
+         and 3 mount the same manifest rendition twice and the reader watches it fail twice
+         as slowly. */
+      if (!c || tried.includes(c.url)) return advance();
+      mount(c.url, c.info);
+    }
+
+    function advance() {
+      clear();
+      if (next >= sources.length) return dead();
+      let got;
+      try { got = sources[next++](); } catch { got = null; }
+      /* Answered synchronously — a legacy post whose player had already hydrated — so it is
+         mounted synchronously too, before videoPlayer() returns. Deferring even to a
+         microtask here would be a behaviour change for the one case that costs no request. */
+      if (got && typeof got.then === 'function') got.then(c => land(c, false), () => advance());
+      else land(got, true);
+    }
+
+    /**
+     * Every source is spent. Replace the player with what we do have — the post's own
+     * still — and say, in as much detail as we can honestly claim, what happened.
+     *
+     * WHY THIS IS NOT `box.remove()` ANY MORE. It was, and the removal WAS the second half
+     * of the report: `error.code 4`, `networkState 3`, zero bytes, and a UI that spun
+     * forever while a reader worked out on their own that Reddit's CDN had dropped the
+     * objects behind a manifest it still serves. Everything needed to say so was already in
+     * hand — which URLs were tried, whether the manifest answered, how old the post is.
+     */
+    function dead() {
+      clear();
+      video.remove();
+      const names = tried.map(u => u.split('?')[0].split('/').pop());
+      /* "11 hours ago" -> "11 hours". The age is the load-bearing detail in the common
+         case: Reddit's manifests are cached for two weeks and outlive the media they name,
+         so a post whose files are already gone is one whose objects went at the source. */
+      const age = m.created ? ` The post was ${ago(m.created).replace(/\s*ago$/, '')} old when this failed.` : '';
+      /* "Reddit offered nothing" and "what Reddit offered had already died" are different
+         facts, and the second one is the reported bug. Asking mp4Of to ignore the expiry is
+         how the two are told apart without walking the JSON a second time here. */
+      const stale = !!SHD.model.mp4Of(m.source, { stale: true });
+      const say =
+        tried.length && manifestSeen
+          ? (names.length === 1
+              ? `Reddit's media server refused the one file this post offers, ${names[0]}. `
+                + 'Its manifest still lists it, '
+              : `Reddit's media server refused every file this post offers — tried ${names.join(', ')}. `
+                + 'Its manifest still lists them, ')
+            + 'so what is missing is the video itself: Reddit removed or revoked it at the '
+            + `source.${age} `
+            + 'That is not your browser, your codecs or an expired link, and no player can get past it.'
+        : tried.length
+          ? `Reddit's media server refused ${names.join(', ')}, and its manifest `
+            + `(${SHD.C.VIDEO_MANIFEST}) did not answer, so there was no other rendition to try.${age} `
+            + 'Reloading the page retries the manifest.'
+        : manifestAsked
+          ? `Reddit offered nothing playable for this post: its manifest (${SHD.C.VIDEO_MANIFEST}) `
+            + 'either failed to load or listed no rendition'
+            + (stale
+                ? ', and the packaged rendition on the page had already passed its expiry.'
+                : ', and the page carries no packaged rendition either.')
+            + ' Reloading the page retries it.'
+          : 'No playable video was found for this post.';
+      /* The forensics, one hover away rather than in the paragraph: the exact URLs and the
+         element's own verdict on the last of them. This is what a report needs and what a
+         reader does not. */
+      const detail = [
+        tried.length ? `tried:\n${tried.join('\n')}` : 'nothing was mounted',
+        video.error ? `MediaError code ${video.error.code}` +
+          (video.error.message ? ` — ${video.error.message}` : '') : null,
+        manifestSeen ? `manifest resolved: ${manifestSeen.url}` : 'manifest: no usable answer'
+      ].filter(Boolean).join('\n');
+
+      if (still) box.appendChild(h('img.shd-video-still', { src: still, alt: '' }));
+      box.appendChild(h('p.shd-video-note.shd-video-fail', { title: detail }, [
+        h('strong', { text: 'Video unavailable ' }),
+        h('span', { text: say })
       ]));
     }
 
-    /* The combined rendition, if it is already there. Synchronous, so a legacy post that
-       hydrated before we ran never spends a request at all. */
-    const early = SHD.model.mp4Of(m.source);
-    if (early) { mount(early); return box; }
-
-    SHD.media.resolve(m).then(res => {
-      /* Only the ASYNC path checks this. The synchronous mount above runs before the box
-         has been appended to the row — videoPlayer() returns it and consumePost() attaches
-         it — so an isConnected guard inside mount() rejects the good URL every time and
-         leaves a permanently empty player. That shipped for about ten minutes and the
-         suite caught it: the legacy post rendered a <video> with no src at all. */
-      if (!box.isConnected) return;              // the row went away mid-flight
-      const late = SHD.model.mp4Of(m.source);    // see the recheck note above
-      if (late) return mount(late);
-      if (res) return mount(res.url, res);
-      /* Nothing playable: leave the page as it was before this function existed, rather
-         than a permanent empty frame. The `watch` link and the permalink still stand. */
-      box.remove();
+    /* The element is the only thing that knows whether a URL actually played. A failure
+       arrives here as an `error` event on the <video>; anything still in `sources` gets its
+       turn, and when nothing is, dead() says so. */
+    video.addEventListener('error', () => {
+      /* An error before anything was mounted is not this list's to answer for — nothing has
+         been asked to load yet, so advancing would silently spend a source. */
+      if (tried.length && box.isConnected) advance();
     });
+    advance();
 
     return box;
   }
