@@ -86,7 +86,7 @@ a working volume slider — the exact lie the "no audio track" note exists to pr
 layer down. The sound row now says the audio track was refused, and deliberately does not
 take the picture down with it.
 
-### Added — an adult video post is blurred with a *click to play*, not replaced by a tile
+### Added — adult posts are blurred behind a *click to view*, not drawn as nothing
 
 Two things collided here. The player's poster frame had never answered to the adult opt-in —
 it was written as a loading state rather than as a picture, and it is both, so it walked past
@@ -113,9 +113,33 @@ so keyboard readers get the same control; `test/geometry.js` measures in a real 
 it lands inside the player rather than escaping to the viewport, and that the frame under it
 is actually blurred rather than merely wearing a class name.
 
-With the opt-in on, an adult video post is an ordinary one — no blur, no button, poster and
-still drawn like any other post's. PRIVACY.md is unchanged: nothing new leaves the browser,
-and while the blur stands rather less does.
+**The same answer then went to `postImage`**, where the old behaviour was starker: an adult
+image or gallery post's comments page drew *no picture at all*, leaving a titled post with no
+way to see what it was about, on the page whose whole job is showing it. It is blurred now
+too, and the load discipline is the same and the point of it: `m.thumbnail` is the `<img>`'s
+own `src`, which on Reddit's responsive sets is the SMALL member, while `m.image` is the
+largest in the `srcset` — so the blur costs the file the row already carried and the click
+fetches the 1080. `test/run.js` proves that on a post whose sizes actually differ, which the
+adult fixture (one size only) structurally could not.
+
+Bug 91's late-frame watcher had to change with it. It used to stand down entirely on an adult
+gallery — correct while no box existed, a bypass the moment one did, since appending frames
+straight into the box is precisely what the blur is for. It now skips only while the box is
+still blurred, and the reveal RE-READS the frames rather than replaying a snapshot: a gallery
+that hydrates behind the blur opens complete instead of losing what arrived while nobody was
+looking.
+
+With the opt-in on, an adult post is an ordinary one — no blur, no button, pictures and
+poster drawn like any other post's. The listing row keeps old reddit's placeholder tile,
+which is the right answer for a picture nobody has asked for yet. PRIVACY.md is unchanged:
+nothing new leaves the browser, and while the blur stands rather less does.
+
+`test/geometry.js` measures both boxes in a real engine, because "a control absolutely
+positioned over a picture" is the class of bug css-lint reads one declaration at a time and
+cannot see: the button lands inside the box it belongs to, the frame under it is genuinely
+blurred rather than merely wearing a class, and the `scale(1.06)` that closes the blur's
+transparent edge is *clipped* rather than allowed to widen the column — that last one caught
+a real 678px-against-a-640px-cap overspill while it was being written.
 
 ### Changed — two fixtures that had quietly stopped testing anything
 

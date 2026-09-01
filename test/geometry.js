@@ -837,6 +837,73 @@ const overlaps = (a, b) =>
     await page.close();
   }
 
+  {
+    /* The same arrangement over a picture rather than a player. Both boxes cap at
+       --shd-video-max, so the blurred still has to obey the cap the sharp picture does —
+       a still that overflowed would push the page sideways on exactly the posts a reader
+       has not opted into seeing. */
+    const { page, pageErrors } = await open(browser, origin, PATHS.nsfwImageComments,
+      '#shd-root .shd-selfpost', undefined, { images: true });
+    await page.evaluate(() => Promise.all(
+      [...document.images].map(i => i.complete ? null : new Promise(r => {
+        i.addEventListener('load', r); i.addEventListener('error', r);
+      }))));
+
+    const cap = await page.evaluate(() => parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--shd-video-max')));
+    const g = await page.evaluate(() => {
+      const box = document.querySelector('.shd-selfpost .shd-image');
+      const btn = document.querySelector('.shd-selfpost .shd-image-reveal');
+      const still = document.querySelector('.shd-selfpost .shd-image-still');
+      if (!box || !btn || !still) return null;
+      const b = box.getBoundingClientRect(), t = btn.getBoundingClientRect();
+      return {
+        inside: t.left >= b.left - 1 && t.right <= b.right + 1 &&
+                t.top >= b.top - 1 && t.bottom <= b.bottom + 1,
+        visible: t.width > 0 && t.height > 0,
+        narrower: t.width < b.width,
+        filter: getComputedStyle(still).filter,
+        stillW: still.getBoundingClientRect().width,
+        boxW: b.width,
+        clipped: getComputedStyle(box).overflow
+      };
+    });
+    check('an adult picture\'s reveal button is drawn inside the box it belongs to',
+      g && g.visible && g.inside && g.narrower, JSON.stringify(g));
+    check('...over a still the engine actually blurs', /blur\(/.test(g?.filter || ''), g?.filter);
+    /* The still is DELIBERATELY wider than its box — scale(1.06) is what closes the
+       transparent border a blur leaves at the edges of its own element — so the assertion is
+       on what the reader actually sees: the box obeys the cap, and the overscale is clipped
+       rather than allowed to widen the column. Measured, because "overflow: hidden is
+       declared" and "the overspill is contained" are different claims and only the engine
+       can settle the second. */
+    check('...whose overscale is clipped, so the reader sees a picture at the cap',
+      g.stillW > cap && g.boxW > 0 && g.boxW <= cap + 1 && /hidden/.test(g.clipped),
+      `still ${Math.round(g.stillW)}px inside a ${Math.round(g.boxW)}px box (${g.clipped}), cap ${cap}px`);
+
+    await page.click('.shd-selfpost .shd-image-reveal');
+    const after = await page.evaluate(() => {
+      const el = document.querySelector('.shd-selfpost .shd-image-el');
+      return {
+        drawn: !!el,
+        gated: !!document.querySelector('.shd-selfpost .shd-image-gated'),
+        button: !!document.querySelector('.shd-selfpost .shd-image-reveal'),
+        filter: el ? getComputedStyle(el).filter : null,
+        w: el ? el.getBoundingClientRect().width : 0,
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth
+      };
+    });
+    check('clicking it draws the picture sharp, and takes the button with it',
+      after.drawn && !after.gated && !after.button && !/blur\(/.test(after.filter || 'none'),
+      JSON.stringify(after));
+    check('...still capped, and still not scrolling the page sideways',
+      after.w > 0 && after.w <= cap + 1 && after.scrollW <= after.clientW + 1,
+      JSON.stringify(after));
+    check('no page errors on an adult image post', pageErrors.length === 0, pageErrors.join(' | '));
+    await page.close();
+  }
+
   /* ================================================================== *
    * IMAGES
    * ================================================================== */
