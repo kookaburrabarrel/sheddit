@@ -235,8 +235,6 @@ Every bug found so far, and what each one looked like:
   offer them logged out either.
 - **Adult content is opt-in**, the way old Reddit did it: a placeholder tile in listings,
   and a blurred *click to view* on a post you open on purpose. Nothing loads until you ask.
-- **Pages with no feed are handed straight back.** Age gates, private communities and
-  rate-limit pages are left alone, so nothing covers the button you need.
 
 **In:** the home feed, `/r/*` listings, comment pages, user profiles, header, sort tabs, the
 `top`/`controversial` time window, sidebar.
