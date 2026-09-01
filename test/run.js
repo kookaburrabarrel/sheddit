@@ -1072,6 +1072,39 @@ async function boot(html, url, setup) {
         .map(i => i.getAttribute('src'))).size === 3);
   }
 
+  {
+    /* AN ADULT GALLERY, which is where the blur and bug 91 meet. The frames hydrate after
+       consume, and until 0.30.0 the late-frame watcher stood down entirely on an adult post
+       — correct then, because the box was never built; a bypass now, because the box exists
+       and appending straight into it is exactly what the blur is for. */
+    const nsfwGallery = commentsPage({ galleryPost: true })
+      .replace('post-type="gallery"', 'post-type="gallery" nsfw=""');
+    const { doc } = await boot(nsfwGallery,
+      'https://www.reddit.com/r/interesting/comments/gallery1/bubble_boy/');
+    check('an adult gallery is blurred like any other adult picture',
+      !!doc.querySelector('.shd-selfpost .shd-image.shd-image-gated') &&
+      !doc.querySelector('.shd-selfpost .shd-image-el'));
+
+    /* A frame arriving while the blur stands must not be appended past it. */
+    const srcPost = doc.querySelector('shreddit-post[id="t3_gallery1"]');
+    const late = doc.createElement('img');
+    srcPost.appendChild(late);
+    late.src = 'https://preview.redd.it/bubble-late-960.jpg';
+    await hold(120);
+    check('...and a frame that hydrates while it stands is not appended past it',
+      !doc.querySelector('.shd-selfpost .shd-image-el'),
+      doc.querySelector('.shd-selfpost .shd-image')?.innerHTML?.slice(0, 160));
+
+    doc.querySelector('.shd-selfpost button.shd-image-reveal')
+      .dispatchEvent(new doc.defaultView.MouseEvent('click', { bubbles: true }));
+    /* The reveal RE-READS, which is why waiting costs nothing: the frame that arrived
+       behind the blur is in the set that opens, not lost to it. */
+    const shown = [...doc.querySelectorAll('.shd-selfpost .shd-image-el')]
+      .map(i => i.getAttribute('src'));
+    check('...the reveal opens everything the post has by then, late frame included',
+      shown.length === 3 && shown.some(u => /bubble-late-960/.test(u)), shown.join(', '));
+  }
+
   /* Bug 90 (QA F1, HIGH — deep branches were unreachable): one click on "20 more
      replies" delivered comments ALREADY CARRYING the affordances for the remainder,
      nested in the just-delivered subtree — and our side rendered zero controls for
@@ -1110,17 +1143,26 @@ async function boot(html, url, setup) {
   }
 
   /* The gate that exists because rendering our own <img> walks straight past the blur
-     Reddit applies to adult thumbnails for logged-out readers (bug 41). An inline
-     full-size copy is that identical bypass, larger, so it has to ask the same question —
-     and this is the assertion that would have caught shipping it without one. */
-  console.log('\n\x1b[1mAN ADULT IMAGE POST IS NOT QUIETLY ENLARGED\x1b[0m');
+     Reddit applies to adult pictures for logged-out readers (bug 41). An inline full-size
+     copy is that identical bypass, larger.
+
+     Until 0.30.0 the answer was to draw NOTHING, and these are the assertions that changed
+     with it: drawing nothing leaves a titled post with no way to see what it is about, on
+     the page whose whole job is showing it. The answer is now Reddit's own — blur it, and
+     let the reader ask — so what has to be proved is that the blur is a blur and not a
+     full-size picture with CSS over it. */
+  console.log('\n\x1b[1mAN ADULT IMAGE POST IS BLURRED, NOT QUIETLY ENLARGED\x1b[0m');
   {
     const { doc } = await boot(commentsPage({ nsfwPost: true }),
       'https://www.reddit.com/r/UkraineWarVideoReport/comments/nsfw1/footage/');
-    check('no inline picture for an adult post at the default setting',
-      !doc.querySelector('.shd-selfpost .shd-image'));
-    // ...and the gate costs the PICTURE, not the post. A blank comments page would be a
-    // worse failure than the one being prevented.
+    check('an adult post gets a picture box, blurred, at the default setting',
+      !!doc.querySelector('.shd-selfpost .shd-image.shd-image-gated'));
+    check('...with no full-size frame in it at all',
+      !doc.querySelector('.shd-selfpost .shd-image-el'));
+    check('...and a real button to reveal it, reachable by keyboard',
+      doc.querySelector('.shd-selfpost button.shd-image-reveal')?.tagName === 'BUTTON');
+    // ...and the gate costs the PICTURE's sharpness, not the post. A blank comments page
+    // would be a worse failure than the one being prevented.
     check('...but the submission itself still renders',
       !!doc.querySelector('.shd-selfpost a.title'));
     check('...and it is still stamped adult, which is what labels it',
@@ -1130,6 +1172,52 @@ async function boot(html, url, setup) {
     check('control: the post really is carrying an image the model can see',
       [...doc.querySelectorAll('shreddit-post img')]
         .some(i => /i\.redd\.it/.test(i.getAttribute('src') || '')));
+
+    doc.querySelector('.shd-selfpost button.shd-image-reveal')
+      .dispatchEvent(new doc.defaultView.MouseEvent('click', { bubbles: true }));
+    check('clicking it draws the picture and takes the blur with it',
+      !!doc.querySelector('.shd-selfpost .shd-image-el') &&
+      !doc.querySelector('.shd-selfpost .shd-image-gated') &&
+      !doc.querySelector('.shd-selfpost button.shd-image-reveal'),
+      doc.querySelector('.shd-selfpost .shd-image')?.outerHTML?.slice(0, 200));
+  }
+
+  {
+    /* THE CLAIM THE BLUR RESTS ON, on a post whose sizes actually differ: what loads while
+       it stands is the SMALL member of Reddit's responsive set — the file the listing row
+       already carried — and the 1080 arrives only when the reader asks for it. On the
+       fixture above the post offers one size, so it cannot tell the two apart; this one
+       can, and it is the assertion that would catch a blurred full-size download. */
+    const nsfwImage = commentsPage({ imagePost: true })
+      .replace('post-type="image"', 'post-type="image" nsfw=""');
+    const { doc } = await boot(nsfwImage,
+      'https://www.reddit.com/r/aww/comments/image1/a_very_good_dog/');
+    const still = doc.querySelector('.shd-selfpost .shd-image-still');
+    check('the blur is drawn over the thumbnail, not the full-size file',
+      still?.getAttribute('src') === 'https://i.redd.it/gooddog.jpg', still?.getAttribute('src'));
+    check('...and the 1080 the post is carrying is nowhere on the page yet',
+      !/gooddog-1080/.test(doc.querySelector('#shd-root')?.innerHTML || ''));
+
+    doc.querySelector('.shd-selfpost button.shd-image-reveal')
+      .dispatchEvent(new doc.defaultView.MouseEvent('click', { bubbles: true }));
+    check('...until the click, which fetches it and nothing before',
+      doc.querySelector('.shd-selfpost .shd-image-el')?.getAttribute('src')
+        === 'https://preview.redd.it/gooddog-1080.jpg',
+      doc.querySelector('.shd-selfpost .shd-image-el')?.getAttribute('src'));
+  }
+
+  {
+    /* With the opt-in given, an adult post is an ordinary one. */
+    const { doc } = await boot(commentsPage({ nsfwPost: true }),
+      'https://www.reddit.com/r/UkraineWarVideoReport/comments/nsfw1/footage/',
+      (w) => { w.chrome = { storage: {
+        sync: { get: async () => ({ settings: { showNsfwThumbnails: true, inlineImages: true,
+                                                autoPaginate: false } }) },
+        onChanged: { addListener() {} } } }; });
+    check('with adult pictures opted in, the picture is drawn straight, no blur and no click',
+      !!doc.querySelector('.shd-selfpost .shd-image-el') &&
+      !doc.querySelector('.shd-selfpost .shd-image-gated') &&
+      !doc.querySelector('.shd-selfpost button.shd-image-reveal'));
   }
 
   /* Old reddit's expando, the other half of the report: an image row navigated away

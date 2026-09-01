@@ -179,12 +179,16 @@ function serveFixtures() {
        centred on" is a layout question — the one class of bug css-lint reads one
        declaration at a time and cannot answer. */
     const wantsNsfwVideo = /\/dead1\//.test(pathname);
+    // ...and an ADULT image submission, for the same reason: the blur and its button are a
+    // box over a box, which is layout.
+    const wantsNsfwImage = /\/image1nsfw\//.test(pathname);
     let body = /\/comments\//.test(pathname)
       // A thread that ships a slice and lazy-loads the rest, which is what a real one does.
       ? commentsPage(wantsBranches ? { deliver: COMMENT_SLICE, branchPager: true }
         : wantsImage ? { imagePost: true }
           : wantsNsfwVideo ? { deadLinkPost: true }
-            : wantsPager ? { deliver: COMMENT_SLICE, pager: true } : {})
+            : wantsNsfwImage ? { imagePost: true }
+              : wantsPager ? { deliver: COMMENT_SLICE, pager: true } : {})
       : listingPage({ pager: wantsPager });
     // /r/paintprobe/ samples the page's computed state at the EARLIEST moment body
     // content exists — a parser-inserted script right after <body> opens, which runs
@@ -195,6 +199,7 @@ function serveFixtures() {
     // The same post, flagged: the fixture is shared with run.js, and the flag is what the
     // blur gate keys on.
     if (wantsNsfwVideo) body = body.replace('post-type="video"', 'post-type="video" nsfw=""');
+    if (wantsNsfwImage) body = body.replace('post-type="image"', 'post-type="image" nsfw=""');
     if (/\/r\/paintprobe\//.test(pathname)) {
       body = body.replace('<body>', `<body><script>
         window.__shdPaint = {
@@ -504,6 +509,7 @@ const PATHS = {
   comments: '/r/programming/comments/link1/nasa/',
   imageComments: '/r/aww/comments/image1/a_very_good_dog/',   // an image submission
   nsfwVideoComments: '/r/funny/comments/dead1/expired/',      // an ADULT video submission
+  nsfwImageComments: '/r/aww/comments/image1nsfw/a_very_good_dog/',  // an ADULT image submission
   broken: '/r/broken/',         // posts missing a required attribute -> real render failure
   pager: '/r/pager/',           // faceplate-partial with a working loadContent()
   spa: '/r/spa/',               // page-world router intercepts sort navs like live Reddit

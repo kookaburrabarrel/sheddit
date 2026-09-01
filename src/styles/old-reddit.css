@@ -509,7 +509,37 @@ html.shd-active body {
 /* The post's own picture on its comments page, in the slot old reddit gave the open
    expando. Bounded by the same width the player uses, so a portrait phone photo cannot
    push the column to the height of the screen, and `height: auto` keeps its aspect. */
-.shd-selfpost .shd-image { margin: 5px 0; max-width: var(--shd-video-max); }
+/* `position: relative` is load-bearing: the reveal button below is absolutely positioned
+   over the picture and would escape to the viewport without it. */
+.shd-selfpost .shd-image { margin: 5px 0; max-width: var(--shd-video-max); position: relative; }
+/* ADULT CONTENT, UNTIL THE READER ASKS — the player's treatment, applied to a picture. What
+   is under the blur is the post's THUMBNAIL, not the full-size file: a blurred full-size
+   <img> would be CSS over a completed download of the picture nobody asked for. See
+   comments.js gateImages. */
+.shd-selfpost .shd-image-gated { overflow: hidden; }
+.shd-selfpost .shd-image-still {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  filter: blur(24px);
+  /* Closes the transparent border a blur leaves at the edges of its own box. */
+  transform: scale(1.06);
+}
+.shd-selfpost .shd-image-reveal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font: inherit;
+  font-size: small;
+  color: var(--shd-text);
+  background: var(--shd-bg);
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+  padding: 4px 8px;
+  cursor: pointer;
+}
 .shd-selfpost .shd-image-el {
   display: block;          /* an <img> is inline: without this it sits on a text baseline */
   width: auto;

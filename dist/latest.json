@@ -2,5 +2,5 @@
   "version": "0.30.0",
   "released": "2026-09-01",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.30.0 fixes video posts that showed nothing: an expired rendition is passed over rather than played, a source that fails falls through to the next one, a video that will not play says why, and an adult video post is blurred behind a click-to-play instead of hidden."
+  "notes": "0.30.0 fixes video posts that showed nothing: an expired rendition is passed over rather than played, a source that fails falls through to the next one, a video that will not play says why, and adult posts are blurred behind a click-to-view instead of drawn as nothing."
 }
