@@ -332,13 +332,12 @@ against. What follows from that, stated plainly:
 - **Adult thumbnails show old Reddit's `nsfw` placeholder**, with the same opt-in old Reddit
   had — reachable from the header's *nsfw thumbnails* button as well as the options page.
   See the note on adult thumbnails under *How it's tested* for the reasoning. It covers
-  pictures: thumbnails, the `[+]` expando and full-size images on a comments page. A
-  flagged **video** gets a different answer, new in 0.30.0: its player is **blurred with a
-  *click to play* button over it** rather than replaced by a placeholder — a player is not a
-  thumbnail, and hiding a video you opened on purpose is not the same act as not drawing one
-  you scrolled past. Nothing but the poster frame loads until you press it: no video, no
-  manifest, no request of any kind. With the opt-in on, an adult video post is an ordinary
-  one.
+  listing thumbnails and the `[+]` expando. On a **comments page** — a post you opened on
+  purpose — 0.30.0 changes the answer from *nothing at all* to Reddit's own: the picture or
+  the player is **blurred, under a single *click to view* / *click to play* button**. What
+  loads while the blur stands is only the small thumbnail the listing row already carried —
+  no full-size file, no video, no manifest, no request of any kind — and pressing the button
+  is what fetches the rest. With the opt-in on, an adult post is an ordinary one.
 - **Pages with no feed are handed straight back.** Age gates, private communities and
   rate-limit pages are recognised and left alone, immediately. Putting an error screen over
   an age gate would cover the button you need to press.

@@ -316,18 +316,70 @@ SHD.comments = (() => {
     return true;
   }
 
+  /** Is this post's picture behind the adult opt-in? One question, asked in three places. */
+  const adultGate = (m) => !!m.nsfw && !SHD.settings.showNsfwThumbnails;
+
+  /* Bare <img>, no anchor — deliberately, since 2026-08-24. These used to link "the file
+     itself", and measurement showed there is no such destination for a logged-out click:
+     i.redd.it AND preview.redd.it both 307 a navigation into Reddit's /media viewer
+     (model.viewerBound documents the probe). The <img> fetch itself is fine — the redirect
+     discriminates on the Accept header — so the picture renders here and a link under it
+     could only bounce the reader out of the layout. */
+  const imageFrames = (urls) => urls.map(u =>
+    h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
+
+  /**
+   * Put an adult post's picture behind a blur and one control, exactly as videoPlayer does
+   * for a player — 0.30.0, and the reasoning is the same in both places.
+   *
+   * WHY NOT NOTHING, WHICH IS WHAT THIS USED TO BE. The gate exists because this extension
+   * reads the image URL off the post and renders its OWN <img>, which walks past the blur
+   * Reddit applies to a logged-out reader (bug 41) — and a full-size inline copy is that
+   * bypass, larger. But "draw nothing" is not what Reddit does and not what old reddit's
+   * opt-in was for on a page you navigated to on purpose: it left the reader with a titled
+   * post and no way to see what it was about, on a page whose whole job is showing it. So
+   * the answer is Reddit's own — BLUR IT — and this draws the blur rather than walking past
+   * it. The listing row keeps its placeholder tile, which is old reddit's answer for a
+   * picture nobody asked for yet.
+   *
+   * WHAT LOADS WHILE THE BLUR STANDS: the THUMBNAIL, and only that. A blurred full-size
+   * <img> would be CSS over a completed download of exactly the picture the reader has not
+   * asked for — the bug wearing a disguise. `m.thumbnail` is the <img>'s own `src`, which on
+   * Reddit's responsive sets is the SMALL member, while `m.image` is the largest in the
+   * srcset — so the blur costs the file the listing row already carried and the click
+   * fetches the rest. Where a post offers only one size the two are the same file, and the
+   * blur is then over a picture the row had anyway: no worse than the row, never worse than
+   * revealing it.
+   *
+   * @param {() => string[]} resolve  the frames to draw, called AT REVEAL TIME. A gallery's
+   *   carousel hydrates late (bug 91), so asking at the click is what makes a post revealed
+   *   ten seconds in show everything it has rather than what it had at first paint.
+   */
+  function gateImages(box, m, resolve) {
+    box.classList.add('shd-image-gated');
+    if (m.thumbnail) box.appendChild(h('img.shd-image-still', { src: m.thumbnail, alt: '' }));
+    const show = h('button.shd-image-reveal', {
+      type: 'button',
+      text: 'adult content — click to view',
+      onclick: () => {
+        box.classList.remove('shd-image-gated');
+        const urls = resolve();
+        /* Nothing left to show — a gallery whose frames went away mid-blur. Leave the page
+           as it was rather than an empty box with a control that did nothing (bug 62). */
+        if (!urls.length) return box.remove();
+        box.replaceChildren(...imageFrames(urls));
+      }
+    });
+    box.appendChild(show);
+    return box;
+  }
+
   /**
    * The post's own picture, on its comments page, where old reddit put the open expando.
-   *
-   * The adult-content gate is not optional here, and it is the same one the thumbnail
-   * carries. The reason that gate exists is that this extension reads the image URL off
-   * the post and renders its own <img>, which walks straight past the blur Reddit applies
-   * for logged-out readers (bug 41) — and a full-size inline copy is that identical bypass,
-   * only larger. Anything that draws a picture must ask the same question.
+   * Adult posts get the blur above; everyone else gets the frames straight.
    */
   function postImage(m) {
     if (!SHD.settings.inlineImages) return null;
-    if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;
     /* A gallery renders every frame it is carrying, stacked — the frames are peers, and
        showing only the largest would silently drop the rest. An image post is the
        single-picture case of the same box. Both fall through to null when nothing
@@ -336,14 +388,17 @@ SHD.comments = (() => {
     const urls = m.type === 'image' && m.image ? [m.image]
       : m.type === 'gallery' ? m.images : [];
     if (!urls.length) return null;
-    /* Bare <img>, no anchor — deliberately, since 2026-08-24. These used to link "the
-       file itself", and measurement showed there is no such destination for a logged-out
-       click: i.redd.it AND preview.redd.it both 307 a navigation into Reddit's /media
-       viewer (model.viewerBound documents the probe). The <img> fetch itself is fine —
-       the redirect discriminates on the Accept header — so the picture renders here and
-       a link under it could only bounce the reader out of the layout. */
-    return h('div.shd-image', null, urls.map(u =>
-      h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' })));
+    const box = h('div.shd-image');
+    if (adultGate(m)) return gateImages(box, m, () => liveFrames(m, urls));
+    box.append(...imageFrames(urls));
+    return box;
+  }
+
+  /** The frames this post can show right now, preferring a re-read over the consume-time snapshot. */
+  function liveFrames(m, fallback) {
+    if (m.type !== 'gallery' || !m.source) return fallback;
+    const now = SHD.model.imagesOf(m.source);
+    return now.length ? now : fallback;
   }
 
   /**
@@ -664,7 +719,9 @@ SHD.comments = (() => {
   function armLateGalleryFrames(row, m) {
     if (m.type !== 'gallery' || !m.source) return;
     if (!SHD.settings.inlineImages) return;
-    if (m.nsfw && !SHD.settings.showNsfwThumbnails) return;
+    /* An adult gallery is NOT skipped any more (0.30.0): it is blurred like every other one,
+       and it can arrive after consume exactly as a clean one can. What the gate costs it is
+       the appending below, not the box. */
     const obs = new MutationObserver(() => {
       if (!row.isConnected) { obs.disconnect(); clearTimeout(stop); return; }
       const urls = SHD.model.imagesOf(m.source);
@@ -675,7 +732,14 @@ SHD.comments = (() => {
         // Where postImage's box goes: in the entry, before the selftext when there is one.
         const text = row.querySelector('.shd-selftext');
         if (text) text.before(box); else row.querySelector('.entry')?.appendChild(box);
+        /* A gallery whose frames all arrived late, on an adult post: the box opens blurred,
+           exactly as postImage would have built it had the frames been there at consume
+           time. Appending the frames straight in here is the bypass the gate is for. */
+        if (adultGate(m)) { gateImages(box, m, () => SHD.model.imagesOf(m.source)); return; }
       }
+      /* Still blurred: the reader has not asked, and the reveal re-reads the frames, so
+         nothing that hydrates while the blur stands is lost by waiting. */
+      if (box.classList.contains('shd-image-gated')) return;
       const have = new Set([...box.querySelectorAll('img')].map(i => i.getAttribute('src')));
       for (const u of urls) {
         if (!have.has(u)) box.appendChild(h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
