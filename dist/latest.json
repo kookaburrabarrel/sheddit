@@ -1,6 +1,6 @@
 {
-  "version": "0.29.0",
-  "released": "2026-08-30",
+  "version": "0.30.0",
+  "released": "2026-09-01",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.29.0 adds the update check itself: the header now says when a build has gone stale, and asks GitHub only when you click."
+  "notes": "0.30.0 fixes video posts that showed nothing: an expired rendition is passed over rather than played, a source that fails falls through to the next one, and a video that will not play says why."
 }

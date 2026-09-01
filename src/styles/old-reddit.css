@@ -588,6 +588,23 @@ html.shd-active body {
 }
 /* Narrow on purpose: this sits under a 640px player, not a media app. */
 .shd-selfpost .shd-video-vol { width: 70px; }
+/* WHAT IS LEFT WHEN NOTHING PLAYS. The player is replaced by the post's own still and a
+   sentence saying what was tried — see comments.js dead(). The still keeps the box the
+   size the player would have been, so a failed video does not collapse the page around it,
+   and it is dimmed because it is a leftover rather than the content. */
+.shd-selfpost .shd-video-still {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  opacity: 0.55;
+  background: #000;
+}
+/* The failure sentence is a paragraph, not the sound row: it wraps as prose rather than
+   laying out a button and a slider, and its lead is on its own line so the reader gets the
+   verdict before the explanation. `title` carries the URLs and the element's error code. */
+.shd-selfpost .shd-video-fail { display: block; cursor: help; }
+.shd-selfpost .shd-video-fail strong { display: block; color: var(--shd-text); }
 .shd-selfpost { border-bottom: 1px solid var(--shd-border); padding-bottom: 8px; margin-bottom: 10px; }
 .commentarea { margin-right: var(--shd-gutter); }
 
