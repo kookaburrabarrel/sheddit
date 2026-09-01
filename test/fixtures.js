@@ -14,6 +14,18 @@
  *   - comments as FLAT siblings carrying depth=
  */
 
+/* THE EXPIRY STAMP ON A PACKAGED RENDITION, MINTED RATHER THAN WRITTEN DOWN.
+   Reddit signs every `packaged-media.redd.it` URL and stamps it `e=<unix seconds>`, about
+   four hours out, and since 0.30.0 model.mp4Of DROPS one that has passed — the whole point
+   being that a dead URL must never be handed to a player. A hardcoded stamp in a fixture is
+   therefore a test that quietly stops testing anything on the day it goes stale: this file
+   carried e=1787288400 (2026-08-21) and every packaged-rendition assertion in the suite
+   began failing the moment the filter shipped, which is the bug reproducing itself inside
+   the tests. So the live shape mints its deadline relative to now, and the dead one keeps a
+   stamp that is permanently in the past. */
+const LIVE_E = Math.floor(Date.now() / 1000) + 4 * 3600;
+const DEAD_E = 1787288400;                       // 2026-08-21 05:00 UTC, and staying there
+
 const POSTS = [
   {
     id: 't3_gallery1', type: 'gallery', title: 'Bubble Boy lived in a sterile environment',
@@ -93,11 +105,11 @@ const POSTS = [
        tell a chosen codec from an array-order accident. `dimensions` carries the number
        the filename scan is recovering, which is what settles the tie. */
     videoJson: { playbackMp4s: { duration: 22, permutations: [
-      { source: { url: 'https://packaged-media.redd.it/storm/pb/m2-res_392p.mp4?m=DASHPlaylist&e=1787288400&s=sig',
+      { source: { url: `https://packaged-media.redd.it/storm/pb/m2-res_392p.mp4?m=DASHPlaylist&e=${LIVE_E}&s=sig`,
                   dimensions: { height: 392, width: 696 } } },
-      { source: { url: 'https://packaged-media.redd.it/storm/pb/m2-vp9-res_1080p.mp4?m=DASHPlaylist&e=1787288400&s=sig',
+      { source: { url: `https://packaged-media.redd.it/storm/pb/m2-vp9-res_1080p.mp4?m=DASHPlaylist&e=${LIVE_E}&s=sig`,
                   dimensions: { height: 1080, width: 1920 } } },
-      { source: { url: 'https://packaged-media.redd.it/storm/pb/m2-res_1080p.mp4?m=DASHPlaylist&e=1787288400&s=sig',
+      { source: { url: `https://packaged-media.redd.it/storm/pb/m2-res_1080p.mp4?m=DASHPlaylist&e=${LIVE_E}&s=sig`,
                   dimensions: { height: 1080, width: 1920 } } }
     ] } },
     permalink: '/r/videos/comments/video1/timelapse/',
@@ -372,7 +384,7 @@ function postHtml(p) {
       score="${p.score}"
       upvote-ratio="0.95"
       comment-count="${p.comments}"
-      created-timestamp="2026-08-11T22:52:55.944000+0000"
+      created-timestamp="${p.created || '2026-08-11T22:52:55.944000+0000'}"
       domain="${p.domain}"
       author="${p.author}"
       subreddit-name="${p.sub}"
@@ -643,6 +655,29 @@ const CMAF_POST = {
   author: 'poster', sub: 'funny', imgs: []
 };
 
+/* THE REPORTED SHAPE, 2026-09-01: a post carrying a packaged rendition whose signature has
+   already run out, on an asset whose manifest still answers. This is the one the extension
+   used to mount and then sit on — the CDN 403s an expired URL, the <video> reports
+   `error.code 4` with nothing buffered, and the page showed neither the video nor a reason.
+   It exists as a fixture because the two halves of the fix are only visible together: the
+   dead URL has to be passed over, AND the manifest behind it has to be reached. */
+const DEAD_LINK_POST = {
+  id: 't3_dead1', type: 'video', title: 'Expired rendition, live manifest',
+  videoJson: { playbackMp4s: { duration: 14, permutations: [
+    { source: { url: `https://packaged-media.redd.it/nzafnbgwcxkh1/pb/m2-res_854p.mp4?m=DASHPlaylist.mpd&e=${DEAD_E}&s=sig`,
+                dimensions: { height: 854, width: 480 } } }
+  ] } },
+  permalink: '/r/funny/comments/dead1/expired/',
+  contentHref: 'https://v.redd.it/nzafnbgwcxkh1',
+  score: 812, comments: 44, domain: 'v.redd.it',
+  author: 'poster', sub: 'funny',
+  /* Eleven and a half hours old, minted rather than written down for the same reason the
+     expiry above is: the failure note states the post's age, and an age is only assertable
+     if it does not drift with the calendar. Floors to "11 hours" whenever the suite runs. */
+  created: new Date(Date.now() - 11.5 * 3600 * 1000).toISOString(),
+  imgs: ['preview.redd.it/dead-poster.jpg']
+};
+
 const commentAttrs = (depth, i) => `
     thingid="t1_c${i}"
     postid="t3_link1"
@@ -807,6 +842,7 @@ const BRANCH_PAGER_REPLIES = 2;      // comments each one delivers
 function commentsPage(opts = {}) {
   const post = opts.selfPost ? SELF_POST
     : opts.cmafPost ? CMAF_POST
+    : opts.deadLinkPost ? DEAD_LINK_POST
     : opts.videoPost ? POSTS.find(p => p.id === 't3_video1')
     : opts.imagePost ? POSTS.find(p => p.id === 't3_image1')
     : opts.galleryPost ? POSTS.find(p => p.id === 't3_gallery1')
@@ -854,7 +890,7 @@ function commentsPage(opts = {}) {
   </shreddit-app></body></html>`;
 }
 
-module.exports = { POSTS, SELF_POST, CMAF_POST, VIDEO_MPD, COMMENT_DEPTHS, listingPage, commentsPage, nestedCommentsHtml,
+module.exports = { POSTS, SELF_POST, CMAF_POST, DEAD_LINK_POST, VIDEO_MPD, LIVE_E, DEAD_E, COMMENT_DEPTHS, listingPage, commentsPage, nestedCommentsHtml,
                    profilePage, PROFILE_COMMENT_COUNT, PROFILE_LINKED_SUB, PROFILE_LINKED_TITLE,
                    PAGER_SCRIPT, PAGER_PAGE_SIZE,
                    COMMENT_PAGER_SCRIPT, COMMENT_PAGER_BATCH,

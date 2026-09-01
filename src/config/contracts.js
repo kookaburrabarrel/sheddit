@@ -89,8 +89,14 @@ SHD.C = {
          written for. Ranking on DASH_ scored every live URL zero and would have picked
          the FIRST one, which is the LOWEST quality. model.js ranks on the largest number
          in the filename, which covers both spellings.
-     The URLs carry a signature and an `e` expiry ~12h out — long enough that a link
-     resolved during a session stays good, short enough that we must never cache one. */
+     The URLs carry a signature and an `e` expiry. It was recorded here as ~12h; MEASURED
+     2026-09-01 on a reported post it was about FOUR hours, which is short enough to run out
+     inside a long session and far short enough to be dead on any page rendered from
+     yesterday's capture. An expired URL is not refused politely — the CDN answers 403 and
+     the <video> reports `error.code 4` (SRC_NOT_SUPPORTED) with nothing buffered, which
+     looks exactly like a codec fault. So model.mp4Of reads the deadline and drops a
+     rendition that has passed it (model.expired), and the manifest below — whose CMAF files
+     carry no signature at all — is what plays instead. Never cache one either way. */
   POST_VIDEO_JSON: 'packaged-media-json',
   /* A GIF in a comment or selftext body, as Reddit ships it: a <shreddit-player gif>
      whose only light-DOM <source> is the raw .gif on preview.redd.it — no `type`, no

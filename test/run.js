@@ -16,7 +16,7 @@ const { listingPage, commentsPage, POSTS, SELF_POST, COMMENT_DEPTHS,
         BRANCH_PAGER_SCRIPT, BRANCH_PAGER_BRANCHES, BRANCH_PAGER_REPLIES,
         CMAF_POST, VIDEO_MPD,
         profilePage, PROFILE_COMMENT_COUNT, PROFILE_LINKED_SUB, PROFILE_LINKED_TITLE,
-        nestedCommentsHtml } = require('./fixtures');
+        nestedCommentsHtml, LIVE_E } = require('./fixtures');
 
 const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.js'), 'utf8');
 
@@ -274,8 +274,8 @@ async function boot(html, url, setup) {
     const post = doc.getElementById('t3_video1');
     const player = doc.createElement('shreddit-player');
     player.setAttribute('packaged-media-json', JSON.stringify({ playbackMp4s: { permutations: [
-      { source: { url: 'https://packaged-media.redd.it/storm/pb/m2-res_392p.mp4?e=1&s=x' } },
-      { source: { url: 'https://packaged-media.redd.it/storm/pb/m2-res_1080p.mp4?e=1&s=x' } }
+      { source: { url: `https://packaged-media.redd.it/storm/pb/m2-res_392p.mp4?e=${LIVE_E}&s=x` } },
+      { source: { url: `https://packaged-media.redd.it/storm/pb/m2-res_1080p.mp4?e=${LIVE_E}&s=x` } }
     ] } }));
     post.appendChild(player);
     doc.addEventListener('click', (e) => e.preventDefault(), true);   // jsdom cannot navigate
@@ -296,9 +296,9 @@ async function boot(html, url, setup) {
     post2.querySelectorAll('shreddit-player').forEach(n => n.remove());
     const stated = doc.createElement('shreddit-player');
     stated.setAttribute('packaged-media-json', JSON.stringify({ playbackMp4s: { permutations: [
-      { source: { url: 'https://packaged-media.redd.it/storm/pb/m2-res_720p.mp4?e=1&s=x',
+      { source: { url: `https://packaged-media.redd.it/storm/pb/m2-res_720p.mp4?e=${LIVE_E}&s=x`,
                   dimensions: { height: 720, width: 1280 } } },
-      { source: { url: 'https://packaged-media.redd.it/storm/pb/m2-res_source.mp4?e=1&s=x',
+      { source: { url: `https://packaged-media.redd.it/storm/pb/m2-res_source.mp4?e=${LIVE_E}&s=x`,
                   dimensions: { height: 1440, width: 2560 } } }
     ] } }));
     post2.appendChild(stated);
@@ -520,6 +520,151 @@ async function boot(html, url, setup) {
       check('a LISTING renders no players and spends no requests',
         !doc.querySelector('#shd-root video') && calls.length === 0,
         `videos=${doc.querySelectorAll('#shd-root video').length} calls=${JSON.stringify(calls)}`);
+    }
+
+    /* THE REPORT, 2026-09-01 — a video post that showed nothing at all, on a page whose
+       layout was fine. Diagnosed from the browser: the packaged rendition baked into the
+       page answered 403, the element reported `error.code 4` (SRC_NOT_SUPPORTED) with zero
+       bytes buffered, and the player sat there. Two separate faults, and these blocks are
+       one apiece — a URL trusted past its expiry, and a source that fails with nowhere to
+       fall to and nothing to say. */
+    {
+      const DEAD_URL = 'https://www.reddit.com/r/funny/comments/dead1/expired/';
+      const { doc, calls } = await bootWithFetch(commentsPage({ deadLinkPost: true }), DEAD_URL);
+      const ok = await waitFor(() => doc.querySelector('.shd-selfpost video.shd-video-el[src]'));
+      const v = doc.querySelector('.shd-selfpost video.shd-video-el');
+      check('a post whose only packaged rendition has EXPIRED still gets a player', ok);
+      /* The packaged URL is signed and its `e` has passed: it would 403. The manifest's
+         CMAF files carry no signature at all, so they are not merely the fallback here,
+         they are the only thing that can play. */
+      check('...from the manifest, because the expired URL was never a candidate',
+        v?.getAttribute('src') === 'https://v.redd.it/nzafnbgwcxkh1/CMAF_480.mp4',
+        v?.getAttribute('src'));
+      check('...and the dead packaged file is nowhere on the page',
+        !/packaged-media/.test(doc.querySelector('.shd-selfpost')?.innerHTML || ''));
+      check('...at the cost of the one manifest request',
+        calls.length === 1 && /DASHPlaylist\.mpd$/.test(calls[0]), JSON.stringify(calls));
+    }
+
+    {
+      /* A LIVE packaged URL that resolves and then fails to load — the same 403, arriving
+         the only way it can be detected: as the element's own error. Before 0.30.0 this was
+         the end of the road, because resolving a URL was taken as proof it would play. */
+      const { doc, calls } = await bootWithFetch(commentsPage({ videoPost: true }),
+        'https://www.reddit.com/r/videos/comments/video1/timelapse/');
+      await waitFor(() => doc.querySelector('.shd-selfpost video.shd-video-el[src]'));
+      const v = doc.querySelector('.shd-selfpost video.shd-video-el');
+      check('the combined packaged file is still tried first, and costs no request',
+        /m2-res_1080p\.mp4/.test(v?.getAttribute('src') || '') && calls.length === 0,
+        `${v?.getAttribute('src')} calls=${calls.length}`);
+
+      v.dispatchEvent(new doc.defaultView.Event('error'));
+      const fellThrough = await waitFor(() =>
+        /CMAF_480/.test(doc.querySelector('.shd-selfpost video.shd-video-el')?.getAttribute('src') || ''));
+      check('...and when it fails to LOAD, the manifest takes over', fellThrough,
+        doc.querySelector('.shd-selfpost video.shd-video-el')?.getAttribute('src'));
+      check('...spending the manifest request only now, when it is the only way to play',
+        calls.length === 1 && /DASHPlaylist\.mpd$/.test(calls[0]), JSON.stringify(calls));
+      check('...with exactly one audio element, not one per attempt',
+        doc.querySelectorAll('.shd-selfpost audio').length === 1,
+        String(doc.querySelectorAll('.shd-selfpost audio').length));
+      check('...and no leftover note from the attempt that failed',
+        doc.querySelectorAll('.shd-selfpost .shd-video-fail').length === 0);
+    }
+
+    {
+      /* Every source spent. This is the half of the report that cost the reporter the most
+         time: the failure was silent, so the page looked like a rendering bug in this
+         extension rather than Reddit's CDN dropping the objects behind a manifest it still
+         serves. The note has to name what was tried and say which of those two it was. */
+      const DEAD_URL = 'https://www.reddit.com/r/funny/comments/dead1/expired/';
+      const { doc } = await bootWithFetch(commentsPage({ deadLinkPost: true }), DEAD_URL);
+      await waitFor(() => doc.querySelector('.shd-selfpost video.shd-video-el[src]'));
+      doc.querySelector('.shd-selfpost video.shd-video-el')
+        .dispatchEvent(new doc.defaultView.Event('error'));
+      const said = await waitFor(() => doc.querySelector('.shd-selfpost .shd-video-fail'));
+      const note = doc.querySelector('.shd-selfpost .shd-video-fail');
+      const text = note?.textContent || '';
+      check('when nothing plays, the player says so instead of spinning', said, text);
+      check('...leading with the verdict', /^Video unavailable/.test(text.trim()), text);
+      check('...naming the file that was refused, not "an error occurred"',
+        /CMAF_480\.mp4/.test(text), text);
+      check('...and telling the reader which failure this is: the media, not the manifest',
+        /Its manifest still lists it/.test(text) &&
+        /Reddit removed or revoked it at the source/.test(text),
+        text);
+      /* The age is the load-bearing detail. Reddit caches these manifests for two weeks, so
+         they outlive the media they name — a post this young whose files are already gone
+         went at the origin, and saying how young rules out "the link expired". */
+      check('...and how old the post was when it failed, which is what dates the removal',
+        /was 11 hours old when this failed/.test(text), text);
+      check('...ruling out the things a reader would otherwise suspect first',
+        /not your browser, your codecs or an expired link/.test(text), text);
+      /* One hover away: the forensics a bug report needs and a reader does not. */
+      check('...with the exact URLs tried in the title attribute',
+        /v\.redd\.it\/nzafnbgwcxkh1\/CMAF_480\.mp4/.test(note?.getAttribute('title') || ''),
+        note?.getAttribute('title'));
+      check('the dead player is replaced by the post\'s own still, not left as a black box',
+        !doc.querySelector('.shd-selfpost video') &&
+        !!doc.querySelector('.shd-selfpost img.shd-video-still'),
+        doc.querySelector('.shd-selfpost .shd-video')?.innerHTML);
+      check('...and the post itself is untouched by any of it',
+        !!doc.querySelector('.shd-selfpost a.title'));
+    }
+
+    {
+      /* The sound half of a CMAF post can die on its own, and a picture that plays silently
+         under a working volume slider tells the reader the same lie the "no audio track"
+         note exists to prevent. */
+      const { doc } = await bootWithFetch(commentsPage({ cmafPost: true }), CMAF_URL);
+      await waitFor(() => doc.querySelector('.shd-selfpost audio.shd-video-audio'));
+      doc.querySelector('.shd-selfpost audio.shd-video-audio')
+        .dispatchEvent(new doc.defaultView.Event('error'));
+      await hold(60);
+      check('an audio track that fails to load says so where the volume control was',
+        /refused this video's audio track/.test(
+          doc.querySelector('.shd-selfpost .shd-video-note')?.textContent || ''),
+        doc.querySelector('.shd-selfpost .shd-video-note')?.textContent);
+      check('...and the picture is not taken down with it',
+        !!doc.querySelector('.shd-selfpost video.shd-video-el[src]'));
+    }
+
+    {
+      /* The other failure, and it must not be described as the first one: no manifest ever
+         answered, so we know nothing about whether the media exists. */
+      const { doc } = await bootWithFetch(commentsPage({ cmafPost: true }), CMAF_URL,
+        { fail: true });
+      await waitFor(() => doc.querySelector('.shd-selfpost .shd-video-fail'));
+      const text = doc.querySelector('.shd-selfpost .shd-video-fail')?.textContent || '';
+      check('a manifest that never answered is reported as exactly that',
+        /manifest \(DASHPlaylist\.mpd\)/.test(text) && /failed to load or listed no rendition/.test(text),
+        text);
+      check('...and does not claim Reddit removed anything, which we cannot know',
+        !/removed or revoked/.test(text), text);
+      check('...offering the one thing that might help: a reload',
+        /Reloading the page retries it/.test(text), text);
+    }
+
+    {
+      /* The adult-content gate, which the poster walked straight past until 0.30.0: this
+         extension renders its own image from a URL it read off the page, and that is the
+         bypass bug 41 is about. A poster is that bypass at player size, and the still the
+         failure note leaves behind is the same picture again. */
+      const nsfwDead = commentsPage({ deadLinkPost: true }).replace(
+        'post-type="video"', 'post-type="video" nsfw=""');
+      const { doc } = await bootWithFetch(nsfwDead,
+        'https://www.reddit.com/r/funny/comments/dead1/expired/');
+      const v = await waitFor(() => doc.querySelector('.shd-selfpost video.shd-video-el'));
+      check('an adult video post gets no poster with adult thumbnails off',
+        v && !doc.querySelector('.shd-selfpost video.shd-video-el').hasAttribute('poster'),
+        doc.querySelector('.shd-selfpost video.shd-video-el')?.getAttribute('poster'));
+      doc.querySelector('.shd-selfpost video.shd-video-el')
+        .dispatchEvent(new doc.defaultView.Event('error'));
+      await waitFor(() => doc.querySelector('.shd-selfpost .shd-video-fail'));
+      check('...and no still when it fails either — the same picture, the same gate',
+        !doc.querySelector('.shd-selfpost img.shd-video-still'));
+      check('...but it is still told what happened',
+        !!doc.querySelector('.shd-selfpost .shd-video-fail'));
     }
   }
 

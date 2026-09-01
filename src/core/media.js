@@ -183,32 +183,43 @@ SHD.media = (() => {
    * onward — whichever control the reader finds, both stay consistent.
    */
   function pair(video, audio) {
+    /* Every listener below goes on in one batch and comes off in one batch. The caller
+       needs the second half: a player that loses its source mid-flight and falls back to
+       another one would otherwise keep this pairing pointed at an audio element that is no
+       longer on the page, and the next pairing would stack a second set of listeners on the
+       same video — two soundtracks, one picture. comments.js calls stop() before it retries.
+       AbortController rather than a hand-kept list because forgetting one removeEventListener
+       is exactly the bug this is here to prevent. */
+    const ctl = new AbortController();
+    const on = (type, fn) => video.addEventListener(type, fn, { signal: ctl.signal });
     const align = () => { audio.currentTime = video.currentTime; };
     const drifted = () => Math.abs(audio.currentTime - video.currentTime) > SYNC_SLOP;
     /* Never let a rejected play() reach the console as an unhandled rejection: autoplay
        policy rejects it routinely and it is not an error we can or should act on. */
     const resume = () => { if (!video.paused) audio.play().catch(() => {}); };
 
-    video.addEventListener('play', () => { align(); resume(); });
-    video.addEventListener('pause', () => audio.pause());
-    video.addEventListener('seeking', align);
-    video.addEventListener('ratechange', () => { audio.playbackRate = video.playbackRate; });
-    video.addEventListener('volumechange', () => {
+    on('play', () => { align(); resume(); });
+    on('pause', () => audio.pause());
+    on('seeking', align);
+    on('ratechange', () => { audio.playbackRate = video.playbackRate; });
+    on('volumechange', () => {
       audio.volume = video.volume;
       audio.muted = video.muted;
     });
     /* The video buffering is the one case where the audio must wait: it is a fraction of
        the video's size, so it is almost always the one that is ahead. */
-    video.addEventListener('waiting', () => audio.pause());
-    video.addEventListener('playing', () => { align(); resume(); });
-    video.addEventListener('ended', () => audio.pause());
+    on('waiting', () => audio.pause());
+    on('playing', () => { align(); resume(); });
+    on('ended', () => audio.pause());
     /* The standing correction. timeupdate fires ~4x/second, which is often enough to catch
        a stall-induced jump and rare enough to cost nothing. */
-    video.addEventListener('timeupdate', () => { if (drifted()) align(); });
+    on('timeupdate', () => { if (drifted()) align(); });
 
     audio.volume = video.volume;
     audio.muted = video.muted;
-    return { align, drifted };
+    /** Unhook this pairing. Called when the video's source is being replaced. */
+    const stop = () => ctl.abort();
+    return { align, drifted, stop };
   }
 
   /** Drop the memo. Called on teardown so a re-render does not serve a stale resolution. */

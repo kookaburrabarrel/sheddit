@@ -43,7 +43,7 @@ SHD.update = (() => {
      package.json and dist/latest.json. run.js asserts that the script still rewrites all
      four, because a BUILT that quietly stops moving does not fail — it turns the nudge into
      a permanent false alarm on a perfectly current copy, which is worse than no nudge. */
-  const BUILT = '2026-08-30';
+  const BUILT = '2026-09-01';
 
   /* Served out of the repository, not from a server of ours — there still is no such
      server. raw.githubusercontent.com answers with `access-control-allow-origin: *`, so

@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.29.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.30.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -13,6 +13,99 @@ Entries lead with what changed for a *user* where there is such a thing, and not
 underlying cause where that is the more useful fact. Several entries describe bugs that
 existed from the first commit and were only found once a test could see them — those are
 marked **never worked**, because "fixed" would imply it once did.
+
+---
+
+## 0.30.0
+
+### Fixed — a video post that showed nothing at all, and never said why
+
+Reported 2026-09-01 with the diagnosis attached, which is the only reason this was two bugs
+and not one. A video post rendered its row, its comments and an empty player: the `<video>`
+carried a `packaged-media.redd.it` URL, that URL answered **403**, and the element reported
+`error.code 4` (SRC_NOT_SUPPORTED) with `networkState 3` and zero bytes buffered. Everything
+else about the page was fine, which is exactly what made it look like the extension's fault.
+
+**The URL had expired, and nothing checked.** Reddit signs every packaged rendition and
+stamps it `e=<unix seconds>`. This project had that written down as *~12h out*; measured on
+the reported post it was about **four hours**. Short enough to run out inside one long
+session — and guaranteed dead for anything rendered from yesterday's page. An expired URL
+does not fail politely: the CDN 403s it and the element reports a codec error, so the one
+thing on screen pointed away from the actual cause. `model.mp4Of` now reads the deadline and
+drops a rendition that has passed it, which is what lets every caller fall through to the
+DASH manifest — whose `CMAF_*.mp4` files carry no signature and no expiry at all, and are
+therefore not the second-best source but the only durable one. The `watch` link on listing
+rows gets the same filter for free, and degrades to the permalink rather than to a 403.
+
+**And resolving a URL was being taken as proof it would play.** The player mounted its first
+source and that was the end of the road; a source that failed to LOAD had nowhere to go, so
+one dead rendition cost the whole post even when a live one existed a request away. The
+sources are now a list, and the thing that advances it is the element's own `error` event —
+the only thing that knows whether a URL actually played, rather than merely resolved:
+
+1. the combined `packaged-media-json` rendition, when Reddit still offers a live one (one
+   file, keeps its own audio, costs no request of ours);
+2. the DASH manifest — re-reading the packaged JSON first, because it hydrates late;
+3. the manifest again, for the case where (2) picked a late-hydrated packaged file and THAT
+   failed. Already-mounted URLs are skipped, so this is a real third source or it is nothing.
+
+`media.pair()` grew the second half it was missing: a `stop()` that unhooks the pairing. A
+fallback without it leaves the old pairing driving an audio element that is no longer on the
+page and stacks a second set of listeners on the video — two soundtracks, one picture.
+`test/media-sync.js` asserts the unhook in a real browser alongside the sync it already
+proved.
+
+### Added — when a video genuinely cannot play, the player says so, in detail
+
+The rest of the report was the silence. Reddit's manifests are cached for a fortnight and
+outlive the media they name, so on that post the manifest still answered 200 while every
+object behind it — four video renditions and both audio rungs — returned S3 `AccessDenied`.
+Nothing on the page said that, and working it out took a browser session and a control test
+against three other posts from the same subreddit.
+
+Everything needed to say it was already in hand, so the player now says it. The dead
+`<video>` is replaced by the post's own still and a note that names what was actually tried,
+and it distinguishes the two failures rather than blurring them into "an error occurred":
+
+> **Video unavailable** — Reddit's media server refused every file this post offers — tried
+> m2-res_854p.mp4, CMAF_480.mp4. Its manifest still lists them, so what is missing is the
+> video itself: Reddit removed or revoked it at the source. The post was 11 hours old when
+> this failed. That is not your browser, your codecs or an expired link, and no player can
+> get past it.
+
+versus, when the manifest itself never answered, a note that says exactly that and does not
+claim Reddit removed anything — because at that point we do not know. The post's age is in
+there deliberately: the manifest outliving the media is what dates the removal to the origin,
+and it is the fact that separates this from an expiry. The exact URLs and the element's own
+`MediaError` code sit in the note's `title`, one hover away — what a bug report needs, and
+what a reader does not.
+
+One more silence closed while the list was being built: on a CMAF post the **sound is its
+own file**, and it can die while the picture plays. That left a video running silently under
+a working volume slider — the exact lie the "no audio track" note exists to prevent, one
+layer down. The sound row now says the audio track was refused, and deliberately does not
+take the picture down with it.
+
+### Fixed — the player's poster walked past the adult-content gate
+
+Found while adding the still above, and the same bug at a different size. Bug 41's rule is
+that anything Sheddit *draws itself* from a URL it read off the page bypasses the blur Reddit
+applies for logged-out readers, so every picture asks the same question first. The video
+poster never did — it was written as a loading state rather than as a picture, and it is
+both. Poster and still are now gated exactly as the thumbnail and the inline images are:
+adult video still plays wherever inline video is on, it simply does not show a frame of
+itself first. PRIVACY.md is unchanged — nothing new leaves the browser — and the README's
+statement of the adult opt-in now says what it covers on a video post.
+
+### Changed — two fixtures that had quietly stopped testing anything
+
+`test/fixtures.js` carried `e=1787288400` on its packaged renditions, and `test/run.js` used
+`e=1` in its inline JSON. Both were fine as opaque strings and both became a date the moment
+the expiry filter shipped — the whole packaged-rendition half of the suite went red at once,
+which is the reported bug reproducing itself inside the tests. Live stamps are now minted
+relative to the run, the dead one is pinned in the past on purpose, and the fixture for the
+reported shape (an expired rendition over a live manifest) mints its post age the same way,
+so "was 11 hours old" is assertable rather than drifting with the calendar.
 
 ---
 
