@@ -19,13 +19,13 @@ Stay logged out, unprofiled, un-manipulated.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
 
-[![version 0.30.0](https://img.shields.io/badge/version-0.30.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.31.0](https://img.shields.io/badge/version-0.31.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.30.0 is out — everyone is welcome to try it
+### Beta 0.31.0 is out — everyone is welcome to try it
 
 If Sheddit improves your browsing experience, please help spread the word — share it with
 friends, on social media, or on Reddit itself (if you still have an account ;)
@@ -155,7 +155,7 @@ than Reddit's — which is why those thumbnails fall back to old Reddit's placeh
 
 ## Install
 
-> ### Current version: **0.30.0** — beta, open to everyone
+> ### Current version: **0.31.0** — beta, open to everyone
 > Both downloads below are this version. It is a beta in the honest sense: it works, it
 > is tested on both browsers — Chrome the more thoroughly of the two — and Reddit can
 > still change something tomorrow that breaks it. If that happens,
@@ -341,8 +341,16 @@ against. What follows from that, stated plainly:
 - **Pages with no feed are handed straight back.** Age gates, private communities and
   rate-limit pages are recognised and left alone, immediately. Putting an error screen over
   an age gate would cover the button you need to press.
+- **A listing with no posts in it is still your layout.** `top` and `controversial` are
+  filtered by time whether or not the URL says so — `/r/x/top/` means *the past 24 hours* —
+  so a busy subreddit can come back empty and look broken. Since 0.31.0 the range is a
+  control again (old Reddit's *links from:* row), the empty page keeps the whole shell, and
+  the line on it names the community and the range instead of repeating Reddit's "this
+  community doesn't have any posts yet", which is the message for a brand new community and
+  not for a quiet day.
 
-**In:** the home feed, `/r/*` listings, comment pages, user profiles, header, sort tabs, sidebar.
+**In:** the home feed, `/r/*` listings, comment pages, user profiles, header, sort tabs, the
+`top`/`controversial` time range, sidebar.
 **Out (for now):** search, modmail, chat, the post composer, and anything auth-gated — these
 are classified as unhandled and left alone.
 

@@ -16,7 +16,7 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { listingPage, commentsPage } = require('./fixtures');
+const { listingPage, commentsPage, EMPTY_FEED_PANEL } = require('./fixtures');
 
 /** How many comments /r/…/pager/ delivers up front, before anything is lazy-loaded. */
 const COMMENT_SLICE = 8;
@@ -281,16 +281,13 @@ function serveFixtures() {
        chunky — heading, paragraph, button, wrapper divs — because a thin one would pass the
        old check too and prove nothing. */
     if (/\/r\/empty\//.test(pathname)) {
-      body = body.replace(/<shreddit-feed>[\s\S]*<\/shreddit-feed>/, `<shreddit-feed>
-        <!-- The CAPTURED live shape (live testing, r/911truth): one div, children H1/P/A.
-             Different from the first guess at this panel, and the round proved the
-             structure heuristic classifies the real thing correctly — keep it real. -->
-        <div class="mt-[100px] flex justify-center items-center flex-col" id="empty-feed-content">
-          <h1 data-testid="no-content">This community doesn't have any posts yet</h1>
-          <p>Make one and get this feed started.</p>
-          <a href="/r/911truth/submit">Create a post</a>
-        </div>
-      </shreddit-feed>`);
+      /* The panel is fixtures.EMPTY_FEED_PANEL — one copy of the captured shape, shared
+         with the jsdom suite, so the two cannot drift apart on the detail that matters
+         (the `data-testid` C.FEED_EMPTY matches). `/r/empty/top/` is the SAME page under
+         a sort that carries a time range, which is how the reported case reached us:
+         nothing in the default 24-hour window of a sub that is not remotely empty. */
+      body = body.replace(/<shreddit-feed>[\s\S]*<\/shreddit-feed>/,
+        `<shreddit-feed>${EMPTY_FEED_PANEL}</shreddit-feed>`);
     }
     if (/renamed/.test(pathname)) {
       body = body.replace(/<shreddit-post(?=[\s>])/g, '<shreddit-postx')
@@ -526,7 +523,8 @@ const PATHS = {
   gateUpsellLockFirst: '/r/gate-upsell-lockfirst/',  // ...with the scroll lock set FIRST
   modalTransient: '/r/modal-transient/',  // a lock that clears itself — must NOT swap layouts
   renamed: '/r/renamed/',       // a POPULATED feed whose post element we no longer recognise
-  empty: '/r/empty/'            // a subreddit Reddit itself says has no posts
+  empty: '/r/empty/',           // a subreddit Reddit itself says has no posts
+  emptyTop: '/r/empty/top/'     // ...under a sort that carries a time range (bug 94)
 };
 
 module.exports = { resolveChrome, requireChrome, noChromeMessage, makeChecker,
