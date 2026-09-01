@@ -761,6 +761,83 @@ const overlaps = (a, b) =>
   }
 
   /* ================================================================== *
+   * THE ADULT-CONTENT BLUR
+   * ================================================================== */
+  console.log('\n\x1b[1mLAYOUT GEOMETRY — THE ADULT-CONTENT BLUR\x1b[0m');
+  {
+    /* The reveal button is absolutely positioned over the player, which is the one
+       arrangement this suite exists for: css-lint reads `position: absolute` and
+       `position: relative` one declaration at a time and cannot tell whether the second one
+       is on the box the first one meant. Without it the button escapes to the viewport and
+       lands somewhere else entirely — the .rank/.midcol bug, in a new place. */
+    const { page, pageErrors } = await open(browser, origin, PATHS.nsfwVideoComments,
+      '#shd-root .shd-selfpost', undefined, { images: true });
+    await page.evaluate(() => Promise.all(
+      [...document.images].map(i => i.complete ? null : new Promise(r => {
+        i.addEventListener('load', r); i.addEventListener('error', r);
+      }))));
+
+    const g = await page.evaluate(() => {
+      const box = document.querySelector('.shd-selfpost .shd-video');
+      const btn = document.querySelector('.shd-selfpost .shd-video-reveal');
+      const vid = document.querySelector('.shd-selfpost .shd-video-el');
+      if (!box || !btn || !vid) return null;
+      const b = box.getBoundingClientRect(), t = btn.getBoundingClientRect();
+      return {
+        inside: t.left >= b.left - 1 && t.right <= b.right + 1 &&
+                t.top >= b.top - 1 && t.bottom <= b.bottom + 1,
+        visible: t.width > 0 && t.height > 0,
+        /* Centred on the frame rather than stretched across it, so the reader can see that
+           what is underneath is blurred rather than covered. */
+        narrower: t.width < b.width,
+        filter: getComputedStyle(vid).filter,
+        gated: box.classList.contains('shd-video-gated'),
+        boxW: Math.round(b.width), btnW: Math.round(t.width)
+      };
+    });
+    check('the reveal button is drawn, and inside the player it belongs to',
+      g && g.visible && g.inside, JSON.stringify(g));
+    check('...over a frame the engine actually blurs, not merely a class name',
+      /blur\(/.test(g?.filter || ''), g?.filter);
+    check('...and does not cover the frame it is inviting you to reveal',
+      g?.narrower, `button ${g?.btnW}px of a ${g?.boxW}px player`);
+
+    await page.click('.shd-selfpost .shd-video-reveal');
+    /* This suite is deliberately offline — every subresource is aborted — so the click
+       starts the source list and every source fails. That is not in the way of the test, it
+       IS a second one: the whole failure path, in a real engine, ending where the reader can
+       see it rather than in an empty frame. */
+    await page.waitForSelector('.shd-selfpost .shd-video-fail', { timeout: 5000 }).catch(() => {});
+    const after = await page.evaluate(() => {
+      const vid = document.querySelector('.shd-selfpost .shd-video-el');
+      const still = document.querySelector('.shd-selfpost .shd-video-still');
+      return {
+        gated: !!document.querySelector('.shd-selfpost .shd-video-gated'),
+        button: !!document.querySelector('.shd-selfpost .shd-video-reveal'),
+        videoFilter: vid ? getComputedStyle(vid).filter : null,
+        stillFilter: still ? getComputedStyle(still).filter : null,
+        said: (document.querySelector('.shd-selfpost .shd-video-fail')?.textContent || '').slice(0, 60)
+      };
+    });
+    check('clicking it clears the blur and takes the button with it',
+      !after.gated && !after.button && !/blur\(/.test(after.videoFilter || 'none'),
+      JSON.stringify(after));
+    check('...and with every source blocked, the reader is told so rather than shown nothing',
+      /^Video unavailable/.test(after.said.trim()), after.said);
+    check('...on a still that is no longer blurred, because the reader asked for it',
+      after.stillFilter != null && !/blur\(/.test(after.stillFilter), after.stillFilter);
+
+    const doc = await page.evaluate(() => ({
+      scrollW: document.documentElement.scrollWidth,
+      clientW: document.documentElement.clientWidth
+    }));
+    check('...and none of it scrolls the page sideways',
+      doc.scrollW <= doc.clientW + 1, JSON.stringify(doc));
+    check('no page errors on an adult video post', pageErrors.length === 0, pageErrors.join(' | '));
+    await page.close();
+  }
+
+  /* ================================================================== *
    * IMAGES
    * ================================================================== */
   console.log('\n\x1b[1mLAYOUT GEOMETRY — IMAGES\x1b[0m');
