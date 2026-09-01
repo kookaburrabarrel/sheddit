@@ -185,10 +185,44 @@ SHD.chrome = (() => {
     const sub = SHD.route.subredditOf();
     const active = SHD.route.sortOf();
     const base = sub ? `/r/${sub}` : '';
-    return h('div.shd-tabmenu-wrap', null,
+    return h('div.shd-tabmenu-wrap', null, [
       h('ul.tabmenu', null, SORTS.map(s =>
         h('li' + (s === active ? '.selected' : ''), null,
-          h('a', { href: `${base}/${s}/`, text: s })))));
+          h('a', { href: `${base}/${s}/`, text: s })))),
+      timeMenu(base, active)
+    ]);
+  }
+
+  /**
+   * Old reddit's "links from:" window, on the two sorts that HAVE one.
+   *
+   * `top` and `controversial` rank over a period, and without this the reader is stuck
+   * with whatever Reddit defaults to — the whole point of clicking `top` is usually to
+   * ask "of what span". `hot`, `new` and `rising` ignore `t`, so offering it there would
+   * be a control that changes nothing (bug 62's shape), which is why route.TIMED_SORTS
+   * owns the answer rather than this function guessing.
+   *
+   * The current window comes from route.timeQuery — the EMITTED query, not
+   * location.search — for the reason the comment sort strip does the same: during the
+   * pre-commit window location still holds the URL the reader is leaving, so reading it
+   * would bold the period they just navigated away from.
+   *
+   * When the URL carries no `t` at all, NOTHING is marked. That is deliberate: Reddit's
+   * default window is unverified, and marking a guess would tell the reader they are
+   * looking at a span they may not be.
+   */
+  function timeMenu(base, active) {
+    if (!SHD.route.TIMED_SORTS.includes(active)) return null;
+    const current = SHD.route.timeQuery;
+    return h('div.shd-timemenu', null, [
+      h('span.shd-timelabel', { text: 'links from: ' }),
+      ...SHD.route.TIMES.flatMap((t, i) => {
+        const el = t.id === current
+          ? h('span.selected', { text: t.label })
+          : h('a', { href: `${base}/${active}/?t=${t.id}`, text: t.label });
+        return i ? [' | ', el] : [el];
+      })
+    ]);
   }
 
   /* route.js owns PROFILE_TABS the way it owns SORTS, and for the same reason: every href
@@ -241,5 +275,5 @@ SHD.chrome = (() => {
     document.querySelector('#shd-header')?.remove();
   }
 
-  return { header, tabMenu, themeBar, nsfwToggle, updateControl, sidebar, reset };
+  return { header, tabMenu, themeBar, nsfwToggle, timeMenu, updateControl, sidebar, reset };
 })();

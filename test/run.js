@@ -1559,6 +1559,78 @@ async function boot(html, url, setup) {
     check('exactly one root', doc.querySelectorAll('#shd-root').length === 1);
   }
 
+  console.log('\n\x1b[1mTHE TIME WINDOW ON top / controversial\x1b[0m');
+  {
+    // "top" without a period is half a control: the whole reason to click it is usually
+    // to ask "of what span". Old reddit put "links from:" under the tabs on exactly the
+    // two sorts that rank over a window.
+    const strip = (d) => d.querySelector('#shd-root .shd-timemenu');
+    const labels = (d) => [...strip(d).querySelectorAll('a, .selected')].map(e => e.textContent);
+
+    const hot = await boot(listingPage(), 'https://www.reddit.com/r/programming/');
+    check('no window on a sort that does not have one', !strip(hot.doc));
+
+    const top = await boot(listingPage(), 'https://www.reddit.com/r/programming/top/');
+    check('top gets the window strip', !!strip(top.doc));
+    check('it offers every period route.js registers',
+      labels(top.doc).length === top.window.SHD.route.TIMES.length, labels(top.doc).join(' | '));
+    check('nothing is marked when the URL carries no t=',
+      !strip(top.doc).querySelector('.selected'),
+      'a guessed default would tell the reader they are looking at a span they may not be');
+    check('its hrefs keep the subreddit and the sort, and only add t=',
+      [...strip(top.doc).querySelectorAll('a')]
+        .every(a => /^\/r\/programming\/top\/\?t=[a-z]+$/.test(a.getAttribute('href'))),
+      [...strip(top.doc).querySelectorAll('a')].map(a => a.getAttribute('href')).join(' '));
+    check('every href it renders still classifies as a listing',
+      [...strip(top.doc).querySelectorAll('a')].every(a =>
+        top.window.SHD.route.classify(a.getAttribute('href').split('?')[0])
+          === top.window.SHD.route.LISTING));
+
+    const month = await boot(listingPage(), 'https://www.reddit.com/r/programming/top/?t=month');
+    check('the period in the URL is the one marked',
+      month.doc.querySelector('#shd-root .shd-timemenu .selected')?.textContent === 'past month',
+      month.doc.querySelector('#shd-root .shd-timemenu .selected')?.textContent);
+    check('...and it is not also offered as a link',
+      ![...strip(month.doc).querySelectorAll('a')].some(a => /t=month$/.test(a.getAttribute('href'))));
+
+    const contro = await boot(listingPage(), 'https://www.reddit.com/controversial/?t=year');
+    check('controversial has one too, on the front page',
+      contro.doc.querySelector('#shd-root .shd-timemenu .selected')?.textContent === 'past year');
+    check('front-page hrefs carry no subreddit',
+      [...strip(contro.doc).querySelectorAll('a')]
+        .every(a => /^\/controversial\/\?t=/.test(a.getAttribute('href'))),
+      [...strip(contro.doc).querySelectorAll('a')].map(a => a.getAttribute('href')).join(' '));
+  }
+
+  {
+    /**
+     * The half that is not cosmetic. Changing the window is a QUERY-ONLY navigation —
+     * the pathname never moves — so a route latch keyed on the path alone concludes
+     * nothing happened, nothing tears down, and Reddit's replacement feed is consumed
+     * UNDER the old window's rows: two spans interleaved on one page. That is bug 87's
+     * failure on the listing side, and it is why `t` had to join the latch key rather
+     * than the strip merely rendering links.
+     */
+    const { doc, window } = await boot(listingPage(),
+      'https://www.reddit.com/r/programming/top/?t=week');
+    const rows = () => doc.querySelectorAll('#shd-root .thing.link').length;
+    check('setup: the week window rendered', rows() === POSTS.length &&
+      doc.querySelector('#shd-root .shd-timemenu .selected')?.textContent === 'past week');
+
+    const emitted = [];
+    window.SHD.route.onChange((mode, path) => emitted.push(path + window.location.search));
+    doc.querySelectorAll('[data-shd]').forEach(el => el.removeAttribute('data-shd'));
+    window.history.pushState({}, '', '/r/programming/top/?t=all');
+    await waitFor(() => doc.querySelector('#shd-root .shd-timemenu .selected')?.textContent === 'all time');
+
+    check('a window change is seen as a route change', emitted.length === 1, JSON.stringify(emitted));
+    check('the strip follows it',
+      doc.querySelector('#shd-root .shd-timemenu .selected')?.textContent === 'all time');
+    check('the feed is re-rendered, not appended to', rows() === POSTS.length,
+      `${rows()} rows — two windows interleaved is the bug this catches`);
+    check('still exactly one root', doc.querySelectorAll('#shd-root').length === 1);
+  }
+
   console.log('\n\x1b[1mHIDDEN TABS — rAF does not fire, but the deadline does\x1b[0m');
   {
     // A page opened in a background tab (middle-click, session restore) never paints, so

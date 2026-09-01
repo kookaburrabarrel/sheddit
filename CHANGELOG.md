@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.30.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.31.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,27 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.31.0
+
+### Added — the time window on `top` and `controversial`
+
+Clicking **top** gave you whatever period Reddit felt like, with no way to ask for
+another — and asking "of what span" is usually the whole reason to click it. Old
+reddit's `links from:` strip is back under the sort tabs, on exactly the two sorts that
+rank over a window: past hour, 24 hours, week, month, year, all time.
+
+The half that isn't cosmetic: changing the window only changes the query string, and
+route detection was keyed on the path, so it would have seen nothing — no teardown, and
+Reddit's replacement feed consumed underneath the previous window's rows, two spans
+interleaved on one page. That is the failure the comments sort hit earlier, on the
+other page type, and the fix is the same: the window joins the small set of query
+parameters that count as a route change. Deliberately small — keying on the whole query
+string would tear the page down for every tracking parameter Reddit rewrites in place.
+
+When the URL carries no period at all, nothing is marked as current. Reddit's own
+default is unverified, and marking a guess would tell you you are looking at a span you
+may not be.
 
 ## 0.30.0
 

@@ -1138,6 +1138,35 @@ const overlaps = (a, b) =>
   /* ================================================================== *
    * THE NSFW TOGGLE KEEPS YOUR PLACE
    * ================================================================== */
+  console.log('\n\x1b[1mTHE TIME WINDOW FITS A NARROW VIEWPORT\x1b[0m');
+  // Six periods, five separators and a label on one flex row is precisely the shape that
+  // shipped as bug 31 — a nowrap flex row that only overflows once the content is wider
+  // than the viewport, which depends on the font actually installed. css-lint requires the
+  // wrap statically; this measures that it works out at the width the report came from.
+  {
+    const { page, pageErrors } = await open(browser, origin, '/r/programming/top/?t=month',
+      '#shd-root .shd-timemenu', { width: 360, height: 900 });
+    const m = await page.evaluate(() => {
+      const strip = document.querySelector('#shd-root .shd-timemenu');
+      const r = strip.getBoundingClientRect();
+      const root = document.querySelector('#shd-root').getBoundingClientRect();
+      return {
+        items: strip.querySelectorAll('a, .selected').length,
+        right: Math.round(r.right), rootRight: Math.round(root.right),
+        hOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        wrapped: r.height > 20,
+        current: strip.querySelector('.selected')?.textContent
+      };
+    });
+    check('the strip renders every period at 360px', m.items === 6, JSON.stringify(m));
+    check('it wraps instead of overflowing the row', m.wrapped === true, JSON.stringify(m));
+    check('it stays inside the layout', m.right <= m.rootRight + 1, JSON.stringify(m));
+    check('and the page does not scroll sideways', m.hOverflow <= 0, `+${m.hOverflow}px`);
+    check('the current window is marked', m.current === 'past month', m.current);
+    check('no page errors', pageErrors.length === 0, pageErrors.join(' | '));
+    await page.close();
+  }
+
   console.log('\n\x1b[1mA SETTINGS CHANGE KEEPS YOUR PLACE\x1b[0m');
   // Changing a setting tears the render down — a placeholder tile and a picture are
   // different markup, not different paint — and without care that lands the reader back
