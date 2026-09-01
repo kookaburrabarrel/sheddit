@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.31.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.32.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -13,6 +13,59 @@ Entries lead with what changed for a *user* where there is such a thing, and not
 underlying cause where that is the more useful fact. Several entries describe bugs that
 existed from the first commit and were only found once a test could see them — those are
 marked **never worked**, because "fixed" would imply it once did.
+
+---
+
+## 0.32.0
+
+### Fixed — an empty listing came up as Reddit's page, telling you the community had no posts
+
+Reported 2026-09-01 with the DOM state from both sides, which is the only reason this was
+two bugs rather than one. `/r/DIYfail/top/` rendered in **Reddit's** dark UI — no
+`shd-active`, `data-shd-waiting="empty-feed"`, zero Sheddit elements on the page — while the
+same URL at `?t=all` rendered 27 rows in Sheddit's. Nothing was broken: that sub has been
+quiet for years and there was genuinely nothing in the window `top` was ranked over (0
+today, 1 this week, 1 this month, 10+ this year).
+
+**The renderer never activated, because the only test for "this page is ours" was whether a
+row had been drawn.** An empty feed was correctly not called a failure — and that verdict
+was then treated as a reason to keep *waiting*. Waiting is right for a feed still streaming
+in; a window with nothing in it has already arrived, and its answer is zero. A check that
+counts posts cannot tell those apart, so the page waited for something that was never
+coming: no timeout, no terminal state, no signal of any kind.
+
+The cost was not the post list. The chrome and the listing are built in one pass, so an
+empty feed cost the **whole shell** — header, tab menu, theme bar, sidebar — which is why
+the page came up in Reddit's dark theme even though your theme was set and correct the whole
+time. The theme survived; the renderer that applies it never ran.
+
+An empty feed is now settled by Reddit's own no-content panel inside the feed — Reddit
+stating the answer — and, failing that, by an inference at the deadline (document finished,
+nothing pending, markup in the feed, no dialog up). The page then gets the full layout and
+an empty listing. The distinction is deliberately strict: without the panel to go on, "a
+feed with no posts in it" also describes an age gate that ships empty feed scaffolding, and
+drawing a "nothing here" page over one would bury the button you have to press.
+
+### Fixed — and the message on it was Reddit's, which is what made a working page look broken
+
+Reddit's panel reads *"This community doesn't have any posts yet"* whatever the reason — the
+message for a brand new community, shown for a time-filtered window on a twelve-year-old
+subreddit. Sheddit reused it by inheritance, and it reads as a data failure, which is
+exactly what that wording invites.
+
+The empty page now says old reddit's own line — *there doesn't seem to be anything here* —
+over a line naming the community and the window: "r/DIYfail has no posts from the past
+week." When the URL carries no period, it says the feed is empty of *the time window this
+sort ranks over* and stops there, because 0.31.0's strip deliberately marks nothing in that
+case — Reddit's default window is unverified, and naming one in a full sentence would be
+that same guess wearing more confidence. Naming the mechanism is what answers the question
+that actually went wrong: the feed is empty because of a window, not because the community
+is. Nothing in the box claims the community is empty, new, or banned — none of which is
+visible from a feed of zero.
+
+`npm run verify:live` grew a section that can settle the default: it loads a bare `/top/`
+alongside each period and reports which one it matches. If `day` holds up on a busy
+subreddit, that is the evidence for naming it in both places.
 
 ---
 

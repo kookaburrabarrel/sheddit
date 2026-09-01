@@ -209,6 +209,59 @@ SHD.gate = (() => {
   }
 
   /**
+   * "The feed has ARRIVED and the answer is zero" — as opposed to "the feed is late".
+   *
+   * nothingToRender() cannot tell those apart, and for its own purpose it does not need
+   * to: both mean "do not accuse ourselves". But `empty-feed` was then treated as a WAIT,
+   * and a wait for something that is never coming has no end — reported 2026-09-01 from
+   * /r/DIYfail/top/, where Reddit's default 24-hour window genuinely holds no posts. The
+   * page sat at data-shd-waiting="empty-feed" indefinitely: never revealed, so never
+   * rendered, so the reader got Reddit's own layout AND Reddit's own empty-state copy,
+   * which says the community has no posts at all. It has twelve years of them. See bug 94.
+   *
+   * Two signals, and the order matters because only the first is evidence:
+   *
+   *   reddit-says-empty  Reddit's own no-content panel is in the feed (C.FEED_EMPTY).
+   *                      That is Reddit stating the answer, so it settles the question
+   *                      immediately, at any age of the page.
+   *   settled-empty      No such panel, but the document has finished, no more posts are
+   *                      pending, the feed holds markup of some kind, and our whole
+   *                      patience window has run out. A last resort, deliberately: it is
+   *                      an INFERENCE from silence, and the cost of getting it wrong is
+   *                      our layout covering a page we do not understand.
+   *
+   * The `settled-empty` conditions are each load-bearing:
+   *   - element children in the feed. An age gate that ships bare feed scaffolding
+   *     (test/harness.js /r/gated-feed/) has none, and drawing "nothing here" over the
+   *     18+ button is bug 21, the cardinal sin of this module.
+   *   - no pending feed partial. That is Reddit telling us posts are still on their way.
+   *   - no native modal up. A dialog over the page is a page mid-flow, not an empty one.
+   *   - document complete, and the full MAX_WAIT_MS. Reddit streams its markup; anything
+   *     shorter is a speed detector, which is the mistake the deadline itself was
+   *     rewritten to stop making.
+   *
+   * @returns {'reddit-says-empty'|'settled-empty'|null}
+   */
+  function emptyFeedReason() {
+    if (sourceCount() > 0) return null;
+    let feed = null;
+    try { feed = document.querySelector(SHD.C.FEED); } catch { return null; }
+    if (!feed) return null;                     // a comment tree is not a feed; see above
+    if (feedIsPopulated()) return null;         // markup we cannot read is not emptiness
+    try {
+      if (feed.querySelector(SHD.C.FEED_EMPTY)) return 'reddit-says-empty';
+    } catch { /* fall through to the inference */ }
+    if (waited < MAX_WAIT_MS) return null;
+    if (document.readyState !== 'complete') return null;
+    if (nativeModalUp()) return null;
+    try {
+      if (document.querySelector(SHD.C.FEED_PARTIAL)) return null;
+      if (!feed.querySelector('*')) return null;
+    } catch { return null; }
+    return 'settled-empty';
+  }
+
+  /**
    * Is nothing on screen because we are broken, because Reddit is slow, or because this
    * simply is not a page we render?
    */
@@ -266,6 +319,14 @@ SHD.gate = (() => {
     // through. Show them the page. Keep the pipeline running in case content turns up.
     const why = nothingToRender();
     if (why) {
+      /* An empty feed that has SETTLED is an answer, and an answer is something we can
+         draw: our own chrome, an empty listing and copy that names the filter in force.
+         pipeline.js decides whether this route wants that and reveal()s if it drew, so a
+         `true` here means the page is ours now and there is nothing left to wait for.
+         Asked on EVERY tick, including the last one — the MAX_WAIT_MS tick is where the
+         inference branch of emptyFeedReason() becomes available, and it is the terminal
+         state this branch used to lack. */
+      if (why === 'empty-feed' && engaged && SHD.pipeline?.renderEmpty?.()) return;
       unblank(why);
       if (waited < MAX_WAIT_MS) scheduleCheck();
       return;
@@ -345,6 +406,7 @@ SHD.gate = (() => {
     document.documentElement.removeAttribute('data-shd-fail');
     document.documentElement.removeAttribute('data-shd-soft-fail');
     document.documentElement.removeAttribute('data-shd-waiting');
+    document.documentElement.removeAttribute('data-shd-empty');
     document.getElementById(ERROR_ID)?.remove();
 
 
@@ -365,6 +427,25 @@ SHD.gate = (() => {
       showLoading();
     }
     scheduleCheck();
+  }
+
+  /**
+   * We are rendering, and what we are rendering is NOTHING — a feed that arrived empty.
+   *
+   * A reveal like any other (the chrome, the tab bar and the empty listing are a real
+   * page), plus a stamp saying which signal settled it, so a report can tell Reddit's own
+   * statement apart from our inference. notEmpty() takes it off again the moment a row
+   * lands: a feed that was empty at 1500ms and streams a post at 3000ms is a normal page,
+   * not an empty one.
+   */
+  function empty(reason) {
+    if (stopped()) return;           // failed, or handed back: nothing of ours is on screen
+    document.documentElement.setAttribute('data-shd-empty', reason);
+    reveal();
+  }
+
+  function notEmpty() {
+    document.documentElement.removeAttribute('data-shd-empty');
   }
 
   /** First successful render — swap suppression for our active state. */
@@ -558,6 +639,7 @@ SHD.gate = (() => {
     // old-reddit.css is scoped under .shd-active, so anything already rendered would
     // otherwise sit there unstyled behind the error screen.
     document.documentElement.classList.remove('shd-gate', SHD.C.BODY_CLASS);
+    document.documentElement.removeAttribute('data-shd-empty');   // our listing is gone with it
     document.getElementById(SHD.C.ROOT_ID)?.remove();
     document.getElementById('shd-header')?.remove();
     hideLoading();
@@ -627,6 +709,7 @@ SHD.gate = (() => {
     document.documentElement.removeAttribute('data-shd-fail');
     document.documentElement.removeAttribute('data-shd-soft-fail');
     document.documentElement.removeAttribute('data-shd-waiting');
+    document.documentElement.removeAttribute('data-shd-empty');
     document.getElementById(ERROR_ID)?.remove();
     hideLoading();
   }
@@ -747,7 +830,7 @@ SHD.gate = (() => {
 
   return {
     arm, reveal, fail, release, reportError, standDown, onStop, resetForRoute, unblank,
-    syncNativeModal, engage,
+    syncNativeModal, engage, empty, notEmpty, emptyFeedReason,
     get revealed() { return revealed; },
     get failed() { return failed; },
     get released() { return released; },
