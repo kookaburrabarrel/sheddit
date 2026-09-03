@@ -3,7 +3,7 @@
  * build.js — produces dist/sheddit.dev.js
  *
  * A single self-contained file you can paste into DevTools on any reddit.com page to run
- * the whole extension immediately. Same source files, same order as the manifest; the two
+ * the whole extension immediately. Same source files, same order as the manifest; the
  * stylesheets are inlined and injected as <style> tags instead of arriving via the manifest.
  *
  * This exists so the extension is testable without the load-unpacked / reload cycle.
@@ -20,7 +20,11 @@ const OUT = path.join(OUT_DIR, 'sheddit.dev.js');
 // Must match manifest.json content_scripts order.
 // themes.css is delivered at document_start in the manifest (--shd-blank has to beat the
 // pre-render blackout); in one bundle that distinction does not exist, so it goes last.
-const CSS = ['src/styles/suppress.css', 'src/styles/old-reddit.css', 'src/styles/themes.css'];
+const CSS = ['src/styles/suppress.css', 'src/styles/old-reddit.css', 'src/styles/themes.css',
+             // The old.reddit interstitial. Inert anywhere else — every rule is under
+             // .shd-redirecting, which only oldreddit.js sets and only on that host — so
+             // the one bundle stays honest about what the extension delivers.
+             'src/styles/redirect.css'];
 const JS = [
   'src/config/contracts.js',
   'src/config/themes.js',
@@ -33,6 +37,11 @@ const JS = [
   // and on a streamed page that question is asked before route.js would load at idle.
   'src/core/route.js',
   'src/core/gate.js',
+  // Only ever acts on old.reddit.com, where the manifest delivers it alone at
+  // document_start; on any other host targetFor() returns null and start() does nothing.
+  // It is here because the drift check below is a check on the SET of files that ship,
+  // and a file exempted from it is a file that can go missing unnoticed.
+  'src/core/oldreddit.js',
   'src/core/dom.js',
   'src/core/model.js',
   'src/core/media.js',

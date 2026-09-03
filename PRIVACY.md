@@ -111,8 +111,19 @@ if you have asked for one. Nothing else is written.
 **Host access to `*://*.reddit.com/*`** — Sheddit's entire function is rewriting Reddit's
 own pages into the old.reddit.com layout, which cannot be done without running on those
 pages. The access is limited to reddit.com and is used only to read and re-draw the
-document already loaded in your tab. `old.reddit.com` itself and `reddit.com/media` are
-explicitly excluded.
+document already loaded in your tab. `reddit.com/media` is excluded outright, and
+`old.reddit.com` is excluded from everything that reads or redraws a page.
+
+**On `old.reddit.com`, one script and nothing else.** That host now answers every page
+with a login wall, so a link to it dead-ends — and a Reddit link that dead-ends is blamed
+on whichever extension is installed. Sheddit therefore ships a single small script there
+(`src/core/oldreddit.js`) whose only job is to say so on screen and send you to the same
+page on `www.reddit.com`. It reads the URL in your address bar, reads your
+`redirectOldReddit` preference, writes one entry to that tab's `sessionStorage` so two
+redirectors cannot bounce you between hosts for ever, and navigates. It reads no page
+content, sends no request, and is off entirely if you untick the option. The destination
+in a login wall's `dest` parameter is followed only when it points back at reddit.com, so
+the redirect cannot be pointed at anyone else's site.
 
 **No host access to `v.redd.it` or `raw.githubusercontent.com`, despite the two requests
 above.** Both servers answer with `access-control-allow-origin: *`, so those files can be
