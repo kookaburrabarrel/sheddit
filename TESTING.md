@@ -213,7 +213,19 @@ was a real gap:
   the ordinary case where the deadline fires before anything reaches the screen.
 
 Note the third one: an assertion that throws looks exactly like a mutation that survived.
-Keep assertions null-safe.
+Keep assertions null-safe. **It recurred in 0.33.0**, in the new old.reddit rows, exactly
+as written: the row that removes the interstitial made every assertion that reads the card
+throw, the suite died, and `grep -c FAIL` counted zero. The reads there now go through
+null-safe accessors, and the one assertion whose two halves are both satisfied by a card
+that never appeared carries an explicit `!!stay` so it cannot pass on nothing.
+
+**A mutation that survives may be the row that is wrong.** Also 0.33.0: a row swapped
+`out.hostname = NEW_HOST` for `out.host = NEW_HOST`, expecting the port to be dropped. It
+is not — the WHATWG `host` setter *keeps* the existing port when the value it is handed
+carries none, measured, so the two are identical and the mutation changed nothing. The row
+was replaced with the bug that really loses the port (building the target by concatenating
+onto a hardcoded origin, which drops the scheme with it). Check what the mutation actually
+does before concluding the test is at fault.
 
 **And the same failure, one level up: a suite that *dies* looks exactly like a suite with
 nothing to say.** The sweep runs on a throwaway copy built by `tar --exclude=dist` —
