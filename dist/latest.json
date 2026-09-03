@@ -1,6 +1,6 @@
 {
-  "version": "0.32.0",
-  "released": "2026-09-01",
+  "version": "0.33.0",
+  "released": "2026-09-03",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.32.0 renders a listing that came back empty instead of waiting for ever behind Reddit's page: the whole layout stays, and the line on it says the feed is empty of a time window rather than repeating Reddit's \"this community doesn't have any posts yet\"."
+  "notes": "0.33.0 catches a link to old.reddit.com — which now answers every page with a login wall — and sends it to www.reddit.com instead, behind a notice saying so, so a dead old-reddit link stops looking like Sheddit failing."
 }

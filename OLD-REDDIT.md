@@ -10,6 +10,16 @@ spec, not as a report someone once wrote.
 `npm run verify:live` checks `contracts.js` against *new* Reddit. There is no equivalent for
 this file and there cannot be one again. Do not "correct" a value here against memory.
 
+**Status update, 2026-09-03 — the retirement moved a stage.** Measured from a plain HTTP
+client: every path on `old.reddit.com` now answers `302 →
+/login/?reason=lor2&dest=<the requested url>`, and that login page answers **403**. Logged
+out, there is nothing left to read there and nothing further to capture. This is an
+observation about the host's availability, not a correction to any measurement below —
+those stand exactly as recorded on 2026-08-18. What it changed in the extension is
+`src/core/oldreddit.js`: a link to that host is now taken to `www.reddit.com`, behind a
+notice, because a dead Reddit link gets blamed on whichever extension is installed
+(ARCHITECTURE §5.2, engineering log 95).
+
 ## Provenance and its limits
 
 - **A side:** old.reddit.com at 878–911px. **B side:** www.reddit.com with Sheddit at 1264px.

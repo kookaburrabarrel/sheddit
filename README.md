@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
 
-[![version 0.32.0](https://img.shields.io/badge/version-0.32.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.33.0](https://img.shields.io/badge/version-0.33.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.32.0 is out — everyone is welcome to try it
+### Beta 0.33.0 is out — everyone is welcome to try it
 
 Works in Chrome and Firefox, [installed by hand](#install) in about a minute.
 If Sheddit makes Reddit better for you, tell a friend — or post about it on Reddit itself,
@@ -116,11 +116,19 @@ The catch is that Reddit can quietly rename the parts of its page Sheddit reads,
 it likes, and owes nobody notice when it does. That is why this project is free, open
 source, and collaborative. When they change something, so will we.
 
+**And when a link takes you there anyway.** Old links, old bookmarks and other people's
+posts still point at `old.reddit.com`, where there is now nothing to read: every path
+answers with a login wall. A Reddit link that dead-ends looks exactly like the extension
+you just installed being broken, so Sheddit does not leave that unexplained — it takes the
+page you asked for over to `www.reddit.com`, where it loads and Sheddit draws it, behind a
+short notice saying what happened. If you still log in to old reddit and would rather it
+were left alone, one checkbox on the options page turns it off.
+
 [cl]: https://github.com/mkornreich/old_reddit
 
 ## Install
 
-Version **0.32.0**, beta. It works and is tested on both browsers, Chrome more
+Version **0.33.0**, beta. It works and is tested on both browsers, Chrome more
 thoroughly, but Reddit can change something tomorrow that breaks it. If that happens,
 [tell me](https://github.com/kookaburrabarrel/sheddit/issues/new/choose). Store listings
 are in progress; until they land, the zips below are the way in. Nothing to build.
@@ -184,6 +192,7 @@ build step. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | **Sorting that asks "of what span"** | `top` and `controversial` carry old Reddit's *links from* window — past hour through all time |
 | **Five themes, no reload** | Switched from a button in the header; the choice follows you to every other tab |
 | **Adult thumbnails, your call** | Flagged posts show old Reddit's placeholder tile by default; an *nsfw thumbnails* button in the header reveals them, and remembers |
+| **Old Reddit links that still work** | `old.reddit.com` answers every page with a login wall now; Sheddit catches those links and opens the same page on `www.reddit.com`, in the same layout, behind a notice saying so |
 | **Tells you when it breaks** | If Reddit ships markup Sheddit can't read, you get a screen saying so, with a button to hand the page back |
 | **Nothing leaves your browser** | No API calls and no telemetry; your settings live in your browser's own storage and go nowhere else |
 

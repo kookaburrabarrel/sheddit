@@ -1374,6 +1374,45 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     invisible, and a captured `top` page means something different depending on when it
     is replayed.
 
+95. **A link to old.reddit.com looked exactly like Sheddit being broken.** Not a code
+    defect — an unhandled case with a code defect's shape, and recorded here for the
+    reason bug 52 is: the observable is what matters, and this observable was *the
+    extension you just installed does not work*.
+
+    What the reader saw: click a Reddit link (an old bookmark, somebody's post, a
+    search result — old.reddit URLs are everywhere and outlive the host), land on a
+    page with no posts, no layout, no header, and nothing of Sheddit's on it anywhere.
+    Measured 2026-09-03: `old.reddit.com` answers every path `302 →
+    /login/?reason=lor2&dest=<the page you asked for>`, and that login page answers
+    **403**. Reddit retired a host; the extension that happened to be installed took
+    the report.
+
+    Sheddit had no answer available, and that is the actual defect. Every content
+    script `exclude_matches` `old.reddit.com` — correctly, since old reddit is the
+    thing this extension imitates — so on the one host where a reader most needs to be
+    told *this is not us*, there was nothing of ours that could say it. That is bug
+    52's argument ("a silent hand-back is indistinguishable from an unrelated bug")
+    arriving through a door the exclusion held open.
+
+    The fix is one script and one stylesheet on that host and nothing else
+    (`src/core/oldreddit.js`, ARCHITECTURE §5.2): say what is happening, then open the
+    same page on `www.reddit.com`, where it loads and the renderer draws it.
+
+    Three things about it are easy to get wrong later, and each has a mutation row:
+
+    - **The page is in `dest`, not in the path.** The 302 is server-side, so no
+      document exists for the URL that was clicked — `location` reads `/login/` by the
+      time anything of ours runs. Swapping only the hostname sends the reader to
+      **www's** login page: a hop that "works", to another wall.
+    - **`dest` is hostile input.** It is followed only back to reddit.com, and never
+      into another login page. A redirector that follows an arbitrary parameter is an
+      open redirect wearing this extension's name — the one failure mode in this file
+      that is a security bug rather than a layout one.
+    - **A silent hop is the same bug again.** An unexplained change of hostname is the
+      next thing an extension is blamed for, so the interstitial is not decoration; it
+      is the entire point, and the mutation that removes it leaves a feature that still
+      "works".
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

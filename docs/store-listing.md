@@ -88,8 +88,11 @@ WHAT YOU GET
   Classic is old.reddit.com as it was: Verdana, blue links, square corners.
 • Adult thumbnails behind old reddit's placeholder tile, with a one-click reveal in the
   header when you want them.
+• Old links that still work: old.reddit.com answers every page with a login wall now, so
+  a link to it opens the same page on www.reddit.com — in the same layout — behind a
+  short notice saying what happened.
 • An options page for turning any of it off: listings, comments, profiles, thumbnails,
-  compact rows, auto-paging, inline video and images.
+  compact rows, auto-paging, inline video and images, and the old.reddit.com redirect.
 
 PRIVACY
 
@@ -130,7 +133,9 @@ of Reddit, Inc., used here only to describe what this extension works on.
 ```
 Sheddit re-renders pages on reddit.com into the old.reddit.com layout. It reads the post
 and comment data already present in the loaded page and draws an alternative layout from
-it. That is its only function.
+it. That is its only function. Because old.reddit.com no longer serves those pages at
+all — it answers with a login wall — a link to that host is opened on www.reddit.com
+instead, behind a notice saying so, so the same layout can be drawn.
 ```
 
 ## Permission justifications
@@ -142,10 +147,10 @@ answered.
 
 ```
 Stores the user's display preferences: which colour theme they chose, which page types
-Sheddit should re-render (listings, comments, profiles), and layout toggles such as
-compact rows, thumbnails, auto-paging and inline media. Eleven boolean-or-string values
-in one object. No identifiers, no browsing data, nothing derived from what the user
-reads.
+Sheddit should re-render (listings, comments, profiles), layout toggles such as compact
+rows, thumbnails, auto-paging and inline media, and whether old.reddit.com links should
+be opened on www.reddit.com. Twelve boolean-or-string values in one object. No
+identifiers, no browsing data, nothing derived from what the user reads.
 ```
 
 **Host permission `*://*.reddit.com/*`**
@@ -153,9 +158,12 @@ reads.
 ```
 The extension's entire function is re-rendering Reddit's own pages, which requires
 running on those pages. Access is limited to reddit.com and used only to read the
-already-loaded document and draw a replacement layout into it. old.reddit.com and
-reddit.com/media are explicitly excluded in the manifest, because neither needs it. No
-other host is requested, and no data leaves the page.
+already-loaded document and draw a replacement layout into it. reddit.com/media is
+excluded outright in the manifest, and old.reddit.com is excluded from every script that
+reads or redraws a page. On old.reddit.com the extension runs one small script that does
+not read the page at all: that host now answers every URL with a login wall, so the
+script says so on screen and opens the same page on www.reddit.com, where the layout
+works. A checkbox turns it off. No other host is requested, and no data leaves the page.
 ```
 
 This is the one a reviewer actually reads, and the reason a submission with a broad host
