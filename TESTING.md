@@ -464,6 +464,15 @@ unchecked.
 
 ## Known gaps
 
+- **The old.reddit hop has no Firefox coverage.** `test/extension.js` drives it end to end
+  in a real Chromium — the 302 onto the login wall, the 403, the card, the landing on www
+  with rows rendered — and `test/run.js` asserts that the manifest entry survives
+  `firefoxManifest()` byte-identically. Nothing runs it *in Gecko*, which is the runtime
+  whose realm rules have already cost this project a shipped bug (engineering log 82). The
+  suite that would hold it is `test/extension-firefox.js`; it needs a machine with Firefox
+  and geckodriver, which the container this landed from does not have. Reasoning, not
+  evidence — and the reason the README now says plainly that Chrome is the better-tested
+  of the two builds.
 - **Real logged-out page states are approximated, not captured.** The `/r/gated/` fixture
   is a hand-written stand-in for an age gate; actual NSFW interstitials, quarantine
   notices, private-community pages and rate-limit pages have never been seen by this test

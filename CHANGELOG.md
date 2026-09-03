@@ -65,6 +65,21 @@ asserts it. The known limit is recorded in ARCHITECTURE.md §5.2: a content scri
 document, so if old.reddit ever stops answering at all, Chrome's own error page replaces
 the document and nothing of ours runs.
 
+### Changed — the README now says outright which browser is better tested
+
+It said "tested on both browsers, Chrome more thoroughly" in a subclause of the install
+paragraph, which is true and easy to read past. Someone choosing a browser deserves the
+claim up front and with a reason behind it: Chrome is the primary target, three of the test
+suites drive a real Chromium (packed extension, layout geometry, media playback) against
+one for Firefox, and every feature lands on Chrome first. Firefox is genuinely supported and
+its suite passes — it has fewer miles on it, and the README now says so where a reader
+picks a build rather than only where they scroll past.
+
+Concrete instance of that gap, filed in TESTING.md's known gaps rather than implied: the
+old.reddit hop above is driven end to end in Chromium and nothing runs it in Gecko. The
+Firefox manifest entry is asserted to survive the transform byte-identically, which is not
+the same thing as having watched it work.
+
 ### Fixed — the mutation sweep had been running half the jsdom suite
 
 Not a shipped bug; a hole in the thing that proves the tests have teeth, and found only
