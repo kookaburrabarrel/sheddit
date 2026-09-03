@@ -65,6 +65,20 @@ asserts it. The known limit is recorded in ARCHITECTURE.md §5.2: a content scri
 document, so if old.reddit ever stops answering at all, Chrome's own error page replaces
 the document and nothing of ours runs.
 
+### Fixed — the release script never committed the Firefox download
+
+`package-extension.js` has always written both zips. `refresh-zip.sh` staged only
+`dist/sheddit.zip`, so every run rebuilt the Firefox one, left it uncommitted and dirty in
+the working tree, and pushed a release whose Firefox link still served whatever version
+someone last added by hand — 0.28.1, going by the log, against a 0.32.0 Chrome zip beside
+it. Precisely the quiet failure the script's own header paragraph exists to prevent,
+happening inside the script written to prevent it.
+
+Both zips are staged now, and `test/run.js` asserts both names appear in that `git add` —
+watched go red with the fix reverted, because an assertion nobody has seen fail is not
+evidence. Nothing can prove the push happened; a dropped `git add` is the whole failure and
+that is what is pinned.
+
 ### Changed — the README now says outright which browser is better tested
 
 It said "tested on both browsers, Chrome more thoroughly" in a subclause of the install
