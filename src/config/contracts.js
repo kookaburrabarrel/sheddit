@@ -505,6 +505,18 @@ SHD.settings = {
      Reddit applies for logged-out readers and a full-size copy is that same bypass. Both
      settings must say yes. */
   inlineImages: true,
+  /* Send a link to old.reddit.com to www.reddit.com instead, behind an interstitial that
+     says so. On by default because old.reddit.com stopped serving logged-out readers —
+     every path there answers with a login wall — and a Reddit link that dead-ends is
+     blamed on the extension that is installed, not on the host that retired. Turn it off
+     and old.reddit.com is left exactly as it is, which is what a reader who can still log
+     in there wants.
+
+     The one setting no code in this file's world ever reads: it belongs to
+     src/core/oldreddit.js, which ships ALONE on old.reddit.com and repeats the default
+     rather than being handed 500 lines of selectors for a page it is leaving. test/run.js
+     asserts the two agree — the arrangement bridge.js has with BRIDGE. */
+  redirectOldReddit: true,
   /* Which palette to paint in. The ids live in src/config/themes.js, which also owns the
      fallback: anything not on that list resolves to 'classic'. This is the one setting
      that is not a boolean, and the only one a page can change by itself — the header's

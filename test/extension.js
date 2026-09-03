@@ -53,7 +53,10 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     executablePath: EXE,
     args: [
       ...LAUNCH_ARGS,
-      '--host-resolver-rules=MAP www.reddit.com 127.0.0.1',
+      // old.reddit.com joins www on the same fixture server; the Host header is what
+      // tells them apart there, and this is the only way to put a REAL cross-host
+      // navigation under test.
+      '--host-resolver-rules=MAP www.reddit.com 127.0.0.1,MAP old.reddit.com 127.0.0.1',
       `--disable-extensions-except=${ROOT}`,
       `--load-extension=${ROOT}`
     ]
@@ -1326,6 +1329,89 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     check('...and our own layout is not caught by the same rule',
       seen.rootVis === 'visible', seen.rootVis);
     await pageA.close();
+  }
+
+  /* ================================================================== *
+   * OLD.REDDIT.COM — the wall, the notice, and the hop off it
+   *
+   * The one thing no other suite can prove. jsdom pins the URL mapping and the card's
+   * contents, but it refuses cross-document navigation, so "the reader ends up on a page
+   * that renders" has never been asserted anywhere. Here the fixture server answers as
+   * old.reddit really does — a 302 onto /login/?reason=lor2&dest=…, then a 403 HTML wall —
+   * a real Chrome follows it, the packed extension's own content script takes over, and
+   * the run ends on www with rows on the page.
+   * ================================================================== */
+  console.log('\n\x1b[1mPACKED EXTENSION — OLD REDDIT REDIRECTS TO WWW\x1b[0m');
+  {
+    /* The card is up for under a second, so sampling it from Node after the fact is a
+       race — and a racy assertion in this suite reports bugs that are not there. The page
+       records it for us instead, at the instant it appears, and shouts the result down the
+       console channel, which outlives the document the redirect destroys. */
+    const cards = [];
+    page.on('console', (m) => {
+      const t = m.text();
+      if (t.startsWith('SHD-CARD ')) { try { cards.push(JSON.parse(t.slice(9))); } catch { /* ignore */ } }
+    });
+    const recorder = await page.evaluateOnNewDocument(() => {
+      if (location.hostname !== 'old.reddit.com') return;
+      new MutationObserver((_, obs) => {
+        const card = document.getElementById('shd-redirect');
+        if (!card) return;
+        obs.disconnect();
+        const wall = document.getElementById('shd-wall');
+        console.log('SHD-CARD ' + JSON.stringify({
+          url: location.href,
+          heading: card.querySelector('h1').textContent,
+          href: card.querySelector('a').getAttribute('href'),
+          role: card.getAttribute('role'),
+          // The blackout, measured rather than assumed: redirect.css is delivered by the
+          // manifest and gated on a class oldreddit.js sets, and either half missing means
+          // the login wall is what the reader is looking at.
+          wallDisplay: wall && getComputedStyle(wall).display,
+          cardFont: getComputedStyle(card).fontFamily,
+          htmlBg: getComputedStyle(document.documentElement).backgroundColor
+        }));
+        // `document`, not documentElement: evaluateOnNewDocument runs before <html>
+        // exists, and observe() throws on a null node.
+      }).observe(document, { childList: true, subtree: true });
+    });
+
+    const oldOrigin = `http://old.reddit.com:${server.port}`;
+    await page.goto(oldOrigin + PATHS.subreddit, { waitUntil: 'domcontentloaded' });
+
+    const arrived = await until(page, () => location.hostname === 'www.reddit.com');
+    check('a link to old.reddit.com ends up on www.reddit.com', arrived === true, page.url());
+    check('...at the page the reader actually asked for, not at a login wall',
+      page.url() === `http://www.reddit.com:${server.port}` + PATHS.subreddit, page.url());
+
+    const rendered = await until(page, () => !!document.querySelector('#shd-root .thing.link'));
+    check('...where the extension renders it, which is the whole point', rendered === true);
+
+    /* `|| {}` deliberately: an assertion that THROWS on a missing field reads exactly
+       like a mutation that survived (TESTING.md). Every field below must fail, not
+       explode, when the card never appeared. */
+    const card = cards[0] || {};
+    check('the reader was told what was happening, not silently moved',
+      card.heading === 'Old Reddit detected, Sheddit redirecting…',
+      JSON.stringify(card));
+    /* The 302 is server-side, so the document this ran on was the LOGIN page. Reading the
+       destination out of `dest` rather than swapping the host is the difference between
+       landing on the subreddit and landing on www's own login wall. */
+    check('...on the login page the 302 actually delivered',
+      /\/login\//.test(card.url || '') && /dest=/.test(card.url || ''), String(card.url));
+    check('...and offered the same destination as a link, for a timer that never fires',
+      card.href === `http://www.reddit.com:${server.port}` + PATHS.subreddit, card.href);
+    check('...announced as a live region', card.role === 'status', String(card.role));
+    check('the login wall was never visible behind it',
+      card.wallDisplay === 'none', String(card.wallDisplay));
+    check('redirect.css is delivered by the manifest, not invented by the script',
+      /Verdana/.test(card.cardFont || '') && card.htmlBg === 'rgb(218, 224, 230)',
+      `${card.cardFont} / ${card.htmlBg}`);
+    check('no page errors across the hop', pageErrors.length === 0, pageErrors.join(' | '));
+
+    // The recorder is scoped to old.reddit.com by hostname, but leaving it installed for
+    // the rest of the run is a needless observer on every later page.
+    await page.removeScriptToEvaluateOnNewDocument(recorder.identifier);
   }
 
   /* ================================================================== *

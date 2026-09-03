@@ -1,0 +1,74 @@
+/*
+ * redirect.css — the old.reddit.com interstitial, and the blackout under it.
+ *
+ * Delivered at document_start with oldreddit.js and gated on a class that script adds
+ * synchronously, exactly as suppress.css and .shd-gate are: an unconditional rule here
+ * would blank old.reddit.com for a reader who has turned the redirect off, and a rule
+ * applied a tick later than the script lets the login wall flash before the card lands.
+ *
+ * Deliberately NOT themed, for the reason the failure screen is not: none of the palette
+ * arrives on this page (themes.css is excluded from old.reddit.com along with everything
+ * else), and a surface that appears for under a second on the way somewhere else should
+ * look the same every time rather than sometimes dark and sometimes not. The values are
+ * classic's, so it reads as Sheddit rather than as a browser page.
+ */
+
+/* --- the blackout ---
+ *
+ * The colour is on <html> and not on <body>: whatever old.reddit's login wall paints on
+ * body would otherwise still reach the canvas, which is the same flash suppress.css
+ * declares an html background to prevent. */
+html.shd-redirecting { background: #dae0e6; }
+html.shd-redirecting body {
+  background: transparent !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+/* display, not the visually-hidden recipe suppress.css uses. Nothing on this page has to
+   stay clickable, readable by a screen reader, or alive for cloning — we are leaving. */
+html.shd-redirecting body > *:not(#shd-redirect) { display: none !important; }
+
+/* --- the card --- */
+#shd-redirect {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 16px 16px;
+  box-sizing: border-box;
+  font: 13px/1.5 Verdana, Arial, Helvetica, sans-serif;
+  color: #1a1a1b;
+  background: #dae0e6;
+}
+#shd-redirect .shd-redirect-box {
+  width: 100%;
+  max-width: 520px;
+  background: #fff;
+  border: 1px solid #c8cbcd;
+  /* Blue, where the failure screen is orangered. This is a working extension doing a
+     deliberate thing, and it should not wear the colour of the screen that means we are
+     broken — old reddit's own header blue is the honest one to borrow. */
+  border-top: 3px solid #5f99cf;
+  padding: 20px 22px 18px;
+  box-sizing: border-box;
+}
+#shd-redirect h1 { font-size: 17px; margin: 0 0 12px; line-height: 1.3; }
+#shd-redirect p { margin: 0 0 10px; }
+#shd-redirect .shd-redirect-what { color: #576f76; }
+#shd-redirect .shd-redirect-to { margin: 14px 0 0; word-break: break-all; }
+#shd-redirect .shd-redirect-to a { color: #369; font-weight: bold; }
+#shd-redirect .shd-redirect-foot { color: #878a8c; font-size: 11px; margin: 12px 0 0; }
+#shd-redirect .shd-redirect-stay {
+  font: bold 12px Verdana, Arial, sans-serif;
+  margin: 14px 0 0;
+  padding: 7px 14px;
+  border: 1px solid #5f99cf;
+  background: #cee3f8;
+  color: #1a4d80;
+  cursor: pointer;
+  border-radius: 2px;
+}
+#shd-redirect .shd-redirect-stay:hover { background: #dbeaf9; }
