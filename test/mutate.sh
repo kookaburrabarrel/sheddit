@@ -38,6 +38,15 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 tar -c --exclude=node_modules --exclude=.git --exclude=dist . | tar -x -C "$WORK"
 ln -s "$SRC/node_modules" "$WORK/node_modules"
+# dist/ is excluded because it is build output — and dist/latest.json is not. It is the
+# file an installed copy READS to learn whether a newer version exists, committed
+# deliberately (.gitignore carries a `!dist/latest.json`), and run.js asserts against it.
+# Without it here, run.js threw ENOENT at that assertion and DIED — so every check after
+# it, roughly the second half of the file, never ran under mutation and every row whose
+# only detector lives down there reported SURVIVED. A sweep that cannot execute the
+# assertion it is testing is not evidence about it; that is this file's whole thesis,
+# turned on itself. Found 2026-09-03 while adding the old.reddit rows.
+mkdir -p "$WORK/dist" && cp "$SRC/dist/latest.json" "$WORK/dist/latest.json"
 cd "$WORK"
 
 BK=$(mktemp -d)
@@ -1653,6 +1662,94 @@ mutate "a stated video/mp4 type stops being believed" run \
 
 mutate "the gif video is muted in markup only, so autoplay is blocked and the box stays blank" run \
   src/core/dom.js "    video.muted = true;" "    ;"
+
+# --- old.reddit.com: the hop, and the notice on it ------------------------------------
+#
+# The whole feature is one script on a host nothing else runs on, so every row here is a
+# way it could go quietly wrong: a hop that goes to the wrong page, a hop with no notice on
+# it, a hop that cannot be turned off, or a redirect that follows a parameter anywhere.
+
+# The failure the login wall actually produces. Swapping the host on /login/ rather than
+# reading `dest` lands the reader on WWW's login page — a hop that "works", to another wall.
+mutate "the login wall's dest is ignored and only the host is swapped" run \
+  src/core/oldreddit.js '    if (isLogin(url)) {' '    if (false) {'
+
+# An open redirect wearing this extension's name: `dest` arrives in a URL anyone can hand
+# a reader, and following it off reddit.com is a security bug, not a layout one.
+mutate "any dest is followed, including one pointing off reddit.com" run \
+  src/core/oldreddit.js '(d && isReddit(d) && !isLogin(d))' '(d && true && !isLogin(d))'
+
+# ...and the nested wall, which is the other half of the same line: a dest that is itself a
+# login page becomes www's login page, so the hop lands on a wall again.
+mutate "a dest that is itself a login wall is followed" run \
+  src/core/oldreddit.js '(d && isReddit(d) && !isLogin(d))' '(d && isReddit(d))'
+
+# NOT `host` instead of `hostname`: that row was written first, SURVIVED, and was the row
+# that was wrong rather than the test. Measured — the WHATWG host setter keeps the existing
+# port when the value it is handed carries none, so the two setters are identical here and
+# the mutation changed nothing. The bug that really loses the port is a target built by
+# concatenating onto a hardcoded origin, which drops the scheme with it: the packed suite's
+# hop then aims at the real internet, and a reader on any non-default port goes nowhere.
+mutate "the target is concatenated onto a hardcoded origin, losing port and scheme" run \
+  src/core/oldreddit.js '    out.hostname = NEW_HOST;
+    return out.href;' '    return `https://${NEW_HOST}${out.pathname}${out.search}${out.hash}`;'
+
+# The silent hop. This is the version that would still "work" and still be blamed for the
+# hostname changing under the reader — the entire reason the card exists.
+mutate "the hop happens with no interstitial at all" run \
+  src/core/oldreddit.js '    whenBody(() => mount(target, false));' ''
+
+# The blackout moved after the first await: the storage read is a promise, so the login
+# wall gets a frame to paint before anything of ours lands on <html>.
+mutate "the blackout waits for the settings read" run \
+  src/core/oldreddit.js '    document.documentElement.classList.add(CLASS);' ''
+
+# A setting that cannot turn the feature off is not a setting.
+mutate "redirectOldReddit stops being consulted" run \
+  src/core/oldreddit.js '    if (!await enabled()) { standDown(); return; }' ''
+
+# Two redirectors volleying between hosts: a hang, with nothing on screen to say why.
+mutate "the loop guard stops recognising a repeat hop" run \
+  src/core/oldreddit.js '    if (looped(target)) { whenBody(() => mount(target, true)); return; }' ''
+
+# ...and the other half of it. A guard that never records cannot fire.
+mutate "the loop guard records nothing to recognise" run \
+  src/core/oldreddit.js '    recordHop(target);' ''
+
+# A feed reader asked for XML and gets an HTML card painted into it.
+mutate "a .rss document is redirected like a page" run \
+  src/core/oldreddit.js '    if (document.contentType && document.contentType !== ' '    if (false && document.contentType !== '
+
+# The stylesheet ungated: old.reddit.com is blanked for the reader who turned the redirect
+# off, which is the one group whose page must be left exactly as it was.
+mutate "redirect.css blanks old.reddit unconditionally" run \
+  src/styles/redirect.css 'html.shd-redirecting body > *:not(#shd-redirect) { display: none !important; }' \
+                          'body > *:not(#shd-redirect) { display: none !important; }'
+
+# The manifest half. A script nothing delivers is a file, not a feature — and the packed
+# suite is the only place that can tell the difference.
+mutate "the manifest stops delivering the old.reddit script" extension \
+  manifest.json '        "src/core/oldreddit.js"' '        "src/core/pipeline.js"'
+
+# ...and the exclusion that keeps the renderer off the page it imitates.
+mutate "the renderer is let loose on old.reddit.com" run \
+  manifest.json '      "exclude_matches": [
+        "*://old.reddit.com/*",
+        "*://*.reddit.com/media*"
+      ],
+      "run_at": "document_start",
+      "all_frames": false,
+      "world": "MAIN",' '      "exclude_matches": [
+        "*://*.reddit.com/media*"
+      ],
+      "run_at": "document_start",
+      "all_frames": false,
+      "world": "MAIN",'
+
+# The duplicated default drifting from contracts.js: the checkbox says one thing and the
+# page does another, with nothing but an assertion between the two.
+mutate "oldreddit.js default drifts from the shipped setting" run \
+  src/core/oldreddit.js '  const REDIRECT_BY_DEFAULT = true;' '  const REDIRECT_BY_DEFAULT = false;'
 
 # The README now TELLS a reader which version the downloads are, in three places. A
 # stated version that has gone stale is worse than none — it is the one fact a reader

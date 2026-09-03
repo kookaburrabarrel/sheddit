@@ -83,6 +83,7 @@ output:
 | Route/tab consistency | **every href the chrome renders must classify as `LISTING`** |
 | Vote delegation | pierces an open shadow root; returns null (not a throw) on a closed one |
 | Native passthrough | the un-clipped ancestor is the body child, siblings hidden, cleanly reversible |
+| old.reddit.com | the host swap (`dest` unwrapped out of the login wall, an off-site or nested-login `dest` refused, port and scheme kept, nothing but that one host rewritten), the notice (blackout set before the first `await`, heading, live region, the destination as a link, why the link failed and who to blame), the setting (off = untouched page, no storage = the shipped default), the loop guard (a repeat hop refused and old reddit offered instead; a stale or different-page record is not a loop), a `.rss` document left alone, and the manifest wiring |
 
 Nothing is mocked except `IntersectionObserver` and `chrome.storage`, neither of which
 jsdom provides.
@@ -134,13 +135,24 @@ only run on `*://*.reddit.com/*`, so it serves the fixtures on loopback and uses
 network access.
 
 This is the only suite that exercises the manifest itself: match patterns, the
-`document_start`/`document_idle` split, script order, and delivery of all three
-stylesheets. It is also the only place a theme can be proven to work: `themes.css` is
+`document_start`/`document_idle` split, script order, and delivery of every stylesheet. It is also the only place a theme can be proven to work: `themes.css` is
 delivered at `document_start` and `old-reddit.css` at `document_idle`, so a palette that
 merely *ties* with the base block on specificity loses — while the dev bundle, which
 concatenates everything into one `<style>` with `themes.css` last, would show it working.
 It also covers vote delegation into a genuine shadow root, SPA navigation, and that
 unhandled routes are left completely untouched.
+
+**It is also the only suite that can prove the old.reddit hop.** jsdom pins the URL
+mapping and the card, but it refuses cross-document navigation, so *"the reader ends up on
+a page that renders"* cannot be asserted there at all. Here `old.reddit.com` is mapped onto
+the same fixture server and answers exactly as the real host does — a 302 onto
+`/login/?reason=lor2&dest=…`, then a **403** HTML wall, told apart from www by the `Host`
+header. A real Chrome follows it, the packed extension's own content script takes over, and
+the run ends on `www.reddit.com` with rows on the page. The card is up for under a second,
+so it is recorded by a page-world observer that shouts down the console channel rather than
+sampled from Node, which would be a race. `redirect.css` arriving from the manifest is
+measured the same way the other stylesheets are: the login wall's computed `display` is
+`none` and the card's font is Verdana.
 
 **It is also the only suite that can see the isolated world.** Content scripts do not
 share a JavaScript realm with the page, so a method Reddit's own code defines is invisible
@@ -201,7 +213,30 @@ was a real gap:
   the ordinary case where the deadline fires before anything reaches the screen.
 
 Note the third one: an assertion that throws looks exactly like a mutation that survived.
-Keep assertions null-safe.
+Keep assertions null-safe. **It recurred in 0.33.0**, in the new old.reddit rows, exactly
+as written: the row that removes the interstitial made every assertion that reads the card
+throw, the suite died, and `grep -c FAIL` counted zero. The reads there now go through
+null-safe accessors, and the one assertion whose two halves are both satisfied by a card
+that never appeared carries an explicit `!!stay` so it cannot pass on nothing.
+
+**A mutation that survives may be the row that is wrong.** Also 0.33.0: a row swapped
+`out.hostname = NEW_HOST` for `out.host = NEW_HOST`, expecting the port to be dropped. It
+is not — the WHATWG `host` setter *keeps* the existing port when the value it is handed
+carries none, measured, so the two are identical and the mutation changed nothing. The row
+was replaced with the bug that really loses the port (building the target by concatenating
+onto a hardcoded origin, which drops the scheme with it). Check what the mutation actually
+does before concluding the test is at fault.
+
+**And the same failure, one level up: a suite that *dies* looks exactly like a suite with
+nothing to say.** The sweep runs on a throwaway copy built by `tar --exclude=dist` —
+correct for build output, wrong for `dist/latest.json`, which is not build output but a
+committed file `run.js` asserts against. Without it the jsdom suite threw `ENOENT` at that
+assertion and stopped there, so roughly the second half of the file never ran under
+mutation and every row whose only detector lives past that point reported `SURVIVED`.
+Found 2026-09-03 while adding the old.reddit rows, whose detectors are near the end of the
+file; the sweep now copies that one file in. If a batch of consecutive rows survives, read
+the suite's *whole* output before believing any of them — `grep -c FAIL` cannot tell a
+clean run from a crash.
 
 If you change rendering logic and the suite stays green, check that you actually rebuilt
 (`npm test` does it for you).
@@ -429,6 +464,15 @@ unchecked.
 
 ## Known gaps
 
+- **The old.reddit hop has no Firefox coverage.** `test/extension.js` drives it end to end
+  in a real Chromium — the 302 onto the login wall, the 403, the card, the landing on www
+  with rows rendered — and `test/run.js` asserts that the manifest entry survives
+  `firefoxManifest()` byte-identically. Nothing runs it *in Gecko*, which is the runtime
+  whose realm rules have already cost this project a shipped bug (engineering log 82). The
+  suite that would hold it is `test/extension-firefox.js`; it needs a machine with Firefox
+  and geckodriver, which the container this landed from does not have. Reasoning, not
+  evidence — and the reason the README now says plainly that Chrome is the better-tested
+  of the two builds.
 - **Real logged-out page states are approximated, not captured.** The `/r/gated/` fixture
   is a hand-written stand-in for an age gate; actual NSFW interstitials, quarantine
   notices, private-community pages and rate-limit pages have never been seen by this test

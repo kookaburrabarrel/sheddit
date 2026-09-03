@@ -4857,6 +4857,317 @@ async function boot(html, url, setup) {
       doc.querySelector('#shd-root') === rowsBefore);
   }
 
+  console.log('\n\x1b[1mOLD.REDDIT.COM — the hop, and the notice on it\x1b[0m');
+  {
+    /* old.reddit.com stopped serving logged-out readers: every path 302s to
+       /login/?reason=lor2&dest=<what you asked for>, and that page answers 403. A reader
+       with Sheddit installed sees a Reddit link dead-end and blames Sheddit, because
+       there is nothing of ours on that page — bug 52's argument arriving through a host
+       we were never on. src/core/oldreddit.js is the only script that runs there.
+
+       It ships ALONE — no contracts.js, no themes, no route.js — so this section boots it
+       by itself rather than through the dev bundle. That is also the honest model of the
+       manifest entry that delivers it. */
+    const OLD_SRC = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'core', 'oldreddit.js'), 'utf8');
+
+    /**
+     * A jsdom window at `url` with the module evaluated in it.
+     *
+     * jsdom refuses a cross-document navigation and reports it through the virtual
+     * console, which is the only signal available that `location.replace` was reached —
+     * location.href never moves here, so `navs` is what "we actually left" looks like.
+     * WHERE we went is asserted off the card's own link, which the module builds from the
+     * same `target` the timer navigates to.
+     */
+    function bootOld(url, { settings = {}, chrome: hasChrome = true, session = null,
+                            contentType, markup } = {}) {
+      const navs = [];
+      const vc = new VirtualConsole();
+      vc.on('jsdomError', (e) => navs.push(String(e.message || e)));
+      const dom = new JSDOM(
+        markup || '<!DOCTYPE html><html><head></head><body><div id="native">login wall</div></body></html>',
+        { url, runScripts: 'outside-only', virtualConsole: vc,
+          ...(contentType ? { contentType } : {}) });
+      const win = dom.window;
+      if (session) win.sessionStorage.setItem('shd-redirected', JSON.stringify(session));
+      if (hasChrome) win.chrome = { storage: { sync: { get: async () => ({ settings }) } } };
+      win.eval(OLD_SRC);
+      return { win, doc: win.document, navs,
+               card: () => win.document.getElementById('shd-redirect') };
+    }
+
+    /* ---- the mapping ----
+       targetFor() is pure and exported for exactly this: every URL below is a shape the
+       host really produces, and none of them needs a browser to pin. */
+    const { targetFor } = bootOld('https://old.reddit.com/r/programming/').win.SHD.oldReddit;
+    const LOGIN = 'https://old.reddit.com/login/?reason=lor2&dest=';
+    const wall = (dest) => targetFor(LOGIN + encodeURIComponent(dest));
+
+    check('an ordinary old.reddit path becomes the same path on www',
+      targetFor('https://old.reddit.com/r/programming/') === 'https://www.reddit.com/r/programming/',
+      targetFor('https://old.reddit.com/r/programming/'));
+    check('...with the query and fragment carried across',
+      targetFor('https://old.reddit.com/r/x/comments/a/b/?sort=new#c1') ===
+      'https://www.reddit.com/r/x/comments/a/b/?sort=new#c1',
+      targetFor('https://old.reddit.com/r/x/comments/a/b/?sort=new#c1'));
+
+    /* The login wall is the URL this script actually runs on. The 302 is server-side, so
+       no document is ever created for the link the reader clicked — swapping only the
+       host here lands them on WWW's login page, which is the same wall in different
+       paint. The page they asked for is in `dest`, and it is the only thing on that URL
+       worth anything. */
+    check('the login wall resolves to the page `dest` names, not to www\'s own login page',
+      wall('https://old.reddit.com/r/programming/') === 'https://www.reddit.com/r/programming/',
+      wall('https://old.reddit.com/r/programming/'));
+    check('...a path-only dest resolves against old.reddit and still lands on www',
+      wall('/r/aww/') === 'https://www.reddit.com/r/aww/', wall('/r/aww/'));
+    check('...a login wall carrying no dest falls back to the front page',
+      targetFor('https://old.reddit.com/login/') === 'https://www.reddit.com/',
+      targetFor('https://old.reddit.com/login/'));
+    /* `dest` sits in a URL anyone can hand a reader. Following it off reddit.com would
+       make Sheddit an open redirect wearing its own name — the one failure mode in this
+       file that is a security bug and not a layout one. */
+    check('...a dest pointing off reddit.com is refused, not followed',
+      wall('https://evil.example/steal') === 'https://www.reddit.com/',
+      wall('https://evil.example/steal'));
+    check('...and so is a lookalike host that merely ends in the right letters',
+      wall('https://notreddit.com/x') === 'https://www.reddit.com/',
+      wall('https://notreddit.com/x'));
+    check('...a dest that is itself a login wall does not become one on www',
+      wall('https://old.reddit.com/login/?dest=%2F') === 'https://www.reddit.com/',
+      wall('https://old.reddit.com/login/?dest=%2F'));
+
+    check('nothing but old.reddit.com is ever rewritten',
+      targetFor('https://www.reddit.com/r/x/') === null &&
+      targetFor('https://sh.reddit.com/r/x/') === null &&
+      targetFor('https://example.com/old.reddit.com/') === null);
+    check('an unparseable url is not a crash', targetFor('not a url') === null);
+    /* hostname, not host. The packed-extension suite reaches its fixture server on an
+       explicit port, and a swap that dropped it would aim that hop at the real internet —
+       or at nothing. The scheme is left alone for the same reason: reddit.com is HSTS
+       preloaded, so http is the browser's business, not ours. */
+    check('the port and the scheme survive the host swap',
+      targetFor('http://old.reddit.com:8080/r/x/') === 'http://www.reddit.com:8080/r/x/',
+      targetFor('http://old.reddit.com:8080/r/x/'));
+
+    /* ---- the interstitial ---- */
+    {
+      const o = bootOld(LOGIN + encodeURIComponent('https://old.reddit.com/r/programming/'));
+      /* Synchronous, before start() reaches its first await: the storage read is a
+         promise, and without the class already on <html> the login wall paints in the
+         gap. That is .shd-gate's contract, on a different host. */
+      check('the blackout is on <html> the instant the script runs, before any await',
+        o.doc.documentElement.classList.contains('shd-redirecting'));
+
+      await waitFor(() => !!o.card());
+      /* Every read below goes through these, and none of them may throw. An assertion
+         that throws when the card is missing reads exactly like a mutation that SURVIVED
+         (TESTING.md) — and "the hop happens with no interstitial at all" is one of the
+         rows aimed at this very section, so the trap is not hypothetical: it swallowed
+         that row on its first sweep. */
+      const card = () => o.card();
+      const text = (sel) => card()?.querySelector(sel)?.textContent ?? null;
+      const href = (sel) => card()?.querySelector(sel)?.getAttribute('href') ?? null;
+      const all = () => card()?.textContent ?? '';
+
+      check('an interstitial goes up, saying what is happening',
+        text('h1') === 'Old Reddit detected, Sheddit redirecting…', String(text('h1')));
+      check('...as a live region, so it is announced and not merely drawn',
+        card()?.getAttribute('role') === 'status', String(card()?.getAttribute('role')));
+      /* The whole reason this screen exists. An unexplained hop between two hostnames is
+         the next thing to be blamed on the extension, so the card names the cause and
+         says where the switch is. */
+      check('...naming Sheddit as the cause, and pointing at the way to turn it off',
+        /Sheddit did this on purpose/.test(all()) && /options/.test(all()), all().slice(0, 80));
+      check('...and saying why the link failed, which is the fact the reader is missing',
+        /login wall/.test(all()), all().slice(0, 80));
+      /* The link is not decoration: it carries the SAME target the timer navigates to, so
+         a blocked or slow timer still leaves the reader one click from the page they
+         asked for — and it is the only handle a browserless test has on where we go. */
+      check('the card links the destination it is about to take',
+        href('a') === 'https://www.reddit.com/r/programming/', String(href('a')));
+
+      check('the hop has not happened yet — the notice is up first', o.navs.length === 0);
+      const left = await waitFor(() => o.navs.length > 0, { timeout: 4000 });
+      check('...and then it happens, with nothing asked of the reader', left === true,
+        JSON.stringify(o.navs));
+    }
+
+    /* ---- the setting ---- */
+    {
+      const o = bootOld('https://old.reddit.com/r/programming/',
+        { settings: { redirectOldReddit: false } });
+      const gone = await waitFor(() =>
+        !o.doc.documentElement.classList.contains('shd-redirecting'));
+      check('turned off, the blackout comes straight back off', gone === true);
+      await hold(1200);       // asserting nothing happens
+      check('...and there is no card and no hop — old.reddit is left exactly as it is',
+        !o.card() && o.navs.length === 0, JSON.stringify(o.navs));
+    }
+    {
+      // No storage to ask (the dev harness, or a Firefox that revoked the grant): the
+      // default decides, and the default is to redirect.
+      const o = bootOld('https://old.reddit.com/r/programming/', { chrome: false });
+      const left = await waitFor(() => o.navs.length > 0, { timeout: 4000 });
+      check('with no storage available the default applies and the hop still happens',
+        left === true && !!o.card());
+    }
+
+    /* ---- the loop guard ---- */
+    {
+      /* www.reddit.com never sends anyone back here. Another old-reddit redirector
+         installed alongside Sheddit does exactly that, and two extensions each doing half
+         a round trip is an infinite one — a hang, with no error and nothing on screen to
+         say why. The record is written on old.reddit.com's own origin, which is the one
+         origin both halves of such a loop pass through. */
+      const o = bootOld('https://old.reddit.com/r/programming/',
+        { session: { to: 'https://www.reddit.com/r/programming/', at: Date.now() } });
+      await waitFor(() => !!o.card());
+      const heading = () => o.card()?.querySelector('h1')?.textContent ?? null;
+      check('a second hop to the same page inside the window is refused',
+        /something is sending you back/.test(heading() || ''), String(heading()));
+      await hold(1200);       // asserting nothing happens
+      check('...and nothing navigates, so the two extensions cannot volley',
+        o.navs.length === 0, JSON.stringify(o.navs));
+      check('...while the page the reader asked for is still one click away',
+        o.card()?.querySelector('a')?.getAttribute('href') ===
+        'https://www.reddit.com/r/programming/');
+      /* A dead end is not an answer. This is the one state where old.reddit itself may be
+         the better page — the reader may be logged in there — so it is offered as a
+         button, the way the failure screen offers native Reddit. */
+      const stay = o.card()?.querySelector('.shd-redirect-stay');
+      stay?.dispatchEvent(new o.win.Event('click'));
+      /* `!!stay` is load-bearing: without it, a card that never appeared satisfies both
+         halves of this and the row passes on nothing at all. */
+      check('...and old.reddit can be taken instead, leaving nothing of ours behind',
+        !!stay && !o.card() && !o.doc.documentElement.classList.contains('shd-redirecting'),
+        `button=${!!stay}`);
+    }
+    {
+      /* The OTHER half of the guard, and the half nothing above can see: every section
+         that exercises `looped()` SEEDS the record, so a hop that writes none would
+         satisfy all of them and the guard would simply never fire. Caught as a surviving
+         mutation on the first sweep of these rows.
+
+         The key is spelled out rather than read from the module, deliberately: `looped()`
+         and `recordHop()` share one constant, so a rename breaks both in step and no
+         internal check could notice — only a literal written down outside the module can. */
+      const o = bootOld('https://old.reddit.com/r/programming/');
+      await waitFor(() => !!o.card());
+      let rec = null;
+      try { rec = JSON.parse(o.win.sessionStorage.getItem('shd-redirected') || 'null'); }
+      catch { /* stays null, and the assertion below says so */ }
+      check('a hop writes the record the next visit will read',
+        !!rec && rec.to === 'https://www.reddit.com/r/programming/' &&
+        typeof rec.at === 'number' && Math.abs(Date.now() - rec.at) < 60000,
+        JSON.stringify(rec));
+    }
+    {
+      // A stale record is not a loop. Two deliberate visits a minute apart must both
+      // work, or the guard becomes the bug it was added to prevent.
+      const o = bootOld('https://old.reddit.com/r/programming/',
+        { session: { to: 'https://www.reddit.com/r/programming/', at: Date.now() - 60000 } });
+      const left = await waitFor(() => o.navs.length > 0, { timeout: 4000 });
+      check('an expired record is not a loop — the hop still happens', left === true);
+    }
+    {
+      // ...and neither is a hop to a DIFFERENT page. Working through several old.reddit
+      // links in one tab is the common case, not a volley.
+      const o = bootOld('https://old.reddit.com/r/aww/',
+        { session: { to: 'https://www.reddit.com/r/programming/', at: Date.now() } });
+      const left = await waitFor(() => o.navs.length > 0, { timeout: 4000 });
+      check('a hop to a different page is not a loop either', left === true);
+    }
+
+    /* ---- what it will not touch ---- */
+    {
+      /* A .rss or .json path under this host is a feed reader, not a person. There is
+         nobody to show a notice to, and painting one into the document corrupts exactly
+         what the request came for. */
+      const o = bootOld('https://old.reddit.com/r/programming/.rss', {
+        contentType: 'application/rss+xml',
+        markup: '<rss version="2.0"><channel><title>programming</title></channel></rss>'
+      });
+      await hold(1200);       // asserting nothing happens
+      check('a feed, not a page: nothing is painted and nothing is redirected',
+        !o.card() && o.navs.length === 0 &&
+        !o.doc.documentElement.classList.contains('shd-redirecting'),
+        `${o.doc.contentType} navs=${JSON.stringify(o.navs)}`);
+    }
+
+    /* ---- the wiring ---- */
+    {
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'));
+      const entry = manifest.content_scripts.find(cs =>
+        (cs.js || []).includes('src/core/oldreddit.js'));
+      check('the manifest delivers oldreddit.js, or none of the above ever runs', !!entry);
+      check('...on old.reddit.com and nowhere else',
+        JSON.stringify(entry.matches) === JSON.stringify(['*://old.reddit.com/*']),
+        JSON.stringify(entry.matches));
+      /* document_start, with its stylesheet: the blackout is a class this script sets
+         synchronously, and a stylesheet that arrives a tick later is a login wall the
+         reader watches flash. */
+      check('...at document_start, with the stylesheet that paints the notice',
+        entry.run_at === 'document_start' &&
+        (entry.css || []).includes('src/styles/redirect.css'), JSON.stringify(entry));
+      check('...alone, so a page we are leaving does not load the whole renderer',
+        entry.js.length === 1, JSON.stringify(entry.js));
+      check('...in the isolated world, which is where chrome.storage exists',
+        (entry.world || 'ISOLATED') === 'ISOLATED', String(entry.world));
+      check('...and in the top frame only, so an embedded old.reddit is left alone',
+        entry.all_frames === false, String(entry.all_frames));
+
+      /* The other three entries must STILL exclude old.reddit.com. Dropping an exclusion
+         puts the renderer on the page it is imitating, on top of this script. */
+      const others = manifest.content_scripts.filter(cs => cs !== entry);
+      check('every other content script still excludes old.reddit.com',
+        others.every(cs => (cs.exclude_matches || []).includes('*://old.reddit.com/*')),
+        JSON.stringify(others.map(cs => cs.exclude_matches)));
+
+      /* Every rule in redirect.css hangs off the class oldreddit.js sets, or off the id of
+         the card itself. An unconditional rule would blank old.reddit.com for a reader who
+         turned the redirect off — the one group whose page must be untouched.
+
+         Assumes a flat stylesheet, which redirect.css is: at-rules are skipped rather than
+         descended into, so a media query added later would need this widened. */
+      const redirectCss = fs.readFileSync(
+        path.join(__dirname, '..', 'src', 'styles', 'redirect.css'), 'utf8');
+      const unscoped = redirectCss
+        .replace(/\/\*[\s\S]*?\*\//g, '')     // comments first, or their prose reads as a selector
+        .split('}')
+        .map(b => b.split('{')[0].trim())
+        .filter(Boolean)
+        .flatMap(sel => sel.split(','))       // a comma list is several rules under one brace
+        .map(sel => sel.trim())
+        .filter(sel => sel && !sel.startsWith('@'))
+        /* `:not(#shd-redirect)` is an EXCLUSION, not a scope. The first version of this
+           check asked whether the id appeared ANYWHERE in the selector, so the mutation
+           that strips `html.shd-redirecting` off exactly that rule read as scoped and
+           SURVIVED. Drop the functional pseudo-classes before asking what a selector is
+           anchored on. */
+        .map(sel => sel.replace(/:(not|is|where|has)\([^)]*\)/g, ''))
+        .filter(sel => !/^html\.shd-redirecting\b/.test(sel) && !/^#shd-redirect\b/.test(sel));
+      check('every rule in redirect.css is anchored on the class oldreddit.js sets',
+        unscoped.length === 0, unscoped.join(' | '));
+
+      /* oldreddit.js ships without contracts.js, so it repeats the default rather than
+         reading SHD.settings — the arrangement bridge.js has with the protocol literals.
+         Nothing but this assertion keeps the two in step, and a drift makes the options
+         checkbox disagree with what the page does. */
+      const vm = require('vm');
+      const ctx = vm.createContext({});
+      vm.runInContext(fs.readFileSync(
+        path.join(__dirname, '..', 'src', 'config', 'contracts.js'), 'utf8'), ctx,
+        { filename: 'contracts.js' });
+      const oldDefault = (OLD_SRC.match(/const REDIRECT_BY_DEFAULT = (true|false);/) || [])[1];
+      check('oldreddit.js repeats the shipped default for redirectOldReddit',
+        oldDefault === String(ctx.SHD.settings.redirectOldReddit),
+        `oldreddit.js=${oldDefault} contracts.js=${ctx.SHD.settings.redirectOldReddit}`);
+    }
+  }
+
   console.log('\n\x1b[1mOPTIONS PAGE\x1b[0m');
   {
     // Nothing exercised options/ at all, and it duplicates the settings list from
