@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.32.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.33.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,69 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.33.0
+
+### Added — a link to old.reddit.com now opens the page instead of a login wall
+
+`old.reddit.com` has stopped serving anyone who is not logged in. Every path there answers
+`302 → /login/?reason=lor2&dest=…`, and that login page answers 403 — so an old link, an
+old bookmark, or somebody else's post pointing at old reddit is a dead end with nothing on
+it.
+
+**The bug this fixes is not the wall, it is who gets blamed for it.** The page a reader
+lands on has no layout, no header and nothing of Sheddit's anywhere on it, which is
+precisely what a broken extension looks like. Reddit retired a host; the extension that
+happens to be installed takes the report. That is the same argument that put the failure
+screen in front of a render failure rather than silently handing the page back (bug 52),
+arriving through a host Sheddit was never on.
+
+So Sheddit now catches those links and opens the same page on `www.reddit.com` — where it
+loads, and where Sheddit draws it in the old.reddit layout the link was asking for — behind
+a short notice: *Old Reddit detected, Sheddit redirecting…*, with the destination as a
+link and a line saying Sheddit did this on purpose and where the switch is. An unexplained
+hop between two hostnames is the next thing an extension gets blamed for, so it is not
+unexplained.
+
+**The page you asked for comes out of `dest`, not out of the host.** The 302 happens on
+Reddit's side, so no document is ever created for the URL that was clicked — by the time
+anything of ours runs, the address bar says `/login/`. Swapping only the hostname there
+would land you on **www's** login page: the same wall in different paint. `dest` is
+followed only when it points back at reddit.com and is not itself another login wall,
+because a redirector that follows an arbitrary parameter is an open redirect wearing this
+extension's name.
+
+**It stops rather than volley.** Another old-reddit redirector installed alongside Sheddit
+would send you straight back, and two extensions each doing half a round trip is an
+infinite one — a hang, with nothing on screen to say why. A second hop to the same page
+within ten seconds stops and says so, offering both hosts as links.
+
+**Off with one checkbox.** *Send old.reddit.com links to www.reddit.com*, on the options
+page, on by default. Turn it off and old.reddit.com is left exactly as it is — which is
+what a reader who still logs in there wants, and the reason this is a setting rather than
+a behaviour.
+
+Scope, deliberately: this is a single script (`src/core/oldreddit.js`) and one stylesheet,
+delivered at `document_start` on that host alone. It reads no page content, makes no
+request, and asks for no new permission — the `*://*.reddit.com/*` access Sheddit already
+has covers it. Every other content script still excludes `old.reddit.com`, and a test
+asserts it. The known limit is recorded in ARCHITECTURE.md §5.2: a content script needs a
+document, so if old.reddit ever stops answering at all, Chrome's own error page replaces
+the document and nothing of ours runs.
+
+### Fixed — the mutation sweep had been running half the jsdom suite
+
+Not a shipped bug; a hole in the thing that proves the tests have teeth, and found only
+because the new rows above have their detectors near the end of `test/run.js`. The sweep
+copies the tree to a throwaway directory with `tar --exclude=dist` — right for build
+output, wrong for `dist/latest.json`, which is *not* build output but a committed file the
+suite asserts against. Without it, `run.js` threw `ENOENT` at that assertion and stopped
+there, so everything after it never ran under mutation and any row whose only detector
+lives past that point reported `SURVIVED`. Two of the new rows did exactly that, which is
+how it surfaced. The sweep now copies that one file in.
+
+Worth stating plainly, because it is the same trap the script exists to catch: a suite
+that *dies* and a suite with nothing to report look identical to `grep -c FAIL`.
 
 ## 0.32.0
 
