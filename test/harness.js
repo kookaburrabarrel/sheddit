@@ -164,6 +164,29 @@ function makeChecker() {
 function serveFixtures() {
   const server = http.createServer((req, res) => {
     const pathname = req.url.split('?')[0];
+
+    /* old.reddit.com, exactly as it answers today (measured 2026-09-03): every path 302s
+       to /login/?reason=lor2&dest=<the absolute url you asked for>, and that login page
+       answers 403 with an HTML body — which is why a content script reaches it at all.
+       Both halves matter. Serving the wall directly would skip the redirect, and the
+       redirect is what makes `location` say `/login/` instead of the page the reader
+       clicked; answering 200 would hide the fact that content scripts run on a 403.
+       Reached through --host-resolver-rules, so the Host header is the only thing that
+       distinguishes it from www on the same socket. */
+    const host = String(req.headers.host || '');
+    if (host.startsWith('old.reddit.com')) {
+      if (!/^\/login\/?$/.test(pathname)) {
+        const dest = encodeURIComponent(`http://${host}${req.url}`);
+        res.writeHead(302, { Location: `/login/?reason=lor2&dest=${dest}` });
+        res.end();
+        return;
+      }
+      res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<!DOCTYPE html><html><head><title>reddit.com</title></head><body>' +
+              '<div id="shd-wall">Log in to continue.</div></body></html>');
+      return;
+    }
+
     // /r/pager/ gets a faceplate-partial with a working loadContent(), so the browser
     // suites can drive real infinite scroll across the isolated/main world boundary.
     const wantsPager = /pager/.test(pathname);

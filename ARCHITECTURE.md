@@ -146,6 +146,7 @@ sheddit/
 │   │   ├── model.js            shreddit-* element → plain JS model object
 │   │   ├── media.js            DASH-manifest resolution + video/audio pairing (0.16–0.30)
 │   │   ├── update.js           build-age nudge + the click-only version check (0.29.0)
+│   │   ├── oldreddit.js        the ONLY script on old.reddit.com — the hop to www (§5.2)
 │   │   └── dom.js              tiny h() builder, escaping, number/time formatting
 │   ├── modules/
 │   │   ├── listing.js          feed & subreddit → old-reddit link rows
@@ -154,6 +155,7 @@ sheddit/
 │   └── styles/
 │       ├── suppress.css        hides native shreddit chrome (document_start)
 │       ├── themes.css          the alternate palettes (document_start — see themes.js)
+│       ├── redirect.css        the old.reddit interstitial + its blackout (§5.2)
 │       └── old-reddit.css      the actual old.reddit skin
 ├── test/
 │   ├── harness.js              Chromium discovery, fixture server, shared reporter
@@ -388,6 +390,57 @@ are load-bearing and were each wrong at some point:
 
 The extension has **zero network surface of its own**. `host_permissions` is scoped to
 `*://*.reddit.com/*` purely so content scripts can run.
+
+### 5.2 old.reddit.com — the one host we leave rather than render
+
+Every renderer script `exclude_matches` `old.reddit.com`, and that is still right: old
+reddit is the thing this extension imitates. But that host no longer serves a logged-out
+reader anything at all. Measured 2026-09-03: every path answers a 302 onto
+`/login/?reason=lor2&dest=<the page you asked for>`, and that login page answers **403**
+with an HTML body.
+
+It is the only legacy hostname that needs anything. Measured the same day, `np.`, `i.`,
+`new.` and `sh.` reddit.com each answer `301 → www.reddit.com/<same path>` on their own, so
+the renderer meets those on www having never seen the redirect. `old.reddit.com` is the one
+that answers with a wall instead.
+
+The problem this creates is not the wall — it is **attribution**. A reader with Sheddit
+installed follows a Reddit link, gets a dead end with no layout, no header and nothing of
+ours anywhere on it, and concludes the extension is broken. That is bug 52's argument
+(*a silent hand-back is indistinguishable from an unrelated bug*) arriving through a host
+we were never on. Silence is not available to us here.
+
+`src/core/oldreddit.js` is therefore the only script that runs there, delivered at
+`document_start` with `redirect.css` and nothing else — no contracts, no themes, no route.
+It swaps the host for `www.reddit.com`, where the page loads and the renderer draws it in
+the layout the link was asking for, behind an interstitial that says so.
+
+Four details are load-bearing:
+
+- **The `dest` parameter is unwrapped, not the host swapped.** The 302 is server-side, so
+  no document is ever created for the URL the reader clicked — by the time the script
+  runs, `location` reads `/login/?reason=lor2&dest=…`. Swapping only the host there lands
+  them on **www's** login page: the same wall in different paint.
+- **`dest` is treated as hostile.** It is followed only when it resolves back to
+  reddit.com, and never when it is itself another login wall. Anything else falls back to
+  the front page. A redirector that follows an arbitrary parameter is an open redirect
+  wearing the extension's name.
+- **The blackout is a class the script sets synchronously**, exactly as `.shd-gate` is,
+  and `redirect.css` hangs every rule off it. An unconditional stylesheet would blank
+  old.reddit for the reader who turned the redirect off — the one group whose page must be
+  untouched — and a class set one tick later is a login wall they watch flash.
+- **A loop guard, in that tab's `sessionStorage`.** `www.reddit.com` never sends anyone
+  back here, but *another* old-reddit redirector installed alongside Sheddit does exactly
+  that, and two extensions each doing half a round trip is an infinite one — a hang, with
+  nothing on screen to explain it. A second hop to the same destination inside ten seconds
+  stops and says why, offering both hosts as links.
+
+**The known limit.** A content script needs a document. Today the wall is a served 403
+page, so there is one; if old.reddit ever stops answering altogether, Chrome's own network
+error page replaces the document and nothing here runs. `declarativeNetRequest` would
+cover that case by intercepting before the request — at the cost of a new permission, a
+ruleset, and an extension-hosted page in the address bar, and with no way to show this
+interstitial. Recorded as the trade that was made, not as an oversight.
 
 ---
 
