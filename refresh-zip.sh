@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 #
-# Make the README's download link serve the current code.
+# Make the README's download links serve the current code.
 #
-#   ./refresh-zip.sh            pull main, rebuild dist/sheddit.zip, push if it changed
+#   ./refresh-zip.sh            pull main, rebuild BOTH zips, push if they changed
 #   ./refresh-zip.sh <version>  bump manifest.json + package.json to it first
 #
-# The zip is a build artifact kept in version control so the README can link a
-# download without a release. That only works if it is rebuilt whenever the source
-# changes, and it fails quietly when it is not — the link keeps working and hands
+# The zips are build artifacts kept in version control so the README can link a
+# download without a release. That only works if they are rebuilt whenever the source
+# changes, and it fails quietly when they are not — the link keeps working and hands
 # people code nobody is looking at any more. This is the one command that fixes it.
+#
+# BOTH of them, and that is the whole reason this line reads the way it does.
+# package-extension.js has always written dist/sheddit.zip AND dist/sheddit-firefox.zip,
+# but this script staged only the first — so every run left the Firefox zip rebuilt,
+# uncommitted and dirty in the working tree, and the README's Firefox download went on
+# serving whichever version someone last remembered to add by hand (0.28.1, by the log).
+# Exactly the quiet failure the paragraph above describes, in the script written to
+# prevent it. Found 2026-09-03; test/run.js now asserts both names appear here.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -68,8 +76,9 @@ fi
 node package-extension.js
 node package-extension.js --check
 
-git add dist/sheddit.zip dist/latest.json manifest.json package.json src/core/update.js
-git commit --quiet --message "Rebuild the download zip for $VERSION"
+git add dist/sheddit.zip dist/sheddit-firefox.zip dist/latest.json \
+        manifest.json package.json src/core/update.js
+git commit --quiet --message "Rebuild the download zips for $VERSION"
 git push --quiet origin main
 echo
-echo "Pushed. The README download now serves $VERSION."
+echo "Pushed. Both README downloads now serve $VERSION."

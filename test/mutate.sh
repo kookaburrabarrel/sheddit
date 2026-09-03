@@ -1751,6 +1751,15 @@ mutate "the renderer is let loose on old.reddit.com" run \
 mutate "oldreddit.js default drifts from the shipped setting" run \
   src/core/oldreddit.js '  const REDIRECT_BY_DEFAULT = true;' '  const REDIRECT_BY_DEFAULT = false;'
 
+# The release script builds both zips and, for most of this project's life, committed only
+# Chrome's — so every release left the Firefox download serving whatever version someone
+# last added by hand. Anchored on the Firefox name alone: dropping it from the `git add` is
+# exactly the mistake, and it leaves no other trace.
+mutate "the release script stops committing the Firefox download" run \
+  refresh-zip.sh 'git add dist/sheddit.zip dist/sheddit-firefox.zip dist/latest.json \
+        manifest.json package.json src/core/update.js' \
+                 'git add dist/sheddit.zip dist/latest.json manifest.json package.json src/core/update.js'
+
 # The README now TELLS a reader which version the downloads are, in three places. A
 # stated version that has gone stale is worse than none — it is the one fact a reader
 # uses to decide whether their copy is current. Mutating the manifest models the real

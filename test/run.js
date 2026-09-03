@@ -3062,6 +3062,16 @@ async function boot(html, url, setup) {
     const refresh = fs.readFileSync(path.join(__dirname, '..', 'refresh-zip.sh'), 'utf8');
     for (const f of ['manifest.json', 'package.json', 'dist/latest.json', 'src/core/update.js'])
       check(`refresh-zip.sh rewrites ${f} on a version bump`, refresh.includes(f), f);
+
+    /* And BOTH downloads, which is the same contract one file further on and was the drift
+       that actually happened: package-extension.js has always written the Firefox zip, and
+       the script staged only Chrome's — so every release left the Firefox zip rebuilt,
+       uncommitted, and the README's Firefox link serving whatever someone last added by
+       hand. Asserting the NAME appears is enough to catch a dropped `git add`, which is
+       the whole failure; nothing here can prove the push happened. */
+    for (const f of ['dist/sheddit.zip', 'dist/sheddit-firefox.zip'])
+      check(`refresh-zip.sh commits ${f}, or its README link goes stale`,
+        new RegExp(`git add[^\\n]*(\\\\\\n[^\\n]*)*${f.replace('.', '\\.')}`).test(refresh), f);
   }
 
   console.log('\n\x1b[1mTHE FIREFOX MANIFEST\x1b[0m');
