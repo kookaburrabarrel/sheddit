@@ -4961,26 +4961,32 @@ async function boot(html, url, setup) {
         o.doc.documentElement.classList.contains('shd-redirecting'));
 
       await waitFor(() => !!o.card());
-      const card = o.card();
+      /* Every read below goes through these, and none of them may throw. An assertion
+         that throws when the card is missing reads exactly like a mutation that SURVIVED
+         (TESTING.md) — and "the hop happens with no interstitial at all" is one of the
+         rows aimed at this very section, so the trap is not hypothetical: it swallowed
+         that row on its first sweep. */
+      const card = () => o.card();
+      const text = (sel) => card()?.querySelector(sel)?.textContent ?? null;
+      const href = (sel) => card()?.querySelector(sel)?.getAttribute('href') ?? null;
+      const all = () => card()?.textContent ?? '';
+
       check('an interstitial goes up, saying what is happening',
-        card.querySelector('h1').textContent === 'Old Reddit detected, Sheddit redirecting…',
-        card.querySelector('h1').textContent);
+        text('h1') === 'Old Reddit detected, Sheddit redirecting…', String(text('h1')));
       check('...as a live region, so it is announced and not merely drawn',
-        card.getAttribute('role') === 'status', card.getAttribute('role'));
+        card()?.getAttribute('role') === 'status', String(card()?.getAttribute('role')));
       /* The whole reason this screen exists. An unexplained hop between two hostnames is
          the next thing to be blamed on the extension, so the card names the cause and
          says where the switch is. */
       check('...naming Sheddit as the cause, and pointing at the way to turn it off',
-        /Sheddit did this on purpose/.test(card.textContent) &&
-        /options/.test(card.textContent));
+        /Sheddit did this on purpose/.test(all()) && /options/.test(all()), all().slice(0, 80));
       check('...and saying why the link failed, which is the fact the reader is missing',
-        /login wall/.test(card.textContent));
+        /login wall/.test(all()), all().slice(0, 80));
       /* The link is not decoration: it carries the SAME target the timer navigates to, so
          a blocked or slow timer still leaves the reader one click from the page they
          asked for — and it is the only handle a browserless test has on where we go. */
       check('the card links the destination it is about to take',
-        card.querySelector('a').getAttribute('href') === 'https://www.reddit.com/r/programming/',
-        card.querySelector('a').getAttribute('href'));
+        href('a') === 'https://www.reddit.com/r/programming/', String(href('a')));
 
       check('the hop has not happened yet — the notice is up first', o.navs.length === 0);
       const left = await waitFor(() => o.navs.length > 0, { timeout: 4000 });
@@ -5018,21 +5024,44 @@ async function boot(html, url, setup) {
       const o = bootOld('https://old.reddit.com/r/programming/',
         { session: { to: 'https://www.reddit.com/r/programming/', at: Date.now() } });
       await waitFor(() => !!o.card());
+      const heading = () => o.card()?.querySelector('h1')?.textContent ?? null;
       check('a second hop to the same page inside the window is refused',
-        /something is sending you back/.test(o.card().querySelector('h1').textContent),
-        o.card().querySelector('h1').textContent);
+        /something is sending you back/.test(heading() || ''), String(heading()));
       await hold(1200);       // asserting nothing happens
       check('...and nothing navigates, so the two extensions cannot volley',
         o.navs.length === 0, JSON.stringify(o.navs));
       check('...while the page the reader asked for is still one click away',
-        o.card().querySelector('a').getAttribute('href') ===
+        o.card()?.querySelector('a')?.getAttribute('href') ===
         'https://www.reddit.com/r/programming/');
       /* A dead end is not an answer. This is the one state where old.reddit itself may be
          the better page — the reader may be logged in there — so it is offered as a
          button, the way the failure screen offers native Reddit. */
-      o.card().querySelector('.shd-redirect-stay').dispatchEvent(new o.win.Event('click'));
+      const stay = o.card()?.querySelector('.shd-redirect-stay');
+      stay?.dispatchEvent(new o.win.Event('click'));
+      /* `!!stay` is load-bearing: without it, a card that never appeared satisfies both
+         halves of this and the row passes on nothing at all. */
       check('...and old.reddit can be taken instead, leaving nothing of ours behind',
-        !o.card() && !o.doc.documentElement.classList.contains('shd-redirecting'));
+        !!stay && !o.card() && !o.doc.documentElement.classList.contains('shd-redirecting'),
+        `button=${!!stay}`);
+    }
+    {
+      /* The OTHER half of the guard, and the half nothing above can see: every section
+         that exercises `looped()` SEEDS the record, so a hop that writes none would
+         satisfy all of them and the guard would simply never fire. Caught as a surviving
+         mutation on the first sweep of these rows.
+
+         The key is spelled out rather than read from the module, deliberately: `looped()`
+         and `recordHop()` share one constant, so a rename breaks both in step and no
+         internal check could notice — only a literal written down outside the module can. */
+      const o = bootOld('https://old.reddit.com/r/programming/');
+      await waitFor(() => !!o.card());
+      let rec = null;
+      try { rec = JSON.parse(o.win.sessionStorage.getItem('shd-redirected') || 'null'); }
+      catch { /* stays null, and the assertion below says so */ }
+      check('a hop writes the record the next visit will read',
+        !!rec && rec.to === 'https://www.reddit.com/r/programming/' &&
+        typeof rec.at === 'number' && Math.abs(Date.now() - rec.at) < 60000,
+        JSON.stringify(rec));
     }
     {
       // A stale record is not a loop. Two deliberate visits a minute apart must both
@@ -5097,18 +5126,30 @@ async function boot(html, url, setup) {
         others.every(cs => (cs.exclude_matches || []).includes('*://old.reddit.com/*')),
         JSON.stringify(others.map(cs => cs.exclude_matches)));
 
-      /* Every rule in redirect.css hangs off the class oldreddit.js sets. An unconditional
-         rule would blank old.reddit.com for a reader who turned the redirect off — the
-         one group whose page must be untouched. */
+      /* Every rule in redirect.css hangs off the class oldreddit.js sets, or off the id of
+         the card itself. An unconditional rule would blank old.reddit.com for a reader who
+         turned the redirect off — the one group whose page must be untouched.
+
+         Assumes a flat stylesheet, which redirect.css is: at-rules are skipped rather than
+         descended into, so a media query added later would need this widened. */
       const redirectCss = fs.readFileSync(
         path.join(__dirname, '..', 'src', 'styles', 'redirect.css'), 'utf8');
       const unscoped = redirectCss
-        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')     // comments first, or their prose reads as a selector
         .split('}')
         .map(b => b.split('{')[0].trim())
         .filter(Boolean)
-        .filter(sel => !/\.shd-redirecting|#shd-redirect/.test(sel));
-      check('redirect.css touches nothing until oldreddit.js says so',
+        .flatMap(sel => sel.split(','))       // a comma list is several rules under one brace
+        .map(sel => sel.trim())
+        .filter(sel => sel && !sel.startsWith('@'))
+        /* `:not(#shd-redirect)` is an EXCLUSION, not a scope. The first version of this
+           check asked whether the id appeared ANYWHERE in the selector, so the mutation
+           that strips `html.shd-redirecting` off exactly that rule read as scoped and
+           SURVIVED. Drop the functional pseudo-classes before asking what a selector is
+           anchored on. */
+        .map(sel => sel.replace(/:(not|is|where|has)\([^)]*\)/g, ''))
+        .filter(sel => !/^html\.shd-redirecting\b/.test(sel) && !/^#shd-redirect\b/.test(sel));
+      check('every rule in redirect.css is anchored on the class oldreddit.js sets',
         unscoped.length === 0, unscoped.join(' | '));
 
       /* oldreddit.js ships without contracts.js, so it repeats the default rather than
