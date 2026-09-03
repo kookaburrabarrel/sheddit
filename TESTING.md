@@ -279,6 +279,22 @@ at open, the run prints the geckodriver log — Firefox's own stderr — and "un
 closed with status 0" usually just means a running Firefox should be quit first; session
 creation already retries once for first-launch housekeeping.
 
+**The old.reddit hop runs here too**, since 0.33.0, and the section is shaped by one
+constraint: the card is up for 900ms and then the document is replaced, so reading it
+after a navigate is a stopwatch, not an assertion. It takes the two states in the order
+that makes each stable. First the hop — visit `old.reddit.com`, poll until the URL is
+`www.reddit.com` and rows are on the page; nothing is timed, the landing *is* the
+assertion. Then the card — visit it **again**, which the loop guard refuses, so the notice
+stays up with no timer behind it and every field reads at leisure. That second visit is
+also the only place the loop guard is exercised in a real browser at all. The card it
+reads is the loop variant, which is not a compromise: every Gecko-specific mechanism is
+shared with the ordinary one — the content script running at `document_start` on a **403**
+response, the `chrome.storage.sync` read that gates it, `whenBody()`'s observer, and
+`redirect.css` arriving from the derived manifest (measured: the login wall computes to
+`display: none` and the card to Verdana). Only the strings differ, and those are pinned in
+jsdom and Chromium. `old.reddit.com` joins `www.reddit.com` in `network.dns.localDomains`;
+the fixture server tells them apart by the `Host` header, as it does under Chromium.
+
 Two things a plain WebDriver read is blind to are covered by fixtures instead, in this
 suite and the Chromium one alike: `/r/paintprobe/` embeds a script at the body's first
 byte, sampling whether the blackout was computed before anything could paint
@@ -464,15 +480,23 @@ unchecked.
 
 ## Known gaps
 
-- **The old.reddit hop has no Firefox coverage.** `test/extension.js` drives it end to end
-  in a real Chromium — the 302 onto the login wall, the 403, the card, the landing on www
-  with rows rendered — and `test/run.js` asserts that the manifest entry survives
-  `firefoxManifest()` byte-identically. Nothing runs it *in Gecko*, which is the runtime
-  whose realm rules have already cost this project a shipped bug (engineering log 82). The
-  suite that would hold it is `test/extension-firefox.js`; it needs a machine with Firefox
-  and geckodriver, which the container this landed from does not have. Reasoning, not
-  evidence — and the reason the README now says plainly that Chrome is the better-tested
-  of the two builds.
+- **`old.reddit.com` itself is a fixture, in both browser suites.** The hop is driven end
+  to end against a server that answers the way the real host was measured to answer on
+  2026-09-03 — `302` onto `/login/?reason=lor2&dest=…`, then a `403` HTML wall. Nobody has
+  pointed the extension at the live host with a real Reddit session, so the shapes that
+  matter to a *logged-in* reader are unverified: whether old.reddit still serves them
+  normally (in which case the redirect is the thing they turn off), and whether the login
+  wall ever arrives in some form other than the one recorded. `verify:live` cannot answer
+  it either — Reddit serves datacenter IPs a bot-mitigation page — so this needs a person
+  on an ordinary connection.
+- **A content script needs a document, and that is the redirect's ceiling.** Today's wall
+  is a served `403`, so one exists. If old.reddit ever stops answering altogether, Chrome
+  and Firefox both replace the document with their own network-error page and nothing of
+  Sheddit's runs — the reader gets a dead link with no explanation, which is the exact
+  failure `src/core/oldreddit.js` was written to prevent, returning through the one door it
+  cannot hold. `declarativeNetRequest` would close it, at the cost of a new permission and
+  the interstitial. Recorded in ARCHITECTURE §5.2 as a decision; there is no test for it
+  because there is nothing to test until the host goes dark.
 - **Real logged-out page states are approximated, not captured.** The `/r/gated/` fixture
   is a hand-written stand-in for an age gate; actual NSFW interstitials, quarantine
   notices, private-community pages and rate-limit pages have never been seen by this test
