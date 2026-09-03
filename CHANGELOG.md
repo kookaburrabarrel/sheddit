@@ -89,10 +89,16 @@ one for Firefox, and every feature lands on Chrome first. Firefox is genuinely s
 its suite passes — it has fewer miles on it, and the README now says so where a reader
 picks a build rather than only where they scroll past.
 
-Concrete instance of that gap, filed in TESTING.md's known gaps rather than implied: the
-old.reddit hop above is driven end to end in Chromium and nothing runs it in Gecko. The
-Firefox manifest entry is asserted to survive the transform byte-identically, which is not
-the same thing as having watched it work.
+That paragraph originally shipped with a concrete instance attached — the old.reddit hop
+was driven end to end in Chromium and nothing ran it in Gecko — and the instance is gone,
+so it is corrected here rather than left standing. `test/extension-firefox.js` now drives
+the hop too: the landing on www, and then the notice itself, held open by a second visit
+the loop guard refuses so there is no 900ms stopwatch to race. 48 assertions there, green
+on a real Firefox.
+
+The comparison it was illustrating still holds, and is the honest reason the README says
+what it says: Chrome has three browser-backed suites to Firefox's one, and every feature
+still lands on Chrome first.
 
 ### Fixed — the mutation sweep had been running half the jsdom suite
 
