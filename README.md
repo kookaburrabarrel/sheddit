@@ -27,7 +27,8 @@ No account. No profile. No feed tuned to keep you scrolling.
 
 ### Beta 0.33.0 is out — everyone is welcome to try it
 
-Works in Chrome and Firefox, [installed by hand](#install) in about a minute.
+Works in Chrome and Firefox, [installed by hand](#install) in about a minute — **Chrome is
+the better-tested of the two**, so start there if you have the choice.
 If Sheddit makes Reddit better for you, tell a friend — or post about it on Reddit itself,
 if you still have an account ;)
 
@@ -128,8 +129,12 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.33.0**, beta. It works and is tested on both browsers, Chrome more
-thoroughly, but Reddit can change something tomorrow that breaks it. If that happens,
+Version **0.33.0**, beta. It works and is tested on both browsers, **but Chrome is the
+primary target and the steadier of the two** — three of the test suites drive a real
+Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
+and every feature lands on Chrome first. Firefox is genuinely supported and its suite
+passes; it simply has fewer miles on it, so a rough edge is likelier there. Either way
+Reddit can change something tomorrow that breaks it — if that happens,
 [tell me](https://github.com/kookaburrabarrel/sheddit/issues/new/choose). Store listings
 are in progress; until they land, the zips below are the way in. Nothing to build.
 
@@ -162,9 +167,10 @@ Works in Chrome 111+ and any Chromium browser (Edge, Brave, Vivaldi, Opera).
 
 **[⬇ Download sheddit-firefox.zip](https://github.com/kookaburrabarrel/sheddit/raw/main/dist/sheddit-firefox.zip)**
 
-Same extension, newer build, fewer miles on it — bug reports from here are especially
-useful. Until the addons.mozilla.org listing lands, Firefox 140+ only accepts it as a
-*temporary* install, which lasts until the browser closes:
+Same extension, newer build, **fewer miles on it — this is the less-tested of the two
+builds**, so bug reports from here are especially useful. Until the addons.mozilla.org
+listing lands, Firefox 140+ only accepts it as a *temporary* install, which lasts until the
+browser closes:
 
 1. Open `about:debugging#/runtime/this-firefox`.
 2. Click **Load Temporary Add-on…** and pick the zip. No need to unzip.
