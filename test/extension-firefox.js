@@ -193,8 +193,10 @@ async function until(expr, { timeout = 15000, step = 120 } = {}) {
 
     const BASE_PREFS = {
       // Gecko's --host-resolver-rules: these hostnames resolve to loopback,
-      // ports untouched, so the manifest's *.reddit.com matches fire.
-      'network.dns.localDomains': 'www.reddit.com',
+      // ports untouched, so the manifest's *.reddit.com matches fire. old.reddit.com
+      // joins the list for the hop section below — same fixture server, told apart by
+      // the Host header, exactly as the Chromium suite does it.
+      'network.dns.localDomains': 'www.reddit.com,old.reddit.com',
       // Sandboxes export HTTPS_PROXY; an inherited proxy swallows the loopback
       // navigations exactly as it did for Chromium (see LAUNCH_ARGS).
       'network.proxy.type': 0,
@@ -562,6 +564,113 @@ async function until(expr, { timeout = 15000, step = 120 } = {}) {
       JSON.stringify(other));
     check('leaves native Reddit visible and unsuppressed',
       other.nativeVisibility === 'visible' && !other.active, JSON.stringify(other));
+
+    /* ============================================================== *
+     * OLD.REDDIT.COM — the hop, in Gecko
+     *
+     * The Chromium suite drives this end to end; nothing ran it here, and Gecko is the
+     * runtime whose realm rules already cost this project a shipped bug (engineering
+     * log 82). Two mechanisms in oldreddit.js are the reason this section exists rather
+     * than being assumed: `whenBody()` observes the document at document_start, and
+     * `enabled()` awaits chrome.storage.sync on a 403 response — neither has ever been
+     * exercised in Firefox on a page that is not www.
+     *
+     * NO RACE, DELIBERATELY. The card is up for DWELL_MS (900) and then the document is
+     * replaced, so reading it after a navigate is a stopwatch, not an assertion — the
+     * kind that reports bugs that are not there on a loaded machine. So the section
+     * takes the two states in the order that makes each one stable:
+     *
+     *   1. hop:  visit old.reddit, poll until the URL is www and rows are on the page.
+     *            Nothing timed; the landing IS the assertion.
+     *   2. card: visit it AGAIN. The first hop wrote the loop record into that origin's
+     *            sessionStorage, so the second visit is refused, the card stays up with
+     *            no timer behind it, and every field can be read at leisure.
+     *
+     * The card read in step 2 is the LOOP variant, and that is not a compromise: every
+     * Gecko-specific mechanism is shared with the ordinary one — same content script at
+     * document_start on a 403, same storage read, same whenBody(), same redirect.css
+     * arriving from the derived manifest. What differs is only which strings are drawn,
+     * and those are pinned in jsdom and Chromium. Step 2 also happens to be the only
+     * place the loop guard is exercised in a real browser at all.
+     *
+     * The two-step was dry-run in CHROMIUM before this section was written, because a
+     * test nobody can execute is a guess: the hop measured 1231ms end to end (against the
+     * 10s window step 2 leans on), the second visit was refused, and the card was still up
+     * with nothing pending 2s later. Every value asserted below is that run's, not an
+     * expectation. What remains unverified here is Gecko's execution of it, which is the
+     * only thing this section is for.
+     * ============================================================== */
+    console.log('\n\x1b[1mFIREFOX EXTENSION — OLD REDDIT REDIRECTS TO WWW\x1b[0m');
+    {
+      const oldOrigin = `http://old.reddit.com:${server.port}`;
+
+      // --- 1. the hop ---
+      await goto(oldOrigin + PATHS.subreddit);
+      const arrived = await until(`location.hostname === 'www.reddit.com'`);
+      /* Read once, defensively: a bare run() in a check's detail argument throws while the
+         page is still navigating, and a throw here takes the whole suite down — which
+         reads, from the tail of the output, exactly like a suite that passed. */
+      let landed = '(unreadable)';
+      try { landed = await run('return location.href;'); } catch { /* left as-is */ }
+      check('a link to old.reddit.com ends up on www.reddit.com in Firefox too',
+        arrived === true, landed);
+      check('...at the page the reader asked for, not at the login wall the 302 served',
+        landed === `http://www.reddit.com:${server.port}` + PATHS.subreddit, landed);
+      /* Bounded at 6s ON PURPOSE, and the number is load-bearing. Step 2 depends on the
+         loop record this hop just wrote, and oldreddit.js expires it after LOOP_WINDOW_MS
+         (10s) — so an unbounded wait here could eat the window and leave step 2 watching a
+         second hop instead of the card it came for, failing somewhere far from the cause.
+         The Chromium suite renders this same fixture in well under a second; 6s elapsing
+         is a real failure, not a busy machine. If LOOP_WINDOW_MS ever shrinks, this
+         shrinks with it. */
+      const rendered = await until(`document.querySelector('#shd-root .thing.link')`,
+        { timeout: 6000 });
+      check('...where the extension renders it, which is the whole point', rendered === true);
+
+      // --- 2. the card, held open by the loop guard ---
+      await goto(oldOrigin + PATHS.subreddit);
+      const up = await until(`document.getElementById('shd-redirect')`);
+      check('a second visit is refused rather than volleyed back', up === true);
+      // Only now, with nothing about to navigate, is it safe to read the thing.
+      const card = await run(`
+        const card = document.getElementById('shd-redirect');
+        if (!card) return null;
+        const wall = document.getElementById('shd-wall');
+        const link = card.querySelector('a');
+        return {
+          url: location.href,
+          heading: (card.querySelector('h1') || {}).textContent || null,
+          href: link ? link.getAttribute('href') : null,
+          role: card.getAttribute('role'),
+          blackout: document.documentElement.classList.contains('shd-redirecting'),
+          // redirect.css arriving from the DERIVED manifest, measured rather than assumed:
+          // either half missing and the login wall is what the reader is looking at.
+          wallDisplay: wall ? getComputedStyle(wall).display : null,
+          cardFont: getComputedStyle(card).fontFamily,
+          htmlBg: getComputedStyle(document.documentElement).backgroundColor
+        };`);
+      /* Null-safe by construction on this side too: a card that never mounted must make
+         these FAIL, never throw. A throw here aborts the suite, and an aborted suite and
+         a passing one are the same thing to anyone reading the tail of the output. */
+      const c = card || {};
+      check('...with the notice up, saying why it stopped',
+        /something is sending you back/.test(c.heading || ''), String(c.heading));
+      check('...announced as a live region', c.role === 'status', String(c.role));
+      check('...still offering the page the reader asked for',
+        c.href === `http://www.reddit.com:${server.port}` + PATHS.subreddit, String(c.href));
+      /* The two mechanisms this section exists for. The card cannot be on screen unless
+         the content script ran at document_start on a 403 document, the storage read
+         resolved, and whenBody()'s observer fired — all three across Gecko's realm
+         boundary, none of them previously measured here. */
+      check('the blackout is on <html>, so nothing of the wall was ever visible',
+        c.blackout === true && c.wallDisplay === 'none',
+        `blackout=${c.blackout} wall=${c.wallDisplay}`);
+      check('redirect.css came from the derived manifest, not from the script',
+        /Verdana/.test(c.cardFont || '') && c.htmlBg === 'rgb(218, 224, 230)',
+        `${c.cardFont} / ${c.htmlBg}`);
+      check('...and the tab is still on old.reddit, so nothing volleyed',
+        /^http:\/\/old\.reddit\.com:/.test(c.url || ''), String(c.url));
+    }
 
     /* ============================================================== *
      * THE RELAY IN ISOLATION — a fresh session modelling the ESR floor
