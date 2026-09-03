@@ -94,8 +94,8 @@ was driven end to end in Chromium and nothing ran it in Gecko — and the instan
 so it is corrected here rather than left standing. `test/extension-firefox.js` now drives
 the hop too: the landing on www, and then the notice itself, held open by a second visit
 the loop guard refuses so there is no 900ms stopwatch to race. The two-step was dry-run in
-Chromium first, so its assertions carry measured values rather than expectations; a real
-Firefox has yet to run it.
+Chromium first, so its assertions carry measured values rather than expectations, and a
+real Firefox has since run it green: 10 assertions, the suite at 50.
 
 The comparison it was illustrating still holds, and is the honest reason the README says
 what it says: Chrome has three browser-backed suites to Firefox's one, and every feature

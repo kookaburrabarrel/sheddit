@@ -597,8 +597,10 @@ async function until(expr, { timeout = 15000, step = 120 } = {}) {
      * test nobody can execute is a guess: the hop measured 1231ms end to end (against the
      * 10s window step 2 leans on), the second visit was refused, and the card was still up
      * with nothing pending 2s later. Every value asserted below is that run's, not an
-     * expectation. What remains unverified here is Gecko's execution of it, which is the
-     * only thing this section is for.
+     * expectation. Gecko then ran it green first time (release Firefox, macOS), which is
+     * the outcome this section existed to establish rather than assume — and the reason
+     * the two mechanisms named above are now measured facts about Firefox instead of
+     * reasoning about it.
      * ============================================================== */
     console.log('\n\x1b[1mFIREFOX EXTENSION — OLD REDDIT REDIRECTS TO WWW\x1b[0m');
     {
