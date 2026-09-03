@@ -102,10 +102,17 @@ SHD.oldReddit = (() => {
     }
 
     const out = new URL(url.href);
-    /* hostname, not host: the port rides along untouched. In production there is none,
-       and in the packed-extension suite the fixture server's port is the only way the
-       hop can land anywhere real. The protocol is left alone for the same reason —
-       reddit.com is HSTS-preloaded, so http is the browser's problem, not ours. */
+    /* ONLY the hostname is rewritten, so the port and the scheme ride along untouched.
+       In production there is no port; in the packed-extension suite the fixture server's
+       port is the only way the hop can land anywhere real. The scheme is left alone
+       because reddit.com is HSTS-preloaded, which makes http the browser's business and
+       not ours.
+
+       `out.host = NEW_HOST` would do exactly the same thing, measured: the WHATWG host
+       setter keeps the existing port when the value it is handed carries none. So the
+       thing worth protecting is not which setter this is — it is that the port and the
+       scheme survive at all, and what actually loses them is a target built by
+       concatenating onto a hardcoded origin. That is what the mutation row reintroduces. */
     out.hostname = NEW_HOST;
     return out.href;
   }

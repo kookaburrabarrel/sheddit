@@ -1684,10 +1684,15 @@ mutate "any dest is followed, including one pointing off reddit.com" run \
 mutate "a dest that is itself a login wall is followed" run \
   src/core/oldreddit.js '(d && isReddit(d) && !isLogin(d))' '(d && isReddit(d))'
 
-# host, not hostname — drops the port, so the packed suite's hop aims at the real internet
-# and a reader on any non-default port goes nowhere.
-mutate "the host swap takes the port with it" run \
-  src/core/oldreddit.js '    out.hostname = NEW_HOST;' '    out.host = NEW_HOST;'
+# NOT `host` instead of `hostname`: that row was written first, SURVIVED, and was the row
+# that was wrong rather than the test. Measured — the WHATWG host setter keeps the existing
+# port when the value it is handed carries none, so the two setters are identical here and
+# the mutation changed nothing. The bug that really loses the port is a target built by
+# concatenating onto a hardcoded origin, which drops the scheme with it: the packed suite's
+# hop then aims at the real internet, and a reader on any non-default port goes nowhere.
+mutate "the target is concatenated onto a hardcoded origin, losing port and scheme" run \
+  src/core/oldreddit.js '    out.hostname = NEW_HOST;
+    return out.href;' '    return `https://${NEW_HOST}${out.pathname}${out.search}${out.hash}`;'
 
 # The silent hop. This is the version that would still "work" and still be blamed for the
 # hostname changing under the reader — the entire reason the card exists.
@@ -1713,7 +1718,7 @@ mutate "the loop guard records nothing to recognise" run \
 
 # A feed reader asked for XML and gets an HTML card painted into it.
 mutate "a .rss document is redirected like a page" run \
-  src/core/oldreddit.js '    if (document.contentType && document.contentType !== ' '    if (false \&\& document.contentType !== '
+  src/core/oldreddit.js '    if (document.contentType && document.contentType !== ' '    if (false && document.contentType !== '
 
 # The stylesheet ungated: old.reddit.com is blanked for the reader who turned the redirect
 # off, which is the one group whose page must be left exactly as it was.

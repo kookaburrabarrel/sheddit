@@ -77,7 +77,18 @@ lives past that point reported `SURVIVED`. Two of the new rows did exactly that,
 how it surfaced. The sweep now copies that one file in.
 
 Worth stating plainly, because it is the same trap the script exists to catch: a suite
-that *dies* and a suite with nothing to report look identical to `grep -c FAIL`.
+that *dies* and a suite with nothing to report look identical to `grep -c FAIL`. It bit
+twice in one sweep: once for the missing file above, and again for the row that removes
+the interstitial, which made every assertion reading the card throw. Those reads are now
+null-safe, and the assertion whose two halves a missing card would both satisfy carries an
+explicit guard so it cannot pass on nothing.
+
+A third row was simply wrong, and is recorded rather than quietly rewritten: it swapped
+`out.hostname` for `out.host` expecting the port to be dropped, and the WHATWG `host`
+setter *keeps* the existing port when the value it is handed carries none — so the two are
+identical and the mutation changed nothing. Replaced with the bug that really loses the
+port: building the target by concatenating onto a hardcoded origin, which drops the scheme
+along with it.
 
 ## 0.32.0
 
