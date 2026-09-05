@@ -1690,6 +1690,15 @@ the way a question got settled is usually more useful than the answer.
       row pin it); whether the buttons are actually there, and under what attributes, is
       what the next signed-in run reports — its VOTE DELEGATION section now dumps every
       button reachable through a post with its attribute names.
+    - **A logged-in feed that comes up empty.** The second signed-in run of the day loaded
+      `/r/programming/` and got Reddit's own no-content panel (`C.FEED_EMPTY`, bug 94's
+      copy: *This community doesn't have any posts yet*) with no `shreddit-post` for 30s,
+      on the page that had answered 27 posts an hour earlier on the same session. Whether
+      that is a transient or a shape the logged-in feed can take is unknown; what is known
+      is that the probe called it "a bot-detection challenge" (its robot-check text test
+      fired on ordinary page copy) and stopped before any account-layer section ran. The
+      probe now reports the panel for what it is, retries on `/top/?t=all`, and never
+      calls a page that carries `shreddit-app` a challenge.
     - Reply control, composer, `execCommand`: the run did not visit a thread with the
       account layer's probes yet (they were added after it, as the REPLY & COMPOSER block
       of the comments section — read, never clicked). Still open.
