@@ -535,6 +535,36 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
     console.log('  \x1b[2mnot reachable — the documented logged-out state (voting is out ' +
                 'of scope; the arrows are decorative for a logged-out session)\x1b[0m');
   }
+  /* THE SHAPE, whatever it is. A NOT FOUND above says only that C.NATIVE.upvote matched
+     nothing; it does not say what IS there. The 2026-09-05 signed-in run reported NOT FOUND
+     with 23 open shadow roots searched — and deepQuery at the time never looked in the
+     post's OWN shadow root, so that number described the wrong tree. This dumps every
+     button reachable through the post and its open shadow roots, with attribute names and
+     labels (never user content), so contracts.js can be corrected from evidence rather
+     than another guess. */
+  const buttons = await page.evaluate((C) => {
+    const out = [];
+    const walk = (root, where, depth) => {
+      if (!root || depth > 8 || out.length > 40) return;
+      for (const b of root.querySelectorAll('button, [role="button"]')) {
+        out.push({ where, tag: b.tagName.toLowerCase(),
+                   attrs: [...b.attributes].map(a => a.name).join(' '),
+                   label: (b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 40) });
+      }
+      if (root.shadowRoot) walk(root.shadowRoot, where + '#shadow', depth + 1);
+      for (const el of root.querySelectorAll('*')) {
+        if (el.shadowRoot) walk(el.shadowRoot, where + '>' + el.tagName.toLowerCase() + '#shadow', depth + 1);
+      }
+    };
+    const post = document.querySelector(C.POST);
+    walk(post, 'post', 0);
+    return { hostHasOwnShadow: !!post?.shadowRoot, buttons: out };
+  }, C);
+  console.log(`  \x1b[2mthe post element has its OWN open shadow root: ${buttons.hostHasOwnShadow}\x1b[0m`);
+  console.log(`  \x1b[2mbuttons reachable through the post (${buttons.buttons.length}):\x1b[0m`);
+  for (const b of buttons.buttons) {
+    console.log(`  \x1b[2m  [${b.where}] <${b.tag} ${b.attrs}> "${b.label}"\x1b[0m`);
+  }
 
   /* ---------------- the account layer (0.34.0) ---------------- */
   console.log('\n\x1b[1mLIVE CONTRACTS — LOGGED-IN SESSION\x1b[0m');
@@ -820,6 +850,65 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   }
   check('shreddit-comment-tree still exists', comments.tree);
   console.log(`  \x1b[2mobserved depths: ${comments.depths.join(', ')}\x1b[0m`);
+
+  /* The account layer's reply protocol, read off a real thread and never driven: NOTHING
+     here is clicked, because on a signed-in session a click would post. It reports what
+     account.js would find — the per-comment reply control (C.NATIVE.reply), a composer
+     already on the page (C.COMPOSER.host, the top-level one a logged-in thread carries),
+     and inside it the editor and submit — and dumps the first comment's buttons the way
+     the vote section does, so a wrong contract is corrected from the attribute names. */
+  const replyShape = await page.evaluate((C) => {
+    const list = (root, sel) => sel.split(',').map(x => x.trim()).filter(Boolean)
+      .map(x => { try { return [x, root.querySelectorAll(x).length]; } catch { return [x, 'invalid']; } });
+    const c = document.querySelector(C.COMMENT);
+    const out = { commentHasOwnShadow: !!c?.shadowRoot, replyControl: null, hosts: list(document, C.COMPOSER.host),
+                  editor: null, submit: null, buttons: [] };
+    const reply = c && SHD.dom.deepQuery(c, C.NATIVE.reply);
+    if (reply) out.replyControl = { attrs: [...reply.attributes].map(a => a.name).join(' '),
+                                   label: (reply.getAttribute('aria-label') || reply.textContent || '').trim().slice(0, 40) };
+    const host = document.querySelector(C.COMPOSER.host);
+    if (host) {
+      out.hostTag = host.tagName.toLowerCase();
+      out.hostInsideComment = !!host.closest(C.COMMENT);
+      const ed = SHD.dom.deepQuery(host, C.COMPOSER.editor);
+      out.editor = ed ? { tag: ed.tagName.toLowerCase(), attrs: [...ed.attributes].map(a => a.name).join(' ') } : null;
+      const sub = SHD.dom.deepQuery(host, C.COMPOSER.submit);
+      out.submit = sub ? { tag: sub.tagName.toLowerCase(), attrs: [...sub.attributes].map(a => a.name).join(' '),
+                           label: (sub.textContent || '').trim().slice(0, 30) } : null;
+    }
+    const walk = (root, where, depth) => {
+      if (!root || depth > 6 || out.buttons.length > 30) return;
+      for (const b of root.querySelectorAll('button, [role="button"]')) {
+        if (b.closest(C.COMMENT) && b.closest(C.COMMENT) !== c) continue;   // this comment's own, not a child's
+        out.buttons.push({ where, attrs: [...b.attributes].map(a => a.name).join(' '),
+                           label: (b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 40) });
+      }
+      if (root.shadowRoot) walk(root.shadowRoot, where + '#shadow', depth + 1);
+      for (const el of root.querySelectorAll('*')) {
+        if (el.shadowRoot && (!el.closest(C.COMMENT) || el.closest(C.COMMENT) === c)) {
+          walk(el.shadowRoot, where + '>' + el.tagName.toLowerCase() + '#shadow', depth + 1);
+        }
+      }
+    };
+    walk(c, 'comment', 0);
+    return out;
+  }, C);
+  console.log('\n  \x1b[1mREPLY & COMPOSER (read, never clicked)\x1b[0m');
+  console.log(`  \x1b[2mthe comment element has its OWN open shadow root: ${replyShape.commentHasOwnShadow}\x1b[0m`);
+  console.log(`  \x1b[2mC.NATIVE.reply on the first comment: ${replyShape.replyControl
+    ? `FOUND <${replyShape.replyControl.attrs}> "${replyShape.replyControl.label}"` : 'NOT FOUND'}\x1b[0m`);
+  console.log(`  \x1b[2mcomposer hosts on the thread: ${JSON.stringify(replyShape.hosts)}\x1b[0m`);
+  if (replyShape.hostTag) {
+    console.log(`  \x1b[2mfirst host <${replyShape.hostTag}> inside a comment: ${replyShape.hostInsideComment}; ` +
+      `editor: ${replyShape.editor ? `<${replyShape.editor.tag} ${replyShape.editor.attrs}>` : 'NOT FOUND'}; ` +
+      `submit: ${replyShape.submit ? `<${replyShape.submit.tag} ${replyShape.submit.attrs}> "${replyShape.submit.label}"` : 'NOT FOUND'}\x1b[0m`);
+  } else {
+    console.log('  \x1b[2mno composer on the page — logged out, that is expected; logged in, C.COMPOSER.host is wrong ' +
+                'and the top-level composer\'s tag is what to look for below the post\x1b[0m');
+  }
+  console.log(`  \x1b[2mbuttons reachable through the first comment (${replyShape.buttons.length}):\x1b[0m`);
+  for (const b of replyShape.buttons) console.log(`  \x1b[2m  [${b.where}] <button ${b.attrs}> "${b.label}"\x1b[0m`);
+
   /* Not a pass/fail — a measurement the codebase is waiting on. See C.COMMENT_SCORE_HIDDEN:
      the attribute name is a candidate, and this line is the evidence that confirms or
      retires it. A young thread (inside the subreddit's hide-scores window) with many

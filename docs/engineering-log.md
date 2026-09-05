@@ -1482,7 +1482,8 @@ the way a question got settled is usually more useful than the answer.
    was. See the `gateModal` fixture. What is still unseen is whether **quarantined** and
    **rate-limited** pages use the same modal pattern or genuinely replace the feed.
 3. **Whether a logged-in session exposes the vote control.** Logged out it is confirmed
-   unreachable (21 open shadow roots searched, nothing). ~~Out of scope, but `deepQuery` is
+   unreachable (21 open shadow roots searched, nothing). **But see question 11: that search never
+   covered the post's own shadow root, so "unreachable" was a statement about the probe.** ~~Out of scope, but `deepQuery` is
    kept for it.~~ **In scope since 0.34.0** and still unmeasured: the account layer
    (ARCHITECTURE §5.3) forwards to the control if it is there and reports a miss once on a
    session that reads as logged in. It widens into question 11 below.
@@ -1668,9 +1669,33 @@ the way a question got settled is usually more useful than the answer.
     is the path that works and the reader should be told to switch. Every one is built to
     fail towards Reddit's own controls (the box stays with the draft; passthrough reveals
     the composer), and the suite asserts that it does — but "fails safe" is not "works".
-    The settle is `npm run verify:live -- --headed`, signed in, whose LOGGED-IN SESSION
-    section reports each of the five. Until that run, the honest status is: designed,
-    asserted against a model, unverified against the site. Also unmeasured: what Reddit's
+    The settle is `npm run verify:live -- --headed --login`, signed in, whose LOGGED-IN
+    SESSION section reports each of the five.
+
+    **First signed-in run, 2026-09-05** (/r/programming/, a 504-comment thread, u/ profile),
+    and it moved two of the five:
+
+    - **`C.SESSION` — settled.** `shreddit-app[user-logged-in="true"]` 1, the avatar button
+      `#expand-user-drawer-button` 1, `[id*="user-drawer"]` 3, both veto clauses 0; the
+      page read as LOGGED IN through three independent signals. `user-drawer-app` matched
+      nothing and is gone. The `shreddit-app` attribute list the probe dumped puts
+      `user-logged-in` beside `loid` and the correlation ids — session bookkeeping on the
+      app element, in the initial HTML, which is the strongest of the three.
+    - **The vote control — NOT FOUND, logged in, 23 open shadow roots searched.** The same
+      answer every logged-out run gave, and it turned out to be an answer about the probe:
+      `dom.deepQuery` searched the shadow roots of the post's *descendants* and never the
+      post's *own*, for the whole life of the function — and a custom element's own root is
+      where it renders its own action bar. Every "unreachable" recorded in §7d and question
+      3 was measured through that hole. Fixed (own root first, a jsdom row and a mutation
+      row pin it); whether the buttons are actually there, and under what attributes, is
+      what the next signed-in run reports — its VOTE DELEGATION section now dumps every
+      button reachable through a post with its attribute names.
+    - Reply control, composer, `execCommand`: the run did not visit a thread with the
+      account layer's probes yet (they were added after it, as the REPLY & COMPOSER block
+      of the comments section — read, never clicked). Still open.
+
+    Until the next run, the honest status is: session detection verified; the rest
+    designed, asserted against a model, and one measurement closer. Also unmeasured: what Reddit's
     optimistic insert of a posted reply looks like (a new `shreddit-comment` under the
     parent is the assumption `compose()` waits on; if Reddit re-renders the branch instead,
     the arrival check falls through to "the editor emptied", which is the weaker signal).
