@@ -4,7 +4,7 @@
 const DEFAULTS = {
   listing: true, comments: true, chrome: true, profiles: true,
   compactRows: true, showThumbnails: true, showNsfwThumbnails: false, autoPaginate: true,
-  inlineVideo: true, inlineImages: true, redirectOldReddit: true,
+  inlineVideo: true, inlineImages: true, redirectOldReddit: true, account: true,
   theme: 'classic'
 };
 

@@ -407,12 +407,33 @@ function postHtml(p) {
   </article><hr>`;
 }
 
-/** @param {{pager?: boolean}} opts  pager: give faceplate-partial a working loadContent() */
+/**
+ * The page header, with or without a session on it.
+ *
+ * Logged OUT (the default, and every fixture before 0.34.0): an EMPTY header — no
+ * signal either way, which is what session.js must read as logged out, because the
+ * decision is presence-based (an affirmative signal is required; see C.SESSION).
+ *
+ *   loggedIn:  the avatar button that opens the user drawer — the C.SESSION.loggedIn
+ *              candidate this suite drives. CANDIDATE shape; a real header may carry a
+ *              different one, and verify:live's LOGGED-IN SESSION section is what says.
+ *   loginLink: Reddit's own "Log In" control, the C.SESSION.loggedOut veto, captured
+ *              live (a faceplate-tracker[noun="login"] around an anchor onto /login).
+ *              Both at once is the contradiction the veto exists for.
+ */
+function headerHtml(opts = {}) {
+  return `<reddit-header-large>` +
+    (opts.loggedIn ? `<span><button id="expand-user-drawer-button" aria-label="Expand user menu"><img alt="User Avatar" src="https://styles.redditmedia.com/avatar.png"></button></span>` : '') +
+    (opts.loginLink ? `<faceplate-tracker noun="login"><a href="https://www.reddit.com/login/">Log In</a></faceplate-tracker>` : '') +
+    `</reddit-header-large>`;
+}
+
+/** @param {{pager?: boolean, loggedIn?: boolean, loginLink?: boolean}} opts  pager: give faceplate-partial a working loadContent() */
 function listingPage(opts = {}) {
   const pager = opts.pager ? `<script>${PAGER_SCRIPT}</script>` : '';
   return `<!DOCTYPE html><html><head><title>reddit</title>${REDDIT_PAGE_CSS}</head><body>${pager}
   <shreddit-app>
-    <reddit-header-large></reddit-header-large>
+    ${headerHtml(opts)}
     ${SR_OUTLET}
     <div><div id="subgrid-container"><div><main id="main-content">
       <shreddit-feed>
@@ -903,7 +924,7 @@ function commentsPage(opts = {}) {
     : opts.pager ? `<script>${COMMENT_PAGER_SCRIPT}</script>` : '';
   return `<!DOCTYPE html><html><head><title>thread</title>${REDDIT_PAGE_CSS}</head><body>${pagerScript}
   <shreddit-app>
-    <reddit-header-large></reddit-header-large>
+    ${headerHtml(opts)}
     <div><div id="subgrid-container"><div><main id="main-content">
       ${postHtml(post)}
       <shreddit-comment-tree post-id="t3_link1" totalcomments="${COMMENT_DEPTHS.length}">
@@ -918,7 +939,7 @@ function commentsPage(opts = {}) {
   </shreddit-app></body></html>`;
 }
 
-module.exports = { POSTS, SELF_POST, EMPTY_FEED_PANEL, emptyListingPage, CMAF_POST, DEAD_LINK_POST, VIDEO_MPD, LIVE_E, DEAD_E, COMMENT_DEPTHS, listingPage, commentsPage, nestedCommentsHtml,
+module.exports = { headerHtml, POSTS, SELF_POST, EMPTY_FEED_PANEL, emptyListingPage, CMAF_POST, DEAD_LINK_POST, VIDEO_MPD, LIVE_E, DEAD_E, COMMENT_DEPTHS, listingPage, commentsPage, nestedCommentsHtml,
                    profilePage, PROFILE_COMMENT_COUNT, PROFILE_LINKED_SUB, PROFILE_LINKED_TITLE,
                    PAGER_SCRIPT, PAGER_PAGE_SIZE,
                    COMMENT_PAGER_SCRIPT, COMMENT_PAGER_BATCH,

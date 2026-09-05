@@ -122,10 +122,10 @@ SHD.comments = (() => {
     if (m.bodyNode) body.appendChild(SHD.dom.inlineGifs(m.bodyNode.cloneNode(true)));
 
     thing.append(
-      h('div.midcol.unvoted', null, [
-        h('div.arrow.up', { role: 'button', 'aria-label': 'upvote' }),
-        h('div.arrow.down', { role: 'button', 'aria-label': 'downvote' })
-      ]),
+      /* Arrows only — old reddit keeps a comment's score in the tagline. Delegated since
+         0.34.0 (account.js), where before they were inert markup: a logged-out session has
+         no native control to forward to, so for that reader nothing changes. */
+      SHD.account.midcol(m, 'comment'),
       h('div.entry', null, [
         h('p.tagline', null, [
           toggler(thing),
@@ -153,10 +153,13 @@ SHD.comments = (() => {
           h('li', null, h('a.permalink', { href: m.permalink || '#', text: 'permalink' })),
           h('li', null, h('a.reply', { href: '#', text: 'reply', onclick: (e) => {
             e.preventDefault();
-            // Auth-gated: hand off to Reddit's own composer rather than reimplementing it.
-            // passthrough() un-clips the whole ancestor path — tagging the comment alone
-            // did nothing, because the clip lives on the <body> child seven levels up.
-            if (SHD.dom.passthrough(m.source)) m.source.scrollIntoView({ block: 'center' });
+            /* Auth-gated, and account.js owns which of two things happens. Logged out:
+               hand off to Reddit's own composer via passthrough rather than reimplementing
+               it — passthrough() un-clips the whole ancestor path, because the clip lives
+               on the <body> child seven levels up and tagging the comment alone did
+               nothing. Logged in (0.34.0): an old-reddit reply box under this entry, whose
+               save drives Reddit's composer and falls back to that same handoff. */
+            SHD.account.reply(m, thing);
           }}))
         ])
       ]),
@@ -820,6 +823,9 @@ SHD.comments = (() => {
     // which nothing is current.
     if (q && C.COMMENT_SORTS.some(s => s.id === q)) current = q;
     const head = h('div.shd-commentarea-head', null, [
+      /* The top-level comment box, old reddit's placement: above the sort strip, under
+         the post. account.js returns null for anyone the layer is off for. */
+      SHD.account.commentBox(m),
       h('div.panestack-title', null,
         h('a.title-button', {
           href: m.permalink,

@@ -5319,6 +5319,488 @@ async function boot(html, url, setup) {
     }
   }
 
+  /* ================================================================================== *
+   * THE ACCOUNT LAYER (0.34.0) — vote, reply, post, for a reader who is logged in
+   * ================================================================================== */
+
+  /**
+   * Reddit's logged-in machinery, MODELLED. Nothing in this suite can be a real session,
+   * so the shapes the contracts name are built here: vote buttons carrying `aria-pressed`
+   * and a "Reply" control, in an OPEN shadow root under the action bar (a post's
+   * shreddit-async-loader, a comment's action row); and a composer that mounts when the
+   * reply control is clicked — a textarea or a contenteditable, and a submit button whose
+   * click appends the new <shreddit-comment> where Reddit would put it (nested under its
+   * parent, or top-level under the tree's <section>), clears the editor and removes the
+   * composer, the way an optimistic insert does.
+   *
+   * The buttons toggle like Reddit's: clicking the lit one clears it, clicking the other
+   * flips. `noState` drops aria-pressed altogether, for the page that exposes no state;
+   * `rejects` keeps the state but never changes it — a vote the server refused.
+   * `composer: 'none'` is a reply control that opens nothing — the failure path.
+   */
+  function installNativeAccount(window, doc, source, opts = {}) {
+    const state = { clicks: { up: 0, down: 0, reply: 0, submit: 0 }, received: [],
+                    up: null, down: null, replyBtn: null, composer: null, editor: null };
+    let host = source.querySelector('shreddit-async-loader');
+    if (!host) {
+      host = doc.createElement('shreddit-comment-action-row');
+      source.appendChild(host);
+    }
+    const shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });
+    const mk = (attr, key) => {
+      const b = doc.createElement('button');
+      b.setAttribute(attr, '');
+      if (!opts.noState) b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', () => {
+        state.clicks[key]++;
+        if (opts.noState || opts.rejects) return;   // rejects: the request failed, nothing changes
+        const other = key === 'up' ? state.down : state.up;
+        const was = b.getAttribute('aria-pressed') === 'true';
+        b.setAttribute('aria-pressed', was ? 'false' : 'true');
+        other.setAttribute('aria-pressed', 'false');
+      });
+      shadow.appendChild(b);
+      return b;
+    };
+    state.up = mk('upvote', 'up');
+    state.down = mk('downvote', 'down');
+    if (!opts.noState && opts.initial === 1) state.up.setAttribute('aria-pressed', 'true');
+    if (!opts.noState && opts.initial === -1) state.down.setAttribute('aria-pressed', 'true');
+    if (opts.reply) {
+      const r = doc.createElement('button');
+      r.setAttribute('data-post-click-location', 'comment-reply');
+      r.textContent = 'Reply';
+      r.addEventListener('click', () => {
+        state.clicks.reply++;
+        if (opts.composer === 'none') return;
+        setTimeout(() => mountComposer(doc, source, opts, state), 30);
+      });
+      shadow.appendChild(r);
+      state.replyBtn = r;
+    }
+    return state;
+  }
+
+  function mountComposer(doc, source, opts, state) {
+    const isComment = source.tagName === 'SHREDDIT-COMMENT';
+    const composer = doc.createElement('comment-composer-host');
+    let editor;
+    if (opts.composer === 'contenteditable') {
+      editor = doc.createElement('div');
+      editor.setAttribute('contenteditable', 'true');
+    } else {
+      editor = doc.createElement('textarea');
+    }
+    const submit = doc.createElement('button');
+    submit.type = 'submit';
+    submit.textContent = 'Comment';
+    submit.addEventListener('click', (e) => {
+      e.preventDefault();
+      state.clicks.submit++;
+      const text = editor.tagName === 'TEXTAREA' ? editor.value : editor.textContent;
+      state.received.push(text);
+      setTimeout(() => {
+        const parentDepth = isComment ? Number(source.getAttribute('depth')) : -1;
+        const id = opts.newId || `t1_new_${isComment ? source.getAttribute('thingid') : 'top'}`;
+        const c = doc.createElement('shreddit-comment');
+        const attrs = {
+          thingid: id, postid: 't3_link1', author: 'me', score: '1',
+          created: new Date().toISOString(), depth: String(parentDepth + 1),
+          'comment-position': '99', permalink: `/r/programming/comments/link1/comment/${id}/`,
+          'content-type': 'text'
+        };
+        for (const [k, v] of Object.entries(attrs)) c.setAttribute(k, v);
+        c.innerHTML = `<div slot="comment"><div class="md"><p>${text}</p></div></div>`;
+        (isComment ? source : doc.querySelector('shreddit-comment-tree section')).appendChild(c);
+        if (editor.tagName === 'TEXTAREA') editor.value = ''; else editor.textContent = '';
+        composer.remove();
+      }, 30);
+    });
+    composer.append(editor, submit);
+    (isComment ? source : doc.querySelector('#main-content')).appendChild(composer);
+    state.composer = composer;
+    state.editor = editor;
+    return composer;
+  }
+
+  /** The suite does not wait 1.5s per row for a hydrated vote bar, nor 8s for a lost reply. */
+  const fastAccount = (window) => Object.assign(window.SHD.account.timings,
+    { settleMs: 30, pollMs: 10, composeWaitMs: 400, arriveWaitMs: 800 });
+
+  const loggedInSettings = (extra = {}) => (win) => {
+    win.chrome = { storage: {
+      sync: { get: async () => ({ settings: { autoPaginate: false, ...extra } }) },
+      onChanged: { addListener() {} }
+    } };
+  };
+
+  const COMMENTS_URL = 'https://www.reddit.com/r/programming/comments/link1/nasa/';
+  const click = (window, el) => el.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  const voteCol = (doc, id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"] > .midcol`);
+
+  console.log('\n\x1b[1mTHE ACCOUNT LAYER IS OFF FOR A LOGGED-OUT READER\x1b[0m');
+  {
+    // The primary use case, and the one this layer must not touch: every fixture before
+    // 0.34.0 carries an EMPTY header — no signal either way — and that has to read as
+    // logged out, because the decision is presence-based (C.SESSION). A logged-out
+    // reader's page is asserted to be byte-for-byte 0.33.0's: no status word, no submit
+    // doors, no comment box, arrows that no-op in silence, `reply` a passthrough.
+    {
+      const { doc, window, logs } = await boot(listingPage(), 'https://www.reddit.com/r/programming/', noAuto);
+      check('an empty header reads as logged out', window.SHD.session.loggedIn() === false);
+      check('...so the account layer is inactive', window.SHD.session.active() === false);
+      check('the header carries no session word', !doc.querySelector('.shd-account-status'));
+      check('the sidebar offers no submit doors', !doc.querySelector('.shd-submit'));
+      click(window, voteCol(doc, 't3_link1').querySelector('.arrow.up'));
+      await hold(50);
+      check('a vote with no native control is a silent no-op — the documented logged-out state',
+        !logs.some(l => /no upvote control/.test(l)) &&
+        !voteCol(doc, 't3_link1').classList.contains('likes'), logs.join(' | '));
+    }
+    {
+      const { doc, window, logs } = await boot(commentsPage(), COMMENTS_URL, noAuto);
+      check('no top-level comment box on a logged-out thread', !doc.querySelector('.shd-commentbox'));
+      const col = voteCol(doc, 't1_c0');
+      check('comment rows still carry their arrows', !!col?.querySelector('.arrow.up') && !!col?.querySelector('.arrow.down'));
+      click(window, col.querySelector('.arrow.up'));
+      await hold(50);
+      check('a comment arrow with no native control is the same silent no-op',
+        !logs.some(l => /no upvote control/.test(l)) && !col.classList.contains('likes'));
+      click(window, doc.querySelector('#shd-root .thing[data-fullname="t1_c0"] a.reply'));
+      check('reply hands off to Reddit\'s own comment (passthrough), as before',
+        doc.documentElement.classList.contains('shd-passthrough-active') &&
+        !doc.querySelector('.shd-reply-form'));
+    }
+    {
+      // Both signals at once — an avatar AND a login button — is the contradiction the
+      // veto exists for. It reads as logged OUT, because the cost of being wrong is
+      // asymmetric: a logged-in reader loses a feature, a logged-out one gets a broken one.
+      const { window } = await boot(listingPage({ loggedIn: true, loginLink: true }),
+        'https://www.reddit.com/r/programming/', noAuto);
+      const r = window.SHD.session.report();
+      check('a login button vetoes a logged-in signal', window.SHD.session.loggedIn() === false);
+      check('...and the report names both, so a bug report can say which was wrong',
+        r.matched.length >= 1 && r.vetoed.some(s => /login/.test(s)), JSON.stringify(r));
+    }
+    {
+      // The reader's own switch. Logged in, layer off: 0.33.0 exactly.
+      const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL,
+        loggedInSettings({ account: false }));
+      check('the page is read as logged in', window.SHD.session.loggedIn() === true);
+      check('...but with the setting off the layer is inactive', window.SHD.session.active() === false);
+      check('nothing of the layer is rendered: no status, no submit, no comment box',
+        !doc.querySelector('.shd-account-status') && !doc.querySelector('.shd-submit') &&
+        !doc.querySelector('.shd-commentbox'));
+      click(window, doc.querySelector('#shd-root .thing[data-fullname="t1_c0"] a.reply'));
+      check('reply is the passthrough handoff with the layer off',
+        doc.documentElement.classList.contains('shd-passthrough-active') && !doc.querySelector('.shd-reply-form'));
+    }
+  }
+
+  console.log('\n\x1b[1mSESSION DETECTION\x1b[0m');
+  {
+    const { doc, window } = await boot(listingPage({ loggedIn: true }), 'https://www.reddit.com/r/programming/', noAuto);
+    const r = window.SHD.session.report();
+    check('the avatar button reads as a logged-in session', window.SHD.session.loggedIn() === true);
+    check('...and the layer is active by default', window.SHD.session.active() === true);
+    check('the report names the clause that matched',
+      r.matched.some(s => /expand-user-drawer-button/.test(s)) && r.vetoed.length === 0, JSON.stringify(r));
+    check('the header says so, in one word', doc.querySelector('#shd-header .shd-account-status')?.textContent === 'logged in');
+    check('...before the theme bar, where old reddit kept the account corner',
+      (() => { const s = doc.querySelector('#shd-header .shd-account-status'); return !!s && s.nextElementSibling?.classList.contains('shd-themebar'); })());
+    check('a reset re-reads rather than remembering', (() => {
+      window.SHD.session.reset();
+      doc.querySelector('#expand-user-drawer-button').remove();
+      return window.SHD.session.loggedIn() === false;
+    })());
+  }
+
+  console.log('\n\x1b[1mVOTING ON A LOGGED-IN SESSION\x1b[0m');
+  {
+    const { doc, window, logs } = await boot(listingPage({ loggedIn: true }), 'https://www.reddit.com/r/programming/', noAuto);
+    fastAccount(window);
+    const settled = (id, cls) => waitFor(() => voteCol(doc, id).classList.contains(cls), { timeout: 1000 });
+
+    // --- the ordinary case: a hydrated bar exposing its state ---
+    const link = installNativeAccount(window, doc, doc.querySelector('shreddit-post[id="t3_link1"]'));
+    const col = voteCol(doc, 't3_link1');
+    click(window, col.querySelector('.arrow.up'));
+    check('our up arrow forwards to Reddit\'s upvote button', link.clicks.up === 1, `clicks=${link.clicks.up}`);
+    check('...and the column lights up: old reddit\'s likes/upmod', await settled('t3_link1', 'likes') &&
+      col.querySelector('.arrow.up').classList.contains('upmod') && !col.classList.contains('unvoted'));
+    check('...and the score moves with it', col.querySelector('.score').textContent === '1868', col.querySelector('.score').textContent);
+    click(window, col.querySelector('.arrow.up'));
+    check('clicking the lit arrow un-votes', await settled('t3_link1', 'unvoted') &&
+      !col.querySelector('.arrow.up').classList.contains('upmod') && link.clicks.up === 2);
+    check('...and the score comes back', col.querySelector('.score').textContent === '1867', col.querySelector('.score').textContent);
+    click(window, col.querySelector('.arrow.down'));
+    check('the down arrow forwards too, and paints dislikes/downmod', link.clicks.down === 1 &&
+      await settled('t3_link1', 'dislikes') && col.querySelector('.arrow.down').classList.contains('downmod'));
+    check('...one below the delivered score', col.querySelector('.score').textContent === '1866', col.querySelector('.score').textContent);
+    col.querySelector('.arrow.up').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    check('the arrows answer the keyboard like a button would', link.clicks.up === 3 &&
+      await settled('t3_link1', 'likes') && !col.querySelector('.arrow.down').classList.contains('downmod'));
+    check('...a flip from down to up is two points of movement', col.querySelector('.score').textContent === '1868', col.querySelector('.score').textContent);
+
+    // --- a bar that exposes NO state: our own toggle, never a contradiction ---
+    const gallery = installNativeAccount(window, doc, doc.querySelector('shreddit-post[id="t3_gallery1"]'), { noState: true });
+    const gcol = voteCol(doc, 't3_gallery1');
+    click(window, gcol.querySelector('.arrow.up'));
+    check('with no native state the arrow still forwards and lights on its own toggle',
+      gallery.clicks.up === 1 && await settled('t3_gallery1', 'likes') && gcol.querySelector('.score').textContent === '12248');
+    click(window, gcol.querySelector('.arrow.up'));
+    check('...and toggles back', await settled('t3_gallery1', 'unvoted') && gcol.querySelector('.score').textContent === '12247');
+
+    // --- a post the reader had ALREADY upvoted: the delivered score includes that vote ---
+    const image = installNativeAccount(window, doc, doc.querySelector('shreddit-post[id="t3_image1"]'), { initial: 1 });
+    const icol = voteCol(doc, 't3_image1');
+    check('a standing vote is picked up from the hydrated bar without a click',
+      await waitFor(() => icol.classList.contains('likes'), { timeout: 3000 }) &&
+      icol.querySelector('.arrow.up').classList.contains('upmod'));
+    check('...and the score is left as delivered, because it already counts that vote',
+      icol.querySelector('.score').textContent === '43110', icol.querySelector('.score').textContent);
+    click(window, icol.querySelector('.arrow.up'));
+    check('un-voting a standing vote takes one off the delivered score',
+      image.clicks.up === 1 && await settled('t3_image1', 'unvoted') && icol.querySelector('.score').textContent === '43109',
+      icol.querySelector('.score').textContent);
+
+    // --- a vote Reddit REFUSES (the button never lights): ours goes dark again ---
+    const refused = installNativeAccount(window, doc, doc.querySelector('shreddit-post[id="t3_text1"]'), { rejects: true });
+    const rcol = voteCol(doc, 't3_text1');
+    const delivered = rcol.querySelector('.score').textContent;
+    click(window, rcol.querySelector('.arrow.up'));
+    check('a refused vote is forwarded, then read back and un-painted — the page\'s answer wins',
+      refused.clicks.up === 1 && await waitFor(() => rcol.classList.contains('unvoted') && !rcol.querySelector('.arrow.up').classList.contains('upmod'), { timeout: 1000 }));
+    check('...and the score returns to what was delivered', rcol.querySelector('.score').textContent === delivered,
+      `${rcol.querySelector('.score').textContent} vs ${delivered}`);
+
+    // --- a miss on a session where the control is EXPECTED is reported, once ---
+    const vcol = voteCol(doc, 't3_video1');
+    click(window, vcol.querySelector('.arrow.up'));
+    click(window, vcol.querySelector('.arrow.up'));
+    await hold(30);
+    const warns = logs.filter(l => /no upvote control/.test(l));
+    check('a missing control on a logged-in session warns once, naming the evidence',
+      warns.length === 1 && /logged-in session/.test(warns[0]) && /open shadow roots searched/.test(warns[0]), warns.join(' | '));
+    check('...and does not light anything', !vcol.classList.contains('likes'));
+    check('no console errors while voting',
+      logs.filter(l => l.startsWith('error') || l.startsWith('jsdomError')).length === 0, logs.join(' | '));
+  }
+  {
+    // Comments: arrows only, the score in the tagline — and a hidden score stays hidden.
+    const page = commentsPage({ loggedIn: true }).replace('thingid="t1_c1"', 'thingid="t1_c1" score-hidden=""');
+    const { doc, window } = await boot(page, COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const c0 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c0"]'));
+    const col = voteCol(doc, 't1_c0');
+    const tagScore = (id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"] > .entry > .tagline > .score`);
+    check('a comment column has arrows and no score of its own',
+      !!col.querySelector('.arrow.up') && !col.querySelector('.score') && tagScore('t1_c0').textContent === '100 points');
+    click(window, col.querySelector('.arrow.up'));
+    check('a comment up arrow forwards to the comment\'s own native button',
+      c0.clicks.up === 1 && await waitFor(() => col.classList.contains('likes'), { timeout: 1000 }));
+    check('...and the tagline score moves', tagScore('t1_c0').textContent === '101 points', tagScore('t1_c0').textContent);
+    click(window, col.querySelector('.arrow.down'));
+    check('flipping to a downvote is two points in the tagline',
+      await waitFor(() => col.classList.contains('dislikes'), { timeout: 1000 }) && tagScore('t1_c0').textContent === '99 points',
+      tagScore('t1_c0').textContent);
+    const c1 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c1"]'));
+    const col1 = voteCol(doc, 't1_c1');
+    click(window, col1.querySelector('.arrow.up'));
+    check('a hidden score lights the arrow but stays "score hidden"',
+      c1.clicks.up === 1 && await waitFor(() => col1.classList.contains('likes'), { timeout: 1000 }) &&
+      tagScore('t1_c1').textContent === 'score hidden', tagScore('t1_c1').textContent);
+  }
+
+  console.log('\n\x1b[1mREPLYING ON A LOGGED-IN SESSION — DRIVING REDDIT\'S COMPOSER\x1b[0m');
+  {
+    const { doc, window, logs } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const row = (id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"]`);
+    const formOf = (id) => row(id)?.querySelector(':scope > .entry > .shd-reply-form');
+
+    // --- the happy path, markdown mode (a textarea) ---
+    const c0 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c0"]'),
+      { reply: true, composer: 'textarea' });
+    click(window, row('t1_c0').querySelector('a.reply'));
+    check('reply opens an old-reddit reply box under the comment, not a passthrough',
+      !!formOf('t1_c0') && !doc.documentElement.classList.contains('shd-passthrough-active'));
+    check('...with a textarea, save and cancel',
+      !!formOf('t1_c0').querySelector('textarea') && !!formOf('t1_c0').querySelector('.shd-reply-save') &&
+      !!formOf('t1_c0').querySelector('.shd-reply-cancel'));
+    click(window, row('t1_c0').querySelector('a.reply'));
+    check('a second click does not open a second box', row('t1_c0').querySelectorAll('.shd-reply-form').length === 1);
+    check('nothing has been clicked on Reddit\'s side yet', c0.clicks.reply === 0 && c0.clicks.submit === 0);
+    formOf('t1_c0').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await hold(30);
+    check('saving an empty box does nothing to Reddit and says so',
+      c0.clicks.reply === 0 && /nothing to save/.test(formOf('t1_c0').querySelector('.shd-reply-status').textContent));
+    formOf('t1_c0').querySelector('textarea').value = 'A reply typed in old reddit.';
+    formOf('t1_c0').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('save opens Reddit\'s composer through Reddit\'s own reply control',
+      await waitFor(() => c0.clicks.reply === 1, { timeout: 1000 }));
+    check('...hands the text to Reddit\'s editor and clicks Reddit\'s submit',
+      await waitFor(() => c0.clicks.submit === 1, { timeout: 1500 }) && c0.received[0] === 'A reply typed in old reddit.',
+      JSON.stringify(c0.received));
+    check('...and the box goes away once the reply is SEEN to arrive',
+      await waitFor(() => !formOf('t1_c0'), { timeout: 1500 }));
+    check('the posted reply renders nested under the comment it answers',
+      await waitFor(() => !!row('t1_c0').querySelector(':scope > .child .thing[data-fullname="t1_new_t1_c0"]'), { timeout: 1500 }) &&
+      /A reply typed in old reddit\./.test(row('t1_new_t1_c0').querySelector('.usertext-body').textContent));
+    check('no passthrough was needed', !doc.documentElement.classList.contains('shd-passthrough-active'));
+
+    // --- rich-text mode (a contenteditable) ---
+    const c1 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c1"]'),
+      { reply: true, composer: 'contenteditable' });
+    click(window, row('t1_c1').querySelector('a.reply'));
+    formOf('t1_c1').querySelector('textarea').value = 'Into a rich-text editor.';
+    formOf('t1_c1').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a contenteditable editor receives the text too',
+      await waitFor(() => c1.clicks.submit === 1, { timeout: 1500 }) && c1.received[0] === 'Into a rich-text editor.',
+      JSON.stringify(c1.received));
+    check('...and that reply lands as well', await waitFor(() => !formOf('t1_c1') && !!row('t1_new_t1_c1'), { timeout: 1500 }));
+
+    // --- cancel ---
+    click(window, row('t1_c2').querySelector('a.reply'));
+    click(window, formOf('t1_c2').querySelector('.shd-reply-cancel'));
+    check('cancel removes the box', !formOf('t1_c2'));
+
+    // --- the reply control opens nothing: fail LOUDLY, keep the draft, reveal Reddit's ---
+    installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c3"]'), { reply: true, composer: 'none' });
+    click(window, row('t1_c3').querySelector('a.reply'));
+    formOf('t1_c3').querySelector('textarea').value = 'This one will not get through.';
+    formOf('t1_c3').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a composer that never appears is reported as that step',
+      await waitFor(() => formOf('t1_c3')?.dataset.shdState === 'failed', { timeout: 2000 }) &&
+      formOf('t1_c3').dataset.shdStep === 'composer' &&
+      /did not open/.test(formOf('t1_c3').querySelector('.shd-reply-status').textContent),
+      formOf('t1_c3')?.querySelector('.shd-reply-status')?.textContent);
+    check('...the draft is kept', formOf('t1_c3').querySelector('textarea').value === 'This one will not get through.');
+    check('...and Reddit\'s own comment is revealed in place so the reader can finish there',
+      doc.documentElement.classList.contains('shd-passthrough-active') &&
+      doc.querySelector('shreddit-comment[thingid="t1_c3"]').classList.contains('shd-passthrough'));
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    check('coming back from the passthrough finds the draft still there',
+      !doc.documentElement.classList.contains('shd-passthrough-active') &&
+      formOf('t1_c3')?.querySelector('textarea').value === 'This one will not get through.');
+
+    // --- no reply control at all ---
+    click(window, row('t1_c4').querySelector('a.reply'));
+    formOf('t1_c4').querySelector('textarea').value = 'No control to click.';
+    formOf('t1_c4').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a missing reply control is the first step reported, and the same handoff',
+      await waitFor(() => formOf('t1_c4')?.dataset.shdState === 'failed', { timeout: 2000 }) &&
+      formOf('t1_c4').dataset.shdStep === 'reply-control' &&
+      doc.documentElement.classList.contains('shd-passthrough-active'));
+    window.SHD.dom.passthroughClear();
+
+    check('no console errors while replying',
+      logs.filter(l => l.startsWith('error') || l.startsWith('jsdomError')).length === 0, logs.join(' | '));
+  }
+  {
+    // A composer already open INSIDE A DESCENDANT must not be taken for this comment's:
+    // a comment's subtree holds its descendants (§1.4), composers included.
+    const depths = [0, 1, 2, 0, 1];
+    const page = commentsPage({ loggedIn: true }).replace(/<section>[\s\S]*?<\/section>/,
+      '<section>' + nestedCommentsHtml(depths) + '</section>');
+    const { doc, window } = await boot(page, COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const parent = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const child = doc.querySelector('shreddit-comment[thingid="t1_c1"]');
+    check('the fixture nests the child inside the parent', parent.contains(child));
+    const childState = { clicks: { submit: 0 }, received: [] };
+    mountComposer(doc, child, { composer: 'textarea' }, childState);     // already open, on the CHILD
+    const parentState = installNativeAccount(window, doc, parent, { reply: true, composer: 'textarea' });
+    click(window, doc.querySelector('#shd-root .thing[data-fullname="t1_c0"] a.reply'));
+    const form = doc.querySelector('#shd-root .thing[data-fullname="t1_c0"] > .entry > .shd-reply-form');
+    form.querySelector('textarea').value = 'For the parent.';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a composer open on a descendant is not reused — the parent\'s own reply control is clicked',
+      await waitFor(() => parentState.clicks.reply === 1, { timeout: 1000 }));
+    check('...and the text goes to the parent\'s composer, never the child\'s',
+      await waitFor(() => parentState.clicks.submit === 1, { timeout: 1500 }) &&
+      parentState.received[0] === 'For the parent.' && childState.received.length === 0 &&
+      childState.clicks.submit === 0, JSON.stringify({ parent: parentState.received, child: childState.received }));
+  }
+  {
+    // The top-level box: a comment on the post itself, through the page's own composer.
+    const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const box = doc.querySelector('#shd-root .shd-commentarea-head .shd-commentbox .shd-reply-form');
+    check('a logged-in thread carries a top-level comment box above the sort strip',
+      !!box && box.dataset.shdKind === 'post' &&
+      box.closest('.shd-commentarea-head').querySelector('.menuarea') !== null);
+    const state = { clicks: { submit: 0 }, received: [] };
+    mountComposer(doc, doc.querySelector('shreddit-post'), { composer: 'textarea', newId: 't1_new_top' }, state);
+    check('the page composer sits outside every comment', !doc.querySelector('comment-composer-host').closest('shreddit-comment'));
+    box.querySelector('textarea').value = 'A top-level comment.';
+    box.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('saving finds the page\'s composer without clicking anything to open it',
+      await waitFor(() => state.clicks.submit === 1, { timeout: 1500 }) && state.received[0] === 'A top-level comment.');
+    check('...the box clears once the comment arrives',
+      await waitFor(() => !doc.querySelector('.shd-commentbox .shd-reply-form'), { timeout: 1500 }));
+    // The pipeline renders on its own rAF, a beat after the form has seen the arrival.
+    const rendered = await waitFor(() => !!doc.querySelector('#shd-root .thing[data-fullname="t1_new_top"]'), { timeout: 1500 });
+    const posted = doc.querySelector('#shd-root .thing[data-fullname="t1_new_top"]');
+    check('...and the new comment renders at the top level',
+      rendered && posted.dataset.depth === '0' && posted.parentElement.classList.contains('nestedlisting'));
+  }
+
+  console.log('\n\x1b[1mPOSTING — THE SIDEBAR\'S DOORS TO REDDIT\'S COMPOSER\x1b[0m');
+  {
+    // Posting is the one of the three that is NOT delegated in place: the doors are real
+    // links onto Reddit's composer route, which route.js classifies OTHER and Sheddit
+    // leaves untouched (CONTRIBUTING: the composer is out of bounds).
+    const { doc, window } = await boot(listingPage({ loggedIn: true }), 'https://www.reddit.com/r/programming/', noAuto);
+    const link = doc.querySelector('#shd-sidebar .shd-submit a.shd-submit-link');
+    const text = doc.querySelector('#shd-sidebar .shd-submit a.shd-submit-text');
+    check('the sidebar offers old reddit\'s two submit buttons',
+      link?.textContent === 'Submit a new link' && text?.textContent === 'Submit a new text post');
+    check('...onto this subreddit\'s composer, typed',
+      link?.getAttribute('href') === '/r/programming/submit/?type=LINK' &&
+      text?.getAttribute('href') === '/r/programming/submit/?type=TEXT',
+      `${link?.getAttribute('href')} ${text?.getAttribute('href')}`);
+    check('...and both are routes Sheddit hands to Reddit untouched',
+      [link, text].every(a => window.SHD.route.classify(new URL(a.getAttribute('href'), 'https://www.reddit.com').pathname) === 'OTHER'));
+    const front = await boot(listingPage({ loggedIn: true }), 'https://www.reddit.com/', noAuto);
+    check('the front page\'s door is the site-wide composer, where Reddit asks which community',
+      front.doc.querySelector('.shd-submit a.shd-submit-link')?.getAttribute('href') === '/submit/?type=LINK');
+  }
+
+  console.log('\n\x1b[1mTHE ACCOUNT LAYER\'S WIRING\x1b[0m');
+  {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'));
+    const idle = manifest.content_scripts.filter(cs => cs.run_at === 'document_idle').flatMap(cs => cs.js || []);
+    const bundle = fs.readFileSync(path.join(__dirname, '..', 'build.js'), 'utf8').match(/'src\/[^']+\.js'/g).map(s => s.slice(1, -1));
+    for (const [name, list] of [['manifest', idle], ['dev bundle', bundle]]) {
+      check(`${name}: session.js and account.js load before the modules that build from them`,
+        list.indexOf('src/core/session.js') > -1 &&
+        list.indexOf('src/core/session.js') < list.indexOf('src/modules/account.js') &&
+        list.indexOf('src/modules/account.js') < list.indexOf('src/modules/listing.js') &&
+        list.indexOf('src/modules/account.js') < list.indexOf('src/modules/comments.js'),
+        JSON.stringify(list));
+    }
+    const vm = require('vm');
+    const ctx = vm.createContext({});
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'config', 'contracts.js'), 'utf8'), ctx, { filename: 'contracts.js' });
+    const C = ctx.SHD.C;
+    check('the session contract has an affirmative list and a veto list',
+      typeof C.SESSION?.loggedIn === 'string' && C.SESSION.loggedIn.length > 0 &&
+      typeof C.SESSION?.loggedOut === 'string' && /login/.test(C.SESSION.loggedOut));
+    check('the composer contract names a host, an editor and a submit',
+      ['host', 'editor', 'submit'].every(k => typeof C.COMPOSER?.[k] === 'string' && C.COMPOSER[k].length > 0));
+    check('the reply control and the vote state are contracts, not literals in account.js',
+      typeof C.NATIVE.reply === 'string' && typeof C.NATIVE.voteState === 'string');
+    const accountSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'account.js'), 'utf8') +
+      fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'session.js'), 'utf8');
+    const code = accountSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    check('neither new module names a Reddit element outside contracts.js',
+      !/shreddit-|faceplate-|comment-composer|user-drawer|aria-pressed/.test(code));
+    check('the account setting ships on, and the options page has its checkbox',
+      ctx.SHD.settings.account === true &&
+      /data-k="account"/.test(fs.readFileSync(path.join(__dirname, '..', 'options', 'options.html'), 'utf8')));
+  }
+
   console.log(`\n\x1b[1m${passed} passed, ${failed} failed\x1b[0m`);
   if (failed) { console.log('failures:\n  - ' + failures.join('\n  - ')); process.exit(1); }
   // Explicit: the paginator heartbeat is a setInterval that runs for a PAGE's lifetime,

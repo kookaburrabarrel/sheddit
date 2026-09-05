@@ -146,11 +146,13 @@ sheddit/
 │   │   ├── model.js            shreddit-* element → plain JS model object
 │   │   ├── media.js            DASH-manifest resolution + video/audio pairing (0.16–0.30)
 │   │   ├── update.js           build-age nudge + the click-only version check (0.29.0)
+│   │   ├── session.js          is the page a logged-in one? presence-based, C.SESSION (0.34.0)
 │   │   ├── oldreddit.js        the ONLY script on old.reddit.com — the hop to www (§5.2)
 │   │   └── dom.js              tiny h() builder, escaping, number/time formatting
 │   ├── modules/
 │   │   ├── listing.js          feed & subreddit → old-reddit link rows
 │   │   ├── comments.js         comment list → nested thread tree, via `depth` (§1.4)
+│   │   ├── account.js          vote / reply / submit for a logged-in page — all delegated (§5.3)
 │   │   └── chrome.js           header bar, update control, theme switcher, tab menu, sidebar
 │   └── styles/
 │       ├── suppress.css        hides native shreddit chrome (document_start)
@@ -265,6 +267,11 @@ Sheddit renders old-reddit vote arrows and links, but owns no auth state. Three 
    logged-out case. Whether a *logged-in* session exposes the control is still unchecked —
    `npm run verify:live -- --headed`, signed in, would answer that if it ever matters.
 
+   **Since 0.34.0 it matters, and the tier is live code again** — see §5.3. The finding
+   above is unchanged for the logged-out reader (no control, decorative arrows, silent);
+   what changed is that a logged-in page is now expected to expose the control, and a miss
+   there is reported once with the evidence, because there it means the contract is stale.
+
 3. **Deferred to native** (reply box, mod tools) — Sheddit does not reimplement these. Clicking
    "reply" un-hides the native composer in place, via `SHD.dom.passthrough()`.
 
@@ -280,6 +287,72 @@ Sheddit renders old-reddit vote arrows and links, but owns no auth state. Three 
    than trying to override it — and `display: none`s every sibling along the path. Only
    the corridor down to the target survives. `#shd-root` hides for the duration and a
    fixed "← back to sheddit" control reverses it. Route changes and bails unwind it.
+
+### 5.3 The account layer (0.34.0) — the delegation tier, extended to the reply box
+
+`src/core/session.js` and `src/modules/account.js`. For a reader who is *already* logged in
+to Reddit, three things and no more: vote, reply, post. The architectural claim is that none
+of them needs a fourth tier. Everything is still tier 2 (a click forwarded to Reddit's own
+control) or tier 1 (a real link), and the extension's network surface stays at zero.
+
+**Who it is on for.** `SHD.session.active()` is the single gate: the reader's setting
+(`account`) AND a page that *affirmatively* reads as logged in. `C.SESSION.loggedIn` is a
+list of presence signals (the avatar button that opens Reddit's user drawer, and the
+attribute `shreddit-app` is believed to carry); `C.SESSION.loggedOut` is a veto (Reddit's
+own *Log In* control, which live captures have shown). No signal either way is logged out.
+This is deliberately asymmetric: an absence-based test switches the layer on for the
+primary, logged-out reader the day Reddit moves a button, and a reply box that cannot post
+is worse than none; a wrong contract the other way costs a logged-in reader a feature they
+can still reach through Reddit's controls. **Every entry is a candidate as of 0.34.0** —
+the settle is one signed-in `verify:live -- --headed` run (its LOGGED-IN SESSION section
+reports which clauses match), which needs a desk, not a container.
+
+**Vote** trusts the control, not the detector. A click resolves `C.NATIVE.upvote/downvote`
+from the hidden source at click time (the bar hydrates late, §1.3) and forwards if found —
+logged in or not, because the button's presence is Reddit's own statement that the session
+can use it. The detector only decides what a *miss* means: logged in, warn once with the
+evidence; logged out, nothing (§7d's documented state). The state is mirrored back in old
+reddit's classes (`likes`/`dislikes`, `upmod`/`downmod`) from Reddit's button
+(`aria-pressed`, `C.NATIVE.voteState`) when it exposes one — read after the click, now and
+again after `settleMs`, so the page's answer beats our optimistic guess and a refused vote
+goes dark — and kept on a local toggle when it does not. The displayed score is
+`delivered + (state − initial)`, `initial` being the first native state seen, because
+Reddit's `score` attribute already counts the reader's standing vote. Comments get the
+same column (arrows only; their score lives in the tagline), where before 0.34.0 the
+arrows were inert markup.
+
+**Reply** drives Reddit's composer instead of reimplementing it. `compose(target, text,
+kind)` is the protocol, every step through `C.COMPOSER` / `C.NATIVE.reply` and each one
+measured:
+
+1. a composer already open *for this target* — scoped by `closest(COMMENT) === target`,
+   because a comment's subtree holds its descendants' composers exactly as it holds their
+   bodies (§1.4); for the post, any composer not inside a comment;
+2. failing that, click Reddit's reply control and wait for one to mount (a snapshot taken
+   before the click keeps an unrelated open composer from being mistaken for ours);
+3. find the editor — a `<textarea>` (markdown mode) is a value and an `input` event; a
+   contenteditable is fed through `document.execCommand('insertText')` so the page's
+   rich-text editor sees a real `beforeinput`/`input`, with a direct text set as the
+   fallback — and *check the text landed* before going on;
+4. click Reddit's submit;
+5. wait for the outcome: a new `shreddit-comment` under the target (Reddit's optimistic
+   insert, which the pipeline then renders nested where Reddit put it), or Reddit's
+   composer emptied or gone.
+
+Every miss returns the step it missed and has one floor: the box stays with the draft, the
+status names the step, and Reddit's own composer is revealed in place (passthrough, §5
+tier 3) so the reader finishes there. The reply is never discarded on a failure.
+
+**Post** is a link. Old reddit's *Submit a new link / text post* sidebar doors onto
+`C.SUBMIT`'s route, which `route.js` classifies `OTHER` and the gate never suppresses — the
+composer is a whole page with its own rules and one of the routes CONTRIBUTING says to leave
+untouched. Reddit navigates to the new post when it is done, and the renderer picks that
+page up.
+
+**What the isolated world allows here.** Clicking, focusing, setting a textarea's value,
+`execCommand`, dispatching an `InputEvent`: all DOM, all shared with the page (§5.0), so no
+bridge extension was needed. If Reddit's editor ever needs a *method* called on it, that is
+a bridge job, and the composer selector would travel as data the way the partial's does.
 
 ### 5.0 The isolated world — the constraint that outranks the rest
 
@@ -748,17 +821,20 @@ settled decision.
 
 ## 8. Deliberate v1 scope
 
-**Logged-out reading is the target.** Everything auth-gated is out, and that is a
-narrowing of §5's three tiers rather than a contradiction of them: tier 1 (navigation) is
-the product, tier 2 (delegation) is retained but unsupported, tier 3 (native handoff)
-exists so the reply path is not a dead end.
+**Logged-out reading is the target.** Everything auth-gated is out *for a logged-out page*,
+and that is a narrowing of §5's three tiers rather than a contradiction of them: tier 1
+(navigation) is the product, tier 2 (delegation) is retained for the logged-in page (§5.3,
+since 0.34.0: vote and reply; before that retained but unsupported), tier 3 (native handoff)
+exists so the reply path is not a dead end and is the floor every delegated action falls to.
 
 Concretely, nothing that requires a session is rendered. `save` and `report` were removed —
 they shipped as `href: permalink`, so they looked like actions and navigated instead, and
 old reddit did not show them to logged-out users either.
 
-**In:** home feed, `/r/*` listings, comment pages, header + tab bar, right sidebar.
-**Out:** search results, user profiles, modmail, chat, the post composer, voting.
+**In:** home feed, `/r/*` listings, comment pages, header + tab bar, right sidebar; and on
+a logged-in page, voting, replying and the doors to the composer (§5.3).
+**Out:** search results, modmail, chat, the post composer itself, everything else
+auth-gated (save, report, moderation). User profiles moved in on 2026-08-21.
 Out-of-scope routes fall through to native Reddit untouched — `route.js` returns `OTHER`
 and `gate.js` never suppresses.
 

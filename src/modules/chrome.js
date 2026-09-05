@@ -26,6 +26,10 @@ SHD.chrome = (() => {
           sub ? h('li.selected', null, h('a', { href: `/r/${sub}/`, text: `r/${sub}` })) : null,
           user ? h('li.selected', null, h('a', { href: `/user/${user}/`, text: `u/${user}` })) : null
         ]),
+        /* Old reddit's header ended in the account corner. Ours says one word there when
+           the account layer is on, so a reader knows the arrows are live without voting
+           to find out; null for everyone else. */
+        SHD.account.headerStatus(),
         themeBar()
       ])
     );
@@ -258,7 +262,11 @@ SHD.chrome = (() => {
           h('div.titlebox', null, [
             h('h1.redditname', null, h('a', title)),
             h('div.shd-note', { text: 'Rendered locally from page data. No API calls.' })
-          ])
+          ]),
+          /* Old reddit's two submit buttons, under the title box. Only for a logged-in
+             reader with the account layer on (account.js decides); a profile page gets
+             the front page's door, which is where Reddit asks which community. */
+          SHD.account.submitBox(sub)
         ])
       ]);
     if (tabbar) tabbar.after(rail);

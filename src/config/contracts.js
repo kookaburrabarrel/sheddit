@@ -249,11 +249,32 @@ SHD.C = {
    */
   POST_BODY: '[slot="text-body"]',
 
+  /* The element Reddit hydrates a post's action bar into — the place the vote buttons
+     appear, late (ARCHITECTURE §1.3), and the one named in the miss report so a reader
+     can say whether the bar was there at all when a delegated click found nothing. */
+  ASYNC_LOADER: 'shreddit-async-loader',
   /* Native controls we delegate clicks to. Resolved AT CLICK TIME — the action bar
      lives inside a shreddit-async-loader and is not present at first paint. */
   NATIVE: {
     upvote: 'button[upvote], button[aria-label*="upvote" i]',
     downvote: 'button[downvote], button[aria-label*="downvote" i]',
+    /* The attribute Reddit's vote buttons carry to say which way the reader has voted —
+       `aria-pressed="true"` on the active arrow. CANDIDATE (see SESSION below for what
+       that word means here): the attribute is the standard toggle-button state and the
+       obvious one for a control that is a toggle, but nothing has read it live yet. Read
+       for MIRRORING only, never for deciding whether to vote: a button that lacks it
+       leaves our arrows on their own local toggle, which is the pre-0.34.0 behaviour
+       plus colour. */
+    voteState: 'aria-pressed',
+    /* The per-comment "Reply" control, for opening Reddit's own composer on a logged-in
+       session (account.js). CANDIDATE. Reddit's action row is a custom element with an
+       open shadow root, so this is resolved with deepQuery like the vote buttons are;
+       the aria-label clause is the fallback for an attribute rename, and a miss is
+       fail-safe — the reply hands off to the native comment via passthrough, exactly as
+       every version before 0.34.0 did. */
+    reply: 'button[data-post-click-location="comment-reply"], ' +
+           'shreddit-comment-action-row button[aria-label*="reply" i], ' +
+           'button[name="reply"], button[aria-label*="reply" i]',
     overflow: 'shreddit-post-overflow-menu',
     textBody: 'shreddit-post-text-body',
     titleLink: 'a[slot="title"]',
@@ -463,6 +484,78 @@ SHD.C = {
     nodes: '#desktop-dynamic-upsell-dialog, desktop-dynamic-upsell-modal'
   },
 
+  /* ---------- the account layer (0.34.0) ---------- */
+  /**
+   * Is the reader logged in to Reddit? Two selector LISTS, and the decision is:
+   *
+   *     logged in  =  something in `loggedIn` matches  AND  nothing in `loggedOut` does
+   *
+   * Presence-based on purpose. An absence-based test ("no login link, so logged in")
+   * turns the account layer ON for the primary, logged-out reader the moment Reddit
+   * moves its login button — which is the one direction of error this must never take.
+   * A wrong guess here therefore costs the FEATURE (a logged-in reader gets 0.33.0's
+   * behaviour, with the native controls still one passthrough away), never the page,
+   * and never a logged-out reader's experience.
+   *
+   * EVERY ENTRY IS A CANDIDATE, unverified live. This is the honest state of the account
+   * layer as it ships: this project's rule is measure-before-conclude, and the one
+   * measurement that settles these — a signed-in run of `npm run verify:live -- --headed`,
+   * whose LOGGED-IN SESSION section reports which of these match — cannot be made from a
+   * container (Reddit answers datacenter IPs with a bot-mitigation shim) and has not yet
+   * been made from a desk. The candidates are the shapes a logged-in shreddit header is
+   * known to carry from ordinary use: the avatar button that opens the user drawer, the
+   * drawer app itself, and the attribute shreddit-app is believed to carry. The
+   * logged-out veto is the header's own login button, which live captures HAVE shown
+   * (a `faceplate-tracker[noun="login"]` wrapping an anchor onto /login).
+   *
+   * When that run happens, delete what did not match and keep what did. Do not add an
+   * absence-based clause to make it "work" — see above.
+   */
+  SESSION: {
+    loggedIn: 'shreddit-app[user-logged-in="true"], #expand-user-drawer-button, ' +
+              'user-drawer-app, reddit-header-large [id*="user-drawer" i]',
+    loggedOut: 'reddit-header-large a[href*="/login"], faceplate-tracker[noun="login"]'
+  },
+
+  /**
+   * Reddit's own comment composer, which account.js DRIVES rather than replaces: the
+   * reader types into an old-reddit reply box of ours, and on save the text is handed to
+   * Reddit's editor and Reddit's submit button is clicked. Reddit's code then owns the
+   * request, the auth, the error handling and the optimistic insert — exactly the
+   * division vote delegation has always had (ARCHITECTURE §5), and the reason the
+   * extension still makes no request of its own.
+   *
+   * CANDIDATES, all three, resolved with deepQuery. `host` is the element Reddit mounts
+   * the editor in; `editor` is the surface that takes text — a <textarea> in markdown
+   * mode, a contenteditable in the default rich-text mode, in that preference order
+   * because a textarea's value is a plain assignment while a contenteditable needs the
+   * page's editor to see an input event; `submit` is the button that posts it. Each miss
+   * has the same fail-safe: the native composer is revealed in place (passthrough) with
+   * whatever text did land, and the reader finishes in Reddit's UI. account.js's
+   * `compose()` measures the outcome — a new comment element arriving under the target —
+   * rather than assuming the click worked (the "N more replies" lesson, log bug 90).
+   */
+  COMPOSER: {
+    host: 'comment-composer-host, shreddit-composer, shreddit-async-loader[bundlename*="composer" i], ' +
+          'faceplate-form[action*="comment" i]',
+    editor: 'textarea, [contenteditable="true"], [contenteditable=""]',
+    submit: 'button[type="submit"], [slot="submit-button"], button[slot*="submit" i]'
+  },
+
+  /**
+   * Where a new post is written: Reddit's own composer, on its own route, which Sheddit
+   * never renders (route.js classifies it OTHER and the gate never suppresses it — it is
+   * one of the routes CONTRIBUTING says to leave completely untouched). Old reddit's
+   * sidebar offered the two doors to it, "Submit a new link" and "Submit a new text
+   * post", and that is what the account layer offers: a link onto this path, with the
+   * type Reddit's composer reads from the query. The values are Reddit's; `/submit` with
+   * no subreddit is the front page's, where Reddit asks which community.
+   */
+  SUBMIT: {
+    path: 'submit',
+    types: { link: 'LINK', text: 'TEXT' }
+  },
+
   /* ---------- our own markers ---------- */
   MARK: 'data-shd',                  // stamped "done" on consumed source elements
   ROOT_ID: 'shd-root',
@@ -517,6 +610,19 @@ SHD.settings = {
      rather than being handed 500 lines of selectors for a page it is leaving. test/run.js
      asserts the two agree — the arrangement bridge.js has with BRIDGE. */
   redirectOldReddit: true,
+  /* The account layer: vote arrows that register, an old-reddit reply box, and the
+     sidebar's "submit" buttons — for a reader who is ALREADY logged in to Reddit. On by
+     default because it does nothing at all for a logged-out reader (SHD.session decides,
+     and every one of its signals is presence-based, so the primary use case is untouched
+     by construction), and because a logged-in reader who installed an old-reddit skin
+     expects old reddit's arrows to work. Off here and a logged-in session reads exactly
+     as 0.33.0 did: arrows decorative, `reply` a handoff to Reddit's own comment.
+
+     Nothing in this layer makes a request of Sheddit's own, logged in or out. Every action
+     is a click forwarded to the control Reddit rendered for the same purpose, and text
+     handed to Reddit's own editor; Reddit's page code makes the request it would have made
+     had the reader used Reddit's button — see PRIVACY.md. */
+  account: true,
   /* Which palette to paint in. The ids live in src/config/themes.js, which also owns the
      fallback: anything not on that list resolves to 'classic'. This is the one setting
      that is not a boolean, and the only one a page can change by itself — the header's

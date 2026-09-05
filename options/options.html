@@ -44,6 +44,8 @@
 <label><input type="checkbox" data-k="inlineImages"> Show images inline, with an expando on rows</label>
 <label><input type="checkbox" data-k="redirectOldReddit"> Send old.reddit.com links to
   www.reddit.com <span class="hint">(where Sheddit works)</span></label>
+<label><input type="checkbox" data-k="account"> Use my Reddit account when I am logged in
+  <span class="hint">(vote, reply, post)</span></label>
 
 <p class="note">
   “Show adult-content pictures” covers thumbnails, the [+] expando and full-size images
@@ -71,9 +73,18 @@
 </p>
 
 <p class="note">
+  “Use my Reddit account” does nothing unless you are already logged in to Reddit in this browser.
+  When you are, the vote arrows register, a “reply” opens an old-reddit reply box, and the
+  sidebar gets “submit a new link / text post”. Every one of those goes through Reddit’s
+  own controls on the page — Sheddit still makes no request of its own, never sees your
+  login, and never acts without a click from you. Turn it off to read with your account
+  and have Sheddit behave exactly as it does logged out.
+</p>
+
+<p class="note">
   old.reddit.com no longer serves a logged-out reader: every page there answers with a
-  login wall, which looks exactly like Sheddit failing. With the last option on, those
-  links go to www.reddit.com instead — the same page, in the same layout — behind a short
+  login wall, which looks exactly like Sheddit failing. With “Send old.reddit.com links to
+  www.reddit.com” on, those links go there instead — the same page, in the same layout — behind a short
   notice saying so. Turn it off if you log in to old reddit and would rather it were left
   alone.
 </p>

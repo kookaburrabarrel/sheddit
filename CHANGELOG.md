@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.33.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.34.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -13,6 +13,90 @@ Entries lead with what changed for a *user* where there is such a thing, and not
 underlying cause where that is the more useful fact. Several entries describe bugs that
 existed from the first commit and were only found once a test could see them — those are
 marked **never worked**, because "fixed" would imply it once did.
+
+---
+
+## 0.34.0
+
+### Added — voting, replying and posting, for a reader who is already logged in
+
+The first cut of a logged-in version, by request, and deliberately no wider than the three
+things asked for: **vote**, **reply**, **post**. Sheddit's identity does not move — it still
+never logs in, never calls the API, never reads a cookie, and a logged-out reader's page is
+asserted to be exactly 0.33.0's. What changes is for a reader who is *already* logged in to
+Reddit in this browser, because old reddit's arrows should register for them, and until now
+they were decoration.
+
+**Vote.** The arrows on a post row *and* on a comment (which had no handler at all before)
+forward a click to Reddit's own vote button for that item, resolved at click time from the
+hidden native element — the delegation tier ARCHITECTURE §5 has always described, now with
+the state mirrored back. The lit arrow and the score take the vote's colour, the score
+moves with the vote, clicking the lit arrow un-votes, and a post you had already voted on
+comes up lit once Reddit's bar hydrates. Where Reddit's button says which way you voted
+(`aria-pressed`), that answer wins over our optimistic guess, so a vote Reddit refuses goes
+dark again; where it exposes no state, the arrows keep their own toggle and never
+contradict the page. A hidden comment score stays *score hidden*.
+
+**Reply.** `reply` on a comment opens an old-reddit reply box under it — a textarea, *save*
+and *cancel* — and a thread carries a top-level comment box above the sort strip. *Save*
+does not build a request: it clicks Reddit's own reply control for that comment, waits for
+Reddit's composer to mount, puts your text into Reddit's editor (a textarea in markdown
+mode; a rich-text field otherwise, fed through the browser's own editing command so the
+editor sees a real input), and clicks Reddit's submit. Then it **measures** the outcome —
+the new comment arriving under its parent — rather than assuming the click worked, which is
+the lesson of the *N more replies* control (log bug 90). Reddit's own code owns the auth,
+the request and the error handling; the pipeline renders the comment Reddit inserts, nested
+where Reddit put it. Every step that can miss has the same floor: the box **stays, with
+your draft**, the status line names the step that failed, and Reddit's own composer is
+revealed in place so you can finish there and come back.
+
+**Post.** Old reddit's two sidebar doors — *Submit a new link* and *Submit a new text post*
+— onto Reddit's composer for the current community (or the site-wide one on the front
+page), with the type in the query. Posting is the one of the three that is *not* delegated
+in place: the composer is a whole page with its own rules, it is one of the routes
+CONTRIBUTING says to leave completely untouched, and it still is — Sheddit hands it to
+Reddit and picks the page back up on the post that results.
+
+**Who it is on for.** `SHD.session` reads the page for a logged-in header — the avatar
+button that opens the user drawer — and requires an *affirmative* signal: with no signal
+either way the answer is logged out, and Reddit's own *Log In* button vetoes. That
+asymmetry is the load-bearing decision. An absence-based test ("no login button, so logged
+in") would switch this layer on for the primary, logged-out reader the day Reddit moved a
+button, and a broken reply box is worse than none; a wrong contract the other way costs a
+logged-in reader a feature they can still reach through Reddit's own controls. A new
+setting, *Use my Reddit account when I am logged in*, on by default, turns the whole layer
+off for a reader who would rather read with their account and have Sheddit behave as it
+does logged out. The header says *logged in* when the layer is on, so nobody has to vote to
+find out.
+
+**What is unverified, stated plainly.** Every one of the new contracts — the logged-in
+header signals, the per-comment reply control, the composer's host, editor and submit, and
+the vote-state attribute — is a candidate shaped from ordinary use of the site and driven
+end to end only against fixtures that model it. The measurement that settles them is one
+signed-in run of `npm run verify:live -- --headed`, whose new **LOGGED-IN SESSION** section
+reports which signals match, whether the reply control and composer are reachable and what
+the vote buttons expose. It cannot be made from a container (Reddit answers datacenter IPs
+with a bot shim) and has not yet been made from a desk. Until it has, the honest description
+is: designed to fail towards Reddit's own controls, and asserted to do so. A report of what
+a signed-in page actually did is the most useful thing a reader can send.
+
+**Tests.** Eighty-three new assertions across six sections in `test/run.js`, driving the layer
+through a modelled logged-in Reddit (vote buttons carrying `aria-pressed` and a reply control
+in an open shadow root, a composer that mounts on click and inserts the posted comment); the
+logged-out sections assert nothing new appears. Twenty-one new mutation rows, each watched go
+red. Voting on a comment, a standing vote, a bar that exposes no state, a refused vote, a
+hidden score, both editor kinds, a composer that never opens, a missing reply control, a
+composer already open on a *descendant* (a comment's subtree holds its descendants'
+composers — §1.4 for composers), the top-level box, both submit doors classifying as routes
+Sheddit hands off.
+
+### Changed — the scope statement
+
+CONTRIBUTING's *Scope* said voting was deliberately not a supported feature, which was true
+and is not any more. It now says what is: logged-out reading is still the target and the
+thing every fixture defaults to; nothing that needs a session may render for a logged-out
+reader; and anything auth-gated that does render is a click forwarded to Reddit's own
+control, never a request of ours. The composer route stays out of bounds.
 
 ---
 

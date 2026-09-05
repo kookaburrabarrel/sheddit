@@ -120,6 +120,9 @@ trust a green sweep, know the three ways a row can look like proof while proving
 - Touching an unhandled route. Search, modmail, chat and the post composer must be left
   *completely* untouched — deleting an element counts as touching it
 - Anything that makes a network request of its own. There are none, and that is a feature
+  — the account layer included: it clicks Reddit's buttons, it does not call Reddit
+- An account-layer affordance that shows for a logged-out reader, or a session check that
+  is absence-based (see *Scope*)
 - A version number in a commit subject. GitHub prints that subject beside every file the
   commit last touched, so a version there outlives its release and reads as the current
   one — the root commit's is still printed against `LICENSE` and the icons. The body is
@@ -142,12 +145,25 @@ revocable, which is what the options page's access warning exists for.
 
 ## Scope
 
-Sheddit is built for **logged-out reading**. Please don't add affordances that need a
-session — `save` and `report` were removed for exactly this reason. Voting is deliberately
-not a supported feature.
+Sheddit is built for **logged-out reading**, and that is still the default every fixture
+boots into. Since 0.34.0 there is also an **account layer** (`src/core/session.js`,
+`src/modules/account.js`) for a reader who is *already* logged in: vote, reply, and the
+sidebar's doors to the composer. Three rules keep the two from bleeding into each other:
 
-**In scope:** the home feed, `/r/*` listings, comment pages, user profiles, and the chrome
-around them. **Out for now:** search, modmail, chat, the composer, anything auth-gated.
+- **Nothing that needs a session may render for a logged-out reader.** The layer is on only
+  when `SHD.session.active()` says so, and that answer requires an *affirmative* logged-in
+  signal (`C.SESSION`) — never "no login button, therefore logged in". `save` and `report`
+  were removed in the logged-out era for shipping as links that navigated; if they come
+  back, they come back behind that same check.
+- **Anything auth-gated that does render is a click forwarded to Reddit's own control**, or
+  text handed to Reddit's own editor. No request of ours, no token, no cookie — the
+  delegation tier of ARCHITECTURE §5, and nothing else.
+- **The composer route stays untouched.** Posting is a link onto it.
+
+**In scope:** the home feed, `/r/*` listings, comment pages, user profiles, the chrome
+around them, and — for a logged-in page — voting, replying and the way to the composer.
+**Out for now:** search, modmail, chat, the composer itself, everything else auth-gated
+(save, hide-on-the-server, moderation).
 
 ## Reporting a bug
 

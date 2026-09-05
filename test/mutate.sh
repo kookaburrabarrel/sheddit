@@ -1772,6 +1772,112 @@ mutate "the README's stated version drifts from the manifest" run \
   manifest.json '  "icons": {' '  "version": "9.9.9",
   "icons": {'
 
+# ---------------------------------------------------------------- the account layer ----
+# 0.34.0. The layer is ON only for a page that affirmatively reads as logged in, and every
+# action is a click on Reddit's own control. Each row below is one of the ways that story
+# quietly stops being true.
+
+# The one direction of error the detector must never take: with no affirmative signal
+# required, every logged-out fixture (an EMPTY header) reads as logged in and the layer
+# switches on for the primary reader.
+mutate "session detection becomes absence-based (no login button = logged in)" run \
+  src/core/session.js 'loggedIn: matched.length > 0 && vetoed.length === 0' 'loggedIn: vetoed.length === 0'
+
+mutate "the login button no longer vetoes a logged-in signal" run \
+  src/core/session.js 'loggedIn: matched.length > 0 && vetoed.length === 0' 'loggedIn: matched.length > 0'
+
+mutate "the account setting is ignored" run \
+  src/core/session.js 'function active() { return !!SHD.settings?.account && loggedIn(); }' \
+                      'function active() { return loggedIn(); }'
+
+mutate "vote arrows stop forwarding to Reddit's button" run \
+  src/modules/account.js '    native.click();
+    // Optimistic' '    // Optimistic'
+
+mutate "clicking the lit arrow no longer un-votes" run \
+  src/modules/account.js 'paint(col, m, kind, before === dir ? 0 : dir);' 'paint(col, m, kind, dir);'
+
+# Our guess is corrected by the page's answer; without the read-back a vote Reddit refused
+# stays lit.
+mutate "the page's own vote state is no longer read back after a click" run \
+  src/modules/account.js '    const s = nativeState(btns);
+    if (s !== null) paint(col, m, kind, s);
+  }' '  }'
+
+mutate "the score no longer discounts the reader's standing vote" run \
+  src/modules/account.js 'const n = m.score + (state - initial);' 'const n = m.score + state;'
+
+# Logged out the control is KNOWN not to exist (ARCHITECTURE §7d); a warning there is
+# noise about a settled decision, and the row that removed the guard reintroduces it.
+mutate "a missing vote control is reported on a logged-out session too" run \
+  src/modules/account.js 'if (missWarned || !active()) return;' 'if (missWarned) return;'
+
+mutate "reply ignores the session and always opens our box" run \
+  src/modules/account.js '  function reply(m, thing) {
+    if (!active()) {' '  function reply(m, thing) {
+    if (false) {'
+
+mutate "reply ignores the session and always hands off" run \
+  src/modules/account.js '  function reply(m, thing) {
+    if (!active()) {' '  function reply(m, thing) {
+    if (true) {'
+
+# A comment's subtree holds its descendants' composers (§1.4 for composers): unscoped, a
+# reply to the parent types into the child's open box.
+mutate "a composer open on a descendant is taken for this comment's" run \
+  src/modules/account.js '? target.contains(el) && el.closest(C.COMMENT) === target' '? target.contains(el)'
+
+mutate "the reply text never reaches Reddit's editor" run \
+  src/modules/account.js '        editor.value = text;
+        editor.dispatchEvent' '        editor.dispatchEvent'
+
+mutate "Reddit's submit button is never clicked" run \
+  src/modules/account.js '    const count = commentsUnder(target, kind);
+    submit.click();' '    const count = commentsUnder(target, kind);'
+
+mutate "a failed reply discards the draft" run \
+  src/modules/account.js "      save.disabled = false;
+      form.dataset.shdState = 'failed';" "      save.disabled = false;
+      form.dataset.shdState = 'failed';
+      ta.value = '';"
+
+mutate "a failed reply no longer reveals Reddit's composer" run \
+  src/modules/account.js "      if (reveal && SHD.dom.passthrough(reveal)) reveal.scrollIntoView?.({ block: 'center' });" ''
+
+mutate "the top-level comment box is dropped" run \
+  src/modules/account.js '  function commentBox(m) {
+    if (!active()) return null;' '  function commentBox(m) {
+    if (true) return null;'
+
+mutate "the submit doors lose the type Reddit's composer reads" run \
+  src/modules/account.js "h('a.morelink.shd-submit-link', { href: \`\${base}?type=\${C.SUBMIT.types.link}\`" \
+                         "h('a.morelink.shd-submit-link', { href: base"
+
+mutate "the submit doors open for a logged-out reader" run \
+  src/modules/account.js '  function submitBox(sub) {
+    if (!active()) return null;' '  function submitBox(sub) {'
+
+mutate "the header stops saying the layer is on" run \
+  src/modules/account.js '  function headerStatus() {
+    if (!active()) return null;' '  function headerStatus() {
+    return null;'
+
+# The action bar's tag was a literal in the miss report (copied from listing.js, where it
+# had sat since the first version). Every Reddit name lives in contracts.js — the one rule
+# CONTRIBUTING says will get a change sent back.
+mutate "a Reddit tag name creeps back into account.js" run \
+  src/modules/account.js 'const loader = m.source.querySelector(C.ASYNC_LOADER);' \
+                         "const loader = m.source.querySelector('shreddit-async-loader');"
+
+# account.js is what listing.js and comments.js build their vote columns from; the manifest
+# order is the only thing that says it is defined first in the installed extension.
+mutate "account.js is delivered after the modules built from it" run \
+  manifest.json '        "src/core/session.js",
+        "src/modules/account.js",
+        "src/modules/listing.js",' '        "src/modules/listing.js",
+        "src/core/session.js",
+        "src/modules/account.js",'
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it
