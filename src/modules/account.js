@@ -210,9 +210,14 @@ SHD.account = (() => {
    * composer that was already open elsewhere is never mistaken for the one we asked for.
    */
   function findHost(target, kind, except = new Set()) {
-    const all = [...document.querySelectorAll(C.COMPOSER.host)];
+    /* The post's composer is looked for inside the page's main column, not the whole
+       document: the host list has a broad fallback clause, and a form elsewhere on the page
+       whose action happens to mention comments must not become where the reader's comment
+       goes (security review, 2026-09-05). */
+    const scope = kind === 'comment' ? target : (document.querySelector(C.MAIN) || document);
+    const all = [...scope.querySelectorAll(C.COMPOSER.host)];
     const mine = all.filter(el => !except.has(el) && (kind === 'comment'
-      ? target.contains(el) && el.closest(C.COMMENT) === target
+      ? el.closest(C.COMMENT) === target
       : !el.closest(C.COMMENT)));
     return mine[0] || null;
   }

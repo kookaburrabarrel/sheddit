@@ -5,8 +5,9 @@
  * NOT part of `npm test`: it needs the network, and Reddit serves an anti-bot
  * interstitial to datacenter IPs, so it only works from an ordinary machine.
  *
- *   npm run verify:live              # logged out, headless
- *   npm run verify:live -- --headed  # watch it, and/or log in first
+ *   npm run verify:live                       # logged out, headless
+ *   npm run verify:live -- --headed           # watch it
+ *   npm run verify:live -- --headed --login   # SIGN IN first — the run the account layer needs
  *
  * WHY THIS EXISTS
  * Every other suite runs against synthetic fixtures. TESTING.md is explicit about the
@@ -34,6 +35,16 @@ const puppeteer = require('puppeteer');
 const { resolveChrome, noChromeMessage, makeChecker } = require('./harness');
 
 const HEADED = process.argv.includes('--headed');
+/* --login: the signed-in run 0.34.0's account layer waits on. Puppeteer opens a FRESH
+   profile, so `--headed` alone is always a logged-out session — nobody could have run the
+   LOGGED-IN SESSION section from the instructions as they stood, and the first attempt
+   (2026-09-05) reported the vote control NOT FOUND for exactly that reason. With --login
+   the browser keeps a profile under dist/live-profile/ (gitignored with the rest of dist),
+   opens Reddit's login page first, and waits for you: press Enter in the terminal once you
+   are signed in, or it continues by itself when a C.SESSION signal appears — whichever is
+   first, up to five minutes. Sign in once; the next --login run is already signed in. */
+const LOGIN = process.argv.includes('--login');
+const PROFILE_DIR = path.join(__dirname, '..', 'dist', 'live-profile');
 const SUB = (process.argv.find(a => a.startsWith('--sub=')) || '--sub=programming').split('=')[1];
 
 /* A malformed flag must FAIL, not silently mean "the default". A live run typed
@@ -42,11 +53,11 @@ const SUB = (process.argv.find(a => a.startsWith('--sub=')) || '--sub=programmin
    the run lost to a typo that nothing reported. These runs need a human and a residential
    connection, so a wasted one costs a person's time, not CI minutes. */
 {
-  const KNOWN = [/^--sub=.+$/, /^--user=.+$/, /^--headed$/];
+  const KNOWN = [/^--sub=.+$/, /^--user=.+$/, /^--headed$/, /^--login$/];
   const bad = process.argv.slice(2).filter(a => a.startsWith('-') && !KNOWN.some(r => r.test(a)));
   if (bad.length) {
     console.error(`\n  unrecognised option(s): ${bad.join(', ')}` +
-      '\n  known options: --sub=<subreddit>   --user=<name>   --headed' +
+      '\n  known options: --sub=<subreddit>   --user=<name>   --headed   --login' +
       '\n  (the likely slip: --sub-aww for --sub=aww)\n');
     process.exit(1);
   }
@@ -69,9 +80,17 @@ const { check, report } = makeChecker();
 const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.js'), 'utf8');
 
 (async () => {
+  if (LOGIN && !HEADED) {
+    console.error('\n  --login needs --headed: you have to be able to see the login page to sign in on it.\n');
+    process.exit(1);
+  }
   const browser = await puppeteer.launch({
     executablePath: EXE,
     headless: !HEADED,
+    // A persistent profile ONLY when asked to sign in: the ordinary run stays what it has
+    // always been, one anonymous fresh profile, so its findings keep describing the
+    // logged-out reader.
+    ...(LOGIN ? { userDataDir: PROFILE_DIR } : {}),
     args: [
       '--no-sandbox', '--disable-dev-shm-usage',
       // A single, well-known Chrome flag (not a stealth plugin) that turns off the
@@ -87,6 +106,35 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   await page.setUserAgent(
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
     '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
+
+  /* ---------------- sign in first, if asked ---------------- */
+  if (LOGIN) {
+    console.log('\n\x1b[1mSIGN IN\x1b[0m');
+    try {
+      await page.goto('https://www.reddit.com/login/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    } catch (e) {
+      console.log(`  \x1b[33mNOTE\x1b[0m could not open the login page (${String(e).split('\n')[0]}) — ` +
+                  'sign in on whatever the window shows, then press Enter here.');
+    }
+    console.log('  sign in to Reddit in the browser window, then press Enter in this terminal.');
+    console.log('  \x1b[2m(the run also continues by itself once the page carries a C.SESSION.loggedIn ' +
+                'signal, and gives up waiting after five minutes; the profile is kept in ' +
+                path.relative(process.cwd(), PROFILE_DIR) + ' so the next --login run is already signed in)\x1b[0m');
+    const deadline = Date.now() + 5 * 60 * 1000;
+    await new Promise((resolve) => {
+      let done = false;
+      const finish = (how) => { if (done) return; done = true; clearInterval(poll); process.stdin.pause(); console.log(`  continuing: ${how}`); resolve(); };
+      process.stdin.resume();
+      process.stdin.once('data', () => finish('Enter pressed'));
+      const poll = setInterval(async () => {
+        if (Date.now() > deadline) return finish('five minutes passed — running whatever the session now is');
+        try {
+          const hit = await page.evaluate((sel) => !!document.querySelector(sel), C.SESSION.loggedIn);
+          if (hit) finish('a logged-in signal appeared on the page');
+        } catch { /* mid-navigation — try again next tick */ }
+      }, 1000);
+    });
+  }
 
   /* ---------------- listing ---------------- */
   console.log(`\n\x1b[1mLIVE CONTRACTS — /r/${SUB}/\x1b[0m`);

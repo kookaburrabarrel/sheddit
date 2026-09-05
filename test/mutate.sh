@@ -1825,7 +1825,7 @@ mutate "reply ignores the session and always hands off" run \
 # A comment's subtree holds its descendants' composers (§1.4 for composers): unscoped, a
 # reply to the parent types into the child's open box.
 mutate "a composer open on a descendant is taken for this comment's" run \
-  src/modules/account.js '? target.contains(el) && el.closest(C.COMMENT) === target' '? target.contains(el)'
+  src/modules/account.js '? el.closest(C.COMMENT) === target' '? true'
 
 mutate "the reply text never reaches Reddit's editor" run \
   src/modules/account.js '        editor.value = text;
