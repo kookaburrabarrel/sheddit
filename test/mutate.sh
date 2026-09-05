@@ -1811,6 +1811,14 @@ git push --quiet origin main
 echo
 echo "Pushed. Both README downloads now serve $VERSION."
 :'
+# deepQuery's own-root hole, 2026-09-05: searching only the descendants' shadow roots
+# reports NOT FOUND for a control the host renders on its own root.
+mutate "deepQuery skips the host element's own shadow root again" run \
+  src/core/dom.js '    if (root.shadowRoot) {
+      const own = deepQuery(root.shadowRoot, selector);
+      if (own) return own;
+    }
+' ''
 
 # ---------------------------------------------------------------- the account layer ----
 # 0.34.0. The layer is ON only for a page that affirmatively reads as logged in, and every

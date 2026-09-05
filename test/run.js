@@ -2566,6 +2566,18 @@ async function boot(html, url, setup) {
        .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     check('clicking our arrow delegates into the shadow root', clicks === 1, `clicks=${clicks}`);
 
+    /* The host's OWN shadow root — the gap the 2026-09-05 signed-in run exposed. deepQuery
+       searched the shadow roots of the post's descendants and never the one on the post
+       itself, which is where a custom element renders its own UI; every "NOT FOUND" the
+       live probe ever reported was measured through that hole. */
+    check('...and a button in the host element\'s OWN shadow root, not only a descendant\'s', (() => {
+      const p3 = doc.querySelector('shreddit-post[id="t3_text1"]');
+      const own = p3.attachShadow({ mode: 'open' });
+      const b = doc.createElement('button');
+      b.setAttribute('downvote', '');
+      own.appendChild(b);
+      return window.SHD.dom.deepQuery(p3, 'button[downvote]') === b && window.SHD.dom.shadowRoots(p3) >= 1;
+    })());
     check('a closed shadow root yields null rather than throwing', (() => {
       const p2 = doc.querySelector('shreddit-post[id="t3_image1"]');
       p2.querySelector('shreddit-async-loader').attachShadow({ mode: 'closed' });

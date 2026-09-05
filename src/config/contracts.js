@@ -256,6 +256,13 @@ SHD.C = {
   /* Native controls we delegate clicks to. Resolved AT CLICK TIME — the action bar
      lives inside a shreddit-async-loader and is not present at first paint. */
   NATIVE: {
+    /* STILL UNVERIFIED as of 2026-09-05, and the measurement that was supposed to settle
+       it was blind: a signed-in run searched 23 open shadow roots under a live post and
+       found nothing — the same answer as logged out — but dom.deepQuery never looked in
+       the POST'S OWN shadow root, only its descendants', and a custom element's own root is
+       where it renders its own action bar. Fixed there; the next signed-in verify:live run
+       dumps every button in the post's shadow tree with its attribute names, which is what
+       corrects these two lines if they are wrong. */
     upvote: 'button[upvote], button[aria-label*="upvote" i]',
     downvote: 'button[downvote], button[aria-label*="downvote" i]',
     /* The attribute Reddit's vote buttons carry to say which way the reader has voted —
@@ -497,23 +504,22 @@ SHD.C = {
    * behaviour, with the native controls still one passthrough away), never the page,
    * and never a logged-out reader's experience.
    *
-   * EVERY ENTRY IS A CANDIDATE, unverified live. This is the honest state of the account
-   * layer as it ships: this project's rule is measure-before-conclude, and the one
-   * measurement that settles these — a signed-in run of `npm run verify:live -- --headed`,
-   * whose LOGGED-IN SESSION section reports which of these match — cannot be made from a
-   * container (Reddit answers datacenter IPs with a bot-mitigation shim) and has not yet
-   * been made from a desk. The candidates are the shapes a logged-in shreddit header is
-   * known to carry from ordinary use: the avatar button that opens the user drawer, the
-   * drawer app itself, and the attribute shreddit-app is believed to carry. The
-   * logged-out veto is the header's own login button, which live captures HAVE shown
+   * VERIFIED LIVE 2026-09-05, signed in (`verify:live -- --headed --login`, /r/programming/):
+   * `shreddit-app[user-logged-in="true"]` matched 1, `#expand-user-drawer-button` matched 1,
+   * `reddit-header-large [id*="user-drawer" i]` matched 3, and both logged-out veto clauses
+   * matched 0 — so the page read as LOGGED IN through three independent signals. A fourth
+   * candidate, `user-drawer-app`, matched nothing and was deleted (the rule this comment
+   * used to end with). The attribute is the strongest of the three: it is on the app
+   * element itself, in the initial HTML, and sits beside `loid` in a list of session
+   * bookkeeping — the header buttons are the fallback for the day it is renamed. The
+   * logged-out veto is the header's own login button, which logged-out captures have shown
    * (a `faceplate-tracker[noun="login"]` wrapping an anchor onto /login).
    *
-   * When that run happens, delete what did not match and keep what did. Do not add an
-   * absence-based clause to make it "work" — see above.
+   * Do not add an absence-based clause — see above.
    */
   SESSION: {
     loggedIn: 'shreddit-app[user-logged-in="true"], #expand-user-drawer-button, ' +
-              'user-drawer-app, reddit-header-large [id*="user-drawer" i]',
+              'reddit-header-large [id*="user-drawer" i]',
     loggedOut: 'reddit-header-large a[href*="/login"], faceplate-tracker[noun="login"]'
   },
 
