@@ -488,6 +488,60 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
                 'of scope; the arrows are decorative for a logged-out session)\x1b[0m');
   }
 
+  /* ---------------- the account layer (0.34.0) ---------------- */
+  console.log('\n\x1b[1mLIVE CONTRACTS — LOGGED-IN SESSION\x1b[0m');
+  /* THE SECTION THAT SETTLES 0.34.0. Every contract the account layer stands on is a
+     candidate (engineering log, open question 11): shaped from ordinary use of the site,
+     driven only against fixtures that model it. This section reads each one off the real
+     page and reports it, logged out or in — run with --headed and sign in when the window
+     opens to get the answer that matters.
+
+     Mostly NOTES rather than pass/fail rows, for the reason the vote section above went
+     that way: a logged-out run cannot fail on "not logged in". The two hard rows are the
+     ones that must hold on EVERY session — a page carrying Reddit's login button reads as
+     logged out (the veto), and the detector never says logged in on nothing (the
+     presence rule). Everything else is the evidence to edit contracts.js with. */
+  const session = await page.evaluate((C) => {
+    const list = (sel) => sel.split(',').map(x => x.trim()).filter(Boolean)
+      .map(x => { try { return [x, document.querySelectorAll(x).length]; } catch { return [x, 'invalid']; } });
+    const r = SHD.session.signals();
+    const post = document.querySelector(C.POST);
+    const up = post && SHD.dom.deepQuery(post, C.NATIVE.upvote);
+    const down = post && SHD.dom.deepQuery(post, C.NATIVE.downvote);
+    return {
+      loggedIn: r.loggedIn, matched: r.matched, vetoed: r.vetoed,
+      loggedInClauses: list(C.SESSION.loggedIn),
+      loggedOutClauses: list(C.SESSION.loggedOut),
+      voteState: up ? { up: up.getAttribute(C.NATIVE.voteState), down: down?.getAttribute(C.NATIVE.voteState),
+                        upAttrs: [...up.attributes].map(a => a.name) } : null,
+      composers: list(C.COMPOSER.host),
+      appAttrs: [...(document.querySelector(C.APP)?.attributes || [])].map(a => a.name)
+    };
+  }, C);
+  console.log(`  \x1b[2msession reads as: ${session.loggedIn ? 'LOGGED IN' : 'logged out'}\x1b[0m`);
+  console.log(`  \x1b[2mloggedIn clauses  ${JSON.stringify(session.loggedInClauses)}\x1b[0m`);
+  console.log(`  \x1b[2mloggedOut clauses ${JSON.stringify(session.loggedOutClauses)}\x1b[0m`);
+  console.log(`  \x1b[2mshreddit-app attributes: ${session.appAttrs.join(' ')}\x1b[0m`);
+  check('a page carrying Reddit\'s login button is read as logged out (the veto)',
+    session.vetoed.length === 0 || session.loggedIn === false, JSON.stringify(session));
+  check('the detector never says logged in without an affirmative signal',
+    !session.loggedIn || session.matched.length > 0, JSON.stringify(session));
+  if (session.loggedIn) {
+    console.log(`  \x1b[33mNOTE\x1b[0m logged in via ${session.matched.join(' | ')} — ` +
+      'these are the C.SESSION.loggedIn clauses to KEEP; delete the ones reporting 0 above.');
+  } else if (session.vetoed.length === 0 && session.matched.length === 0) {
+    console.log('  \x1b[2mno signal either way. If this browser IS signed in, C.SESSION.loggedIn is wrong: ' +
+      'the shreddit-app attribute list above and the header\'s buttons are where the real signal is.\x1b[0m');
+  }
+  if (session.voteState) {
+    const exposes = session.voteState.up != null || session.voteState.down != null;
+    console.log(`  \x1b[33mNOTE\x1b[0m vote buttons ${exposes ? 'EXPOSE' : 'do NOT expose'} ` +
+      `${C.NATIVE.voteState} (up=${session.voteState.up}, down=${session.voteState.down}); ` +
+      `upvote attributes: ${session.voteState.upAttrs.join(' ')}` +
+      (exposes ? '' : ' — the arrows will run on their local toggle; pick the state attribute from that list'));
+  }
+  console.log(`  \x1b[2mcomposer hosts on the listing: ${JSON.stringify(session.composers)}\x1b[0m`);
+
   /* ---------------- comments ---------------- */
   // The BUSIEST post on the listing, not the first one. Comment continuation is only
   // observable on a thread big enough to be truncated, and picking post[0] made that a

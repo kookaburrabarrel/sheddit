@@ -409,6 +409,13 @@ html.shd-active body {
 .midcol .arrow.up:hover::before   { color: var(--shd-upvote); }
 .midcol .arrow.down:hover::before { color: var(--shd-downvote); }
 .midcol .score { padding: 1px 0; white-space: nowrap; }
+/* The reader's own vote, in old reddit's classes: the lit arrow and the score take the
+   vote's colour. account.js paints these from Reddit's own button state (or its local
+   toggle when the button exposes none); a logged-out session never gets them. */
+.midcol .arrow.up.upmod::before     { color: var(--shd-upvote); }
+.midcol .arrow.down.downmod::before { color: var(--shd-downvote); }
+.midcol.likes .score    { color: var(--shd-upvote); }
+.midcol.dislikes .score { color: var(--shd-downvote); }
 
 /* Comment rows have no float, but containment also stops margin-collapse between a
    comment and its .child list, which is what keeps nesting gaps even. */
@@ -793,6 +800,74 @@ html.shd-active body {
 /* The post being replied to. Old reddit set it in the link colour, which is also what
    distinguishes it from the community beside it in a line of otherwise uniform grey. */
 .shd-profile-comment .parent .shd-parent-title { color: var(--shd-link); }
+
+/* ---------------------------------------------------------------- the account layer --
+   The reply box (account.js), old reddit's shape: a full-width textarea in the comment
+   column, save/cancel under it in the tagline's grey, a status line beside them. Sized in
+   em/percent so it follows the theme's type; the width is capped at the body measure so a
+   wide window does not hand the reader a 1500px text field. */
+.shd-reply-form { margin: 6px 0 8px; }
+.shd-reply-form .usertext-edit { max-width: 60em; }
+.shd-reply-text {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 6em;
+  padding: 4px;
+  font: 13px var(--shd-font);
+  color: var(--shd-text);
+  background: var(--shd-bg);
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+  resize: vertical;
+}
+.shd-reply-form .bottom-area {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+.shd-reply-form .usertext-buttons { display: flex; flex-wrap: wrap; gap: 6px; order: -1; }
+.shd-reply-form button {
+  font: 11px var(--shd-font);
+  color: var(--shd-text);
+  background: var(--shd-thumb-bg);
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.shd-reply-form button:disabled { color: var(--shd-meta); cursor: default; }
+.shd-reply-status { color: var(--shd-meta); }
+.shd-reply-form[data-shd-state="failed"] .shd-reply-status { color: var(--shd-nsfw); }
+/* The top-level box sits above the sort strip, with the post's left edge. */
+.shd-commentbox { margin: 0 0 10px; }
+
+/* Old reddit's sidebar submit buttons: two stacked bars under the title box. */
+.shd-submit { margin: 10px 0 0; }
+.shd-submit .morelink {
+  display: block;
+  box-sizing: border-box;
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  font: bold 13px var(--shd-font);
+  color: var(--shd-accent);
+  text-decoration: none;
+  background: var(--shd-thumb-bg);
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+}
+.shd-submit .morelink:hover { background: var(--shd-hover-bg); }
+
+/* The header's one word about the session, in the tab strip's grey, before the theme bar. */
+.shd-account-status {
+  color: var(--shd-meta);
+  font-size: 11px;
+  margin-left: 12px;
+  white-space: nowrap;
+}
 
 .usertext-body {
   font-size: 14px;

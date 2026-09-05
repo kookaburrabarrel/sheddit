@@ -83,6 +83,12 @@ output:
 | Route/tab consistency | **every href the chrome renders must classify as `LISTING`** |
 | Vote delegation | pierces an open shadow root; returns null (not a throw) on a closed one |
 | Native passthrough | the un-clipped ancestor is the body child, siblings hidden, cleanly reversible |
+| The account layer, logged out | every pre-0.34.0 fixture (an empty header) reads as logged out; no status word, no submit doors, no comment box; a vote with no native control is a silent no-op, `reply` is the passthrough; a login button VETOES a logged-in signal; the setting off is 0.33.0 exactly |
+| Session detection | the avatar button reads as logged in, the report names the clause, the header says *logged in* before the theme bar, a reset re-reads |
+| Voting, logged in | a post arrow forwards to Reddit's button (in an open shadow root) and paints `likes`/`upmod`, the score moves, the lit arrow un-votes, a flip is two points, the keyboard works; a bar with no state keeps our toggle; a standing vote is picked up without a click and the delivered score left alone; a refused vote goes dark again; a miss warns ONCE naming the evidence; comment arrows move the tagline score and a hidden score stays hidden |
+| Replying, logged in | `reply` opens our box, once; an empty save touches nothing; save clicks Reddit's reply control, hands the text to a textarea or a contenteditable, clicks Reddit's submit, and the box goes only when the reply is SEEN to arrive, rendered nested under its parent; cancel; a composer that never opens / a missing reply control fail loudly (step named, draft kept, Reddit's composer revealed, draft still there on return); a composer open on a DESCENDANT is not reused; the top-level box posts through the page's composer and the comment renders at depth 0 |
+| Posting | the sidebar's two doors carry the community and the type, both classify `OTHER` (Reddit's composer, untouched), the front page's is site-wide |
+| The account layer's wiring | session.js and account.js load before the modules built from them, in manifest and bundle; the new contracts exist and the new modules name no Reddit element outside contracts.js; the setting ships on with a checkbox |
 | old.reddit.com | the host swap (`dest` unwrapped out of the login wall, an off-site or nested-login `dest` refused, port and scheme kept, nothing but that one host rewritten), the notice (blackout set before the first `await`, heading, live region, the destination as a link, why the link failed and who to blame), the setting (off = untouched page, no storage = the shipped default), the loop guard (a repeat hop refused and old reddit offered instead; a stale or different-page record is not a loop), a `.rss` document left alone, and the manifest wiring |
 
 Nothing is mocked except `IntersectionObserver` and `chrome.storage`, neither of which
@@ -371,12 +377,25 @@ The automated suite covers structure; these need eyes:
 - [ ] Comment threads indent correctly and `[–]` collapses
 - [ ] Navigating between subreddits client-side re-renders cleanly with no duplicate rows
 - [ ] Search / user pages are left as **native Reddit**, untouched
-- [ ] Voting while logged in actually registers (delegation to the hydrated native button)
-- [ ] Clicking `reply` reveals the native composer, and "← back to sheddit" returns
+- [ ] Logged out: clicking `reply` reveals the native composer, and "← back to sheddit" returns
+- [ ] **Logged in** (0.34.0, every item below is unverified live — see the changelog):
+  - [ ] the header says *logged in*; if it does not, the LOGGED-IN SESSION section of
+        `npm run verify:live -- --headed` says which `C.SESSION` signal the header carries
+  - [ ] an upvote on a post row lights the arrow AND registers on Reddit's own page (reload
+        and look)
+  - [ ] a post you had voted on before comes up lit ~1.5s after render
+  - [ ] a comment arrow moves the tagline's points
+  - [ ] `reply` opens the box; *save* posts through Reddit's composer and the reply renders
+        nested; if it fails, the status names the step, the draft is kept, and Reddit's
+        composer is shown with the text in it
+  - [ ] the top-level comment box posts a top-level comment
+  - [ ] *Submit a new link* opens Reddit's composer, untouched, for the right community
+  - [ ] the options checkbox off puts everything back to the logged-out behaviour
 
-Voting is the only behaviour that needs a logged-in session; everything else is verified
-logged out. Run `npm run verify:live` first — it tells you whether the vote control is
-even reachable before you go looking for it by hand.
+The account layer is the one thing that needs a logged-in session; everything else is
+verified logged out. Run `npm run verify:live -- --headed`, sign in when the window opens,
+and read its LOGGED-IN SESSION section first — it tells you whether the session, the vote
+control, the reply control and the composer are even reachable before you go looking by hand.
 
 **Scripted QA needs trusted input for the pagination hold.** The unprompted fill parks
 once the page is worth scrolling (`shdRefusal: filled`), and the release is the reader's

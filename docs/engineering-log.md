@@ -1482,8 +1482,10 @@ the way a question got settled is usually more useful than the answer.
    was. See the `gateModal` fixture. What is still unseen is whether **quarantined** and
    **rate-limited** pages use the same modal pattern or genuinely replace the feed.
 3. **Whether a logged-in session exposes the vote control.** Logged out it is confirmed
-   unreachable (21 open shadow roots searched, nothing). Out of scope, but `deepQuery` is
-   kept for it.
+   unreachable (21 open shadow roots searched, nothing). ~~Out of scope, but `deepQuery` is
+   kept for it.~~ **In scope since 0.34.0** and still unmeasured: the account layer
+   (ARCHITECTURE §5.3) forwards to the control if it is there and reports a miss once on a
+   session that reads as logged in. It widens into question 11 below.
 4. **`gate.js`'s deadline against a genuinely slow real page** — only synthetic stalls have
    been tested.
 5. **Real quarantine / rate-limit pages** have never been seen by the suite. `gated` and
@@ -1654,6 +1656,24 @@ the way a question got settled is usually more useful than the answer.
     and a strip built on guessed selectors is how pages get eaten. Needs one capture:
     the collapsed selftext's subtree skeleton (tags + classes, no text), from a thread
     Reddit happens to serve collapsed. Until then, recorded rather than guessed at.
+
+11. **Everything the account layer stands on (0.34.0).** Five contracts, all candidates,
+    none measured against a signed-in reddit.com: `C.SESSION.loggedIn` (which of the
+    logged-in header signals exists — the avatar button, the drawer app, an attribute on
+    `shreddit-app`), `C.NATIVE.voteState` (whether Reddit's vote buttons carry
+    `aria-pressed`), `C.NATIVE.reply` (the per-comment reply control's attribute),
+    `C.COMPOSER` (the composer's host, editor and submit), and whether a contenteditable
+    editor accepts text through `execCommand('insertText')` at all — Reddit's rich-text
+    editor may reconcile a direct text set away, in which case the markdown-mode textarea
+    is the path that works and the reader should be told to switch. Every one is built to
+    fail towards Reddit's own controls (the box stays with the draft; passthrough reveals
+    the composer), and the suite asserts that it does — but "fails safe" is not "works".
+    The settle is `npm run verify:live -- --headed`, signed in, whose LOGGED-IN SESSION
+    section reports each of the five. Until that run, the honest status is: designed,
+    asserted against a model, unverified against the site. Also unmeasured: what Reddit's
+    optimistic insert of a posted reply looks like (a new `shreddit-comment` under the
+    parent is the assumption `compose()` waits on; if Reddit re-renders the branch instead,
+    the arrival check falls through to "the editor emptied", which is the weaker signal).
 
 Two settled things, so nobody reopens them: the **staircase indentation report does not
 reproduce** (measured at 10 widths), and **comments being DOM-nested was a non-event**
