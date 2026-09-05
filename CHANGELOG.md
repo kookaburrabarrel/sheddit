@@ -90,10 +90,14 @@ is no longer a candidate. The vote control came back NOT FOUND with 23 open shad
 searched, the same answer every logged-out run had given — and that turned out to be an
 answer about the probe: `deepQuery` had never looked in the post element's *own* shadow
 root, only its descendants', for as long as it has existed. A custom element renders its
-own action bar on its own root. Fixed, pinned by a jsdom row and a mutation row; the next
-signed-in run dumps every button reachable through a post and a comment with its attribute
-names, and reads the composer's shape off a thread without clicking anything, so the
-remaining contracts get corrected from evidence.
+own action bar on its own root. Fixed, pinned by a jsdom row and a mutation row — and the
+run after the fix found them: `<button upvote aria-pressed>` and `<button downvote
+aria-pressed>` in the post's own shadow root, exactly the contracts shipped. **Voting is
+verified reachable for a logged-in reader.** The reply and composer contracts are still
+candidates; the probe that reads them off a thread without clicking anything is in place
+for the next run. Also seen and recorded: the logged-in `/r/programming/` listing answered
+27, then 0, then 1 post across three loads, where a logged-out load answers 27 every time —
+open, and measured from here on.
 
 **Tests.** Eighty-four new assertions across six sections in `test/run.js`, driving the layer
 through a modelled logged-in Reddit (vote buttons carrying `aria-pressed` and a reply control

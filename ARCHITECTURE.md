@@ -276,9 +276,12 @@ Sheddit renders old-reddit vote arrows and links, but owns no auth state. Three 
    and the number described the wrong tree.** `deepQuery` searched the shadow roots of
    the post's descendants and never the post's *own*, for the whole life of the function.
    A custom element renders its own UI on its own root, so every "unreachable" above was
-   measured through a hole. The lookup now takes the host's own root first; whether the
-   buttons are there, and under which attributes, is what the next signed-in run's button
-   dump answers (engineering log, question 11).
+   measured through a hole. The lookup now takes the host's own root first, and the run
+   after the fix found them there: `<button upvote aria-pressed>` / `<button downvote
+   aria-pressed>`, in the post's own shadow root, 34 open roots under a logged-in post.
+   **Delegation is verified reachable for a logged-in reader** (engineering log, question
+   11); the click itself has not been exercised by a probe, because a probe that votes is
+   not a probe.
 
 3. **Deferred to native** (reply box, mod tools) — Sheddit does not reimplement these. Clicking
    "reply" un-hides the native composer in place, via `SHD.dom.passthrough()`.
