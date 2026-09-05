@@ -393,8 +393,9 @@ The automated suite covers structure; these need eyes:
   - [ ] the options checkbox off puts everything back to the logged-out behaviour
 
 The account layer is the one thing that needs a logged-in session; everything else is
-verified logged out. Run `npm run verify:live -- --headed`, sign in when the window opens,
-and read its LOGGED-IN SESSION section first — it tells you whether the session, the vote
+verified logged out. Run `npm run verify:live -- --headed --login`, sign in when the login
+page opens and press Enter (the profile is kept under `dist/live-profile/`, so the next
+`--login` run is already signed in), and read its LOGGED-IN SESSION section first — it tells you whether the session, the vote
 control, the reply control and the composer are even reachable before you go looking by hand.
 
 **Scripted QA needs trusted input for the pagination hold.** The unprompted fill parks

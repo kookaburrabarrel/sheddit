@@ -73,7 +73,10 @@ find out.
 header signals, the per-comment reply control, the composer's host, editor and submit, and
 the vote-state attribute — is a candidate shaped from ordinary use of the site and driven
 end to end only against fixtures that model it. The measurement that settles them is one
-signed-in run of `npm run verify:live -- --headed`, whose new **LOGGED-IN SESSION** section
+signed-in run of `npm run verify:live -- --headed --login` (the new `--login` flag opens
+Reddit's login page first and keeps the profile — a plain `--headed` run is a fresh, logged-out
+browser, which is why the first attempt reported the vote control NOT FOUND), whose new
+**LOGGED-IN SESSION** section
 reports which signals match, whether the reply control and composer are reachable and what
 the vote buttons expose. It cannot be made from a container (Reddit answers datacenter IPs
 with a bot shim) and has not yet been made from a desk. Until it has, the honest description
