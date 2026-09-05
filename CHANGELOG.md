@@ -83,10 +83,22 @@ with a bot shim) and has not yet been made from a desk. Until it has, the honest
 is: designed to fail towards Reddit's own controls, and asserted to do so. A report of what
 a signed-in page actually did is the most useful thing a reader can send.
 
-**Tests.** Eighty-three new assertions across six sections in `test/run.js`, driving the layer
+**Verified live the same day, signed in — and one thing found.** The first
+`--headed --login` run read the page as LOGGED IN through three of the four session
+signals (the fourth, `user-drawer-app`, matched nothing and is gone), so session detection
+is no longer a candidate. The vote control came back NOT FOUND with 23 open shadow roots
+searched, the same answer every logged-out run had given — and that turned out to be an
+answer about the probe: `deepQuery` had never looked in the post element's *own* shadow
+root, only its descendants', for as long as it has existed. A custom element renders its
+own action bar on its own root. Fixed, pinned by a jsdom row and a mutation row; the next
+signed-in run dumps every button reachable through a post and a comment with its attribute
+names, and reads the composer's shape off a thread without clicking anything, so the
+remaining contracts get corrected from evidence.
+
+**Tests.** Eighty-four new assertions across six sections in `test/run.js`, driving the layer
 through a modelled logged-in Reddit (vote buttons carrying `aria-pressed` and a reply control
 in an open shadow root, a composer that mounts on click and inserts the posted comment); the
-logged-out sections assert nothing new appears. Twenty-one new mutation rows, each watched go
+logged-out sections assert nothing new appears. Twenty-two new mutation rows, each watched go
 red. Voting on a comment, a standing vote, a bar that exposes no state, a refused vote, a
 hidden score, both editor kinds, a composer that never opens, a missing reply control, a
 composer already open on a *descendant* (a comment's subtree holds its descendants'

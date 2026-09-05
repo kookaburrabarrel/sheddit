@@ -258,7 +258,8 @@ Sheddit renders old-reddit vote arrows and links, but owns no auth state. Three 
    `console.debug('not hydrated yet')`. A miss now warns once, reporting whether the
    loader exists and how many open shadow roots were searched.
 
-   **Verified live 2026-08-14, logged out: the button is not reachable at all.**
+   **Verified live 2026-08-14, logged out: the button is not reachable at all** — *by the
+   search as it then stood; read on, and see the 2026-09-05 note after this list.*
    `deepQuery` searched 21 open shadow roots under the post and found nothing matching
    `C.NATIVE.upvote` — not a closed-root problem, the control simply is not there for a
    logged-out session (Reddit likely renders a "log in to vote" affordance instead of a
@@ -267,10 +268,17 @@ Sheddit renders old-reddit vote arrows and links, but owns no auth state. Three 
    logged-out case. Whether a *logged-in* session exposes the control is still unchecked —
    `npm run verify:live -- --headed`, signed in, would answer that if it ever matters.
 
-   **Since 0.34.0 it matters, and the tier is live code again** — see §5.3. The finding
-   above is unchanged for the logged-out reader (no control, decorative arrows, silent);
-   what changed is that a logged-in page is now expected to expose the control, and a miss
-   there is reported once with the evidence, because there it means the contract is stale.
+   **Since 0.34.0 it matters, and the tier is live code again** — see §5.3. A logged-in
+   page is now expected to expose the control, and a miss there is reported once with the
+   evidence, because there it means the contract is stale.
+
+   **2026-09-05, the first signed-in run: NOT FOUND again, 23 open shadow roots searched —
+   and the number described the wrong tree.** `deepQuery` searched the shadow roots of
+   the post's descendants and never the post's *own*, for the whole life of the function.
+   A custom element renders its own UI on its own root, so every "unreachable" above was
+   measured through a hole. The lookup now takes the host's own root first; whether the
+   buttons are there, and under which attributes, is what the next signed-in run's button
+   dump answers (engineering log, question 11).
 
 3. **Deferred to native** (reply box, mod tools) — Sheddit does not reimplement these. Clicking
    "reply" un-hides the native composer in place, via `SHD.dom.passthrough()`.
