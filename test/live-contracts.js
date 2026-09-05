@@ -247,6 +247,17 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
     return;
   }
 
+  /* Three signed-in loads of /r/programming/ on 2026-09-05 answered 27, then 0 (the
+     no-content panel), then 1 post, where a logged-out load answers 27 every time. Whether
+     the logged-in feed STREAMS its posts in after a thin first paint, or genuinely serves a
+     thin page, decides how gate.js should read an empty feed for a logged-in reader — so
+     count at first sight and again after a pause, and print both. */
+  const firstSight = await page.evaluate((C) => document.querySelectorAll(C.POST).length, C);
+  await new Promise(r => setTimeout(r, 4000));
+  const afterPause = await page.evaluate((C) => document.querySelectorAll(C.POST).length, C);
+  console.log(`  \x1b[2mposts at first sight: ${firstSight}; four seconds later: ${afterPause}` +
+    (afterPause > firstSight ? ' — THE FEED STREAMS IN after first paint on this session' : '') + '\x1b[0m');
+
   const listing = await page.evaluate((C) => {
     const posts = [...document.querySelectorAll(C.POST)];
     const missing = {};
@@ -660,17 +671,35 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   // observable on a thread big enough to be truncated, and picking post[0] made that a
   // coin toss — the previous run happened to land on one and reported "arrived whole" as
   // an equally likely outcome, which tells us nothing about the mechanism.
-  const permalink = await page.evaluate((C) => {
-    const posts = [...document.querySelectorAll(C.POST)];
-    const best = posts.reduce((a, b) =>
-      Number(b.getAttribute(C.POST_ATTR.comments) || 0) >
-      Number(a?.getAttribute(C.POST_ATTR.comments) || -1) ? b : a, null);
-    return best?.getAttribute(C.POST_ATTR.permalink);
-  }, C);
   // Grabbed NOW, while the listing is still loaded — the USER PROFILES section at the
   // bottom visits this author's profile, and by then the page is a comment thread.
   const postAuthorForProfile = await page.evaluate((C) =>
     document.querySelector(C.POST)?.getAttribute(C.POST_ATTR.author), C);
+  const busiest = () => page.evaluate((C) => {
+    const posts = [...document.querySelectorAll(C.POST)];
+    const best = posts.reduce((a, b) =>
+      Number(b.getAttribute(C.POST_ATTR.comments) || 0) >
+      Number(a?.getAttribute(C.POST_ATTR.comments) || -1) ? b : a, null);
+    return { permalink: best?.getAttribute(C.POST_ATTR.permalink), n: posts.length,
+             comments: Number(best?.getAttribute(C.POST_ATTR.comments) || 0) };
+  }, C);
+  let pick = await busiest();
+  /* A THIN listing picks a thin thread. The 2026-09-05 signed-in runs delivered 1 post
+     (and once 0) on /r/programming/ where a logged-out load delivers 27, so "the busiest of
+     what is here" was a post with no comments and every comment section below reported on
+     nothing. Under five posts, pick from the sorted listing instead, which the time-window
+     section already knows answers ~27 on ?t=all. */
+  if (pick.n < 5 || pick.comments === 0) {
+    console.log(`  \x1b[33mNOTE\x1b[0m the listing delivered ${pick.n} post(s) (busiest: ${pick.comments} comments) — ` +
+      `picking the thread from /r/${SUB}/top/?t=all instead`);
+    try {
+      await page.goto(`https://www.reddit.com/r/${SUB}/top/?t=all`, { waitUntil: 'networkidle2', timeout: 60000 });
+      await page.waitForSelector(C.POST, { timeout: 30000 }).catch(() => null);
+      const alt = await busiest();
+      if (alt.comments > pick.comments) pick = alt;
+    } catch { /* keep what we had */ }
+  }
+  const permalink = pick.permalink;
   /* ---------------- the time window on `top` ----------------
    *
    * This section answers a question the code deliberately does not: WHICH window Reddit
@@ -893,21 +922,34 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
      and inside it the editor and submit — and dumps the first comment's buttons the way
      the vote section does, so a wrong contract is corrected from the attribute names. */
   const replyShape = await page.evaluate((C) => {
+    /* Self-contained: the bundle is not injected on this page (the vote section's
+       injection died with the listing document — the first run of this block threw
+       "SHD is not defined" and aborted the run). Same algorithm as dom.deepQuery, own
+       root first. */
+    const deepQuery = (root, sel) => {
+      if (!root || typeof root.querySelector !== 'function') return null;
+      const d = root.querySelector(sel); if (d) return d;
+      if (root.shadowRoot) { const o = deepQuery(root.shadowRoot, sel); if (o) return o; }
+      for (const el of root.querySelectorAll('*')) {
+        if (el.shadowRoot) { const hit = deepQuery(el.shadowRoot, sel); if (hit) return hit; }
+      }
+      return null;
+    };
     const list = (root, sel) => sel.split(',').map(x => x.trim()).filter(Boolean)
       .map(x => { try { return [x, root.querySelectorAll(x).length]; } catch { return [x, 'invalid']; } });
     const c = document.querySelector(C.COMMENT);
-    const out = { commentHasOwnShadow: !!c?.shadowRoot, replyControl: null, hosts: list(document, C.COMPOSER.host),
-                  editor: null, submit: null, buttons: [] };
-    const reply = c && SHD.dom.deepQuery(c, C.NATIVE.reply);
+    const out = { commentHasOwnShadow: !!c?.shadowRoot, hasComment: !!c, replyControl: null,
+                  hosts: list(document, C.COMPOSER.host), editor: null, submit: null, buttons: [] };
+    const reply = c && deepQuery(c, C.NATIVE.reply);
     if (reply) out.replyControl = { attrs: [...reply.attributes].map(a => a.name).join(' '),
                                    label: (reply.getAttribute('aria-label') || reply.textContent || '').trim().slice(0, 40) };
     const host = document.querySelector(C.COMPOSER.host);
     if (host) {
       out.hostTag = host.tagName.toLowerCase();
       out.hostInsideComment = !!host.closest(C.COMMENT);
-      const ed = SHD.dom.deepQuery(host, C.COMPOSER.editor);
+      const ed = deepQuery(host, C.COMPOSER.editor);
       out.editor = ed ? { tag: ed.tagName.toLowerCase(), attrs: [...ed.attributes].map(a => a.name).join(' ') } : null;
-      const sub = SHD.dom.deepQuery(host, C.COMPOSER.submit);
+      const sub = deepQuery(host, C.COMPOSER.submit);
       out.submit = sub ? { tag: sub.tagName.toLowerCase(), attrs: [...sub.attributes].map(a => a.name).join(' '),
                            label: (sub.textContent || '').trim().slice(0, 30) } : null;
     }
@@ -925,10 +967,11 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
         }
       }
     };
-    walk(c, 'comment', 0);
+    if (c) walk(c, 'comment', 0);
     return out;
   }, C);
   console.log('\n  \x1b[1mREPLY & COMPOSER (read, never clicked)\x1b[0m');
+  if (!replyShape.hasComment) console.log('  \x1b[2mno comment on this thread — the per-comment half of this block has nothing to read\x1b[0m');
   console.log(`  \x1b[2mthe comment element has its OWN open shadow root: ${replyShape.commentHasOwnShadow}\x1b[0m`);
   console.log(`  \x1b[2mC.NATIVE.reply on the first comment: ${replyShape.replyControl
     ? `FOUND <${replyShape.replyControl.attrs}> "${replyShape.replyControl.label}"` : 'NOT FOUND'}\x1b[0m`);

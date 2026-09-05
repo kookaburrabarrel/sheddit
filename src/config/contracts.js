@@ -256,22 +256,24 @@ SHD.C = {
   /* Native controls we delegate clicks to. Resolved AT CLICK TIME — the action bar
      lives inside a shreddit-async-loader and is not present at first paint. */
   NATIVE: {
-    /* STILL UNVERIFIED as of 2026-09-05, and the measurement that was supposed to settle
-       it was blind: a signed-in run searched 23 open shadow roots under a live post and
-       found nothing — the same answer as logged out — but dom.deepQuery never looked in
-       the POST'S OWN shadow root, only its descendants', and a custom element's own root is
-       where it renders its own action bar. Fixed there; the next signed-in verify:live run
-       dumps every button in the post's shadow tree with its attribute names, which is what
-       corrects these two lines if they are wrong. */
+    /* VERIFIED LIVE 2026-09-05, signed in: both buttons sit in the POST'S OWN open shadow
+       root (not a descendant's — which is why every earlier probe, searching only the
+       descendants' roots, reported them unreachable), as
+         <button rpl aria-pressed class data-action-bar-action style upvote>   "Upvote"
+         <button rpl aria-pressed class data-action-bar-action style downvote> "Downvote"
+       The bare `upvote` / `downvote` attribute is the first clause and matched; the
+       aria-label clause is the fallback for the day it is renamed. Whether the same buttons
+       exist on a logged-out page is now an open question again — the "not reachable"
+       findings were measured through the own-root hole — and does not matter to a
+       logged-out reader either way: Reddit's own click handler decides what a click does. */
     upvote: 'button[upvote], button[aria-label*="upvote" i]',
     downvote: 'button[downvote], button[aria-label*="downvote" i]',
     /* The attribute Reddit's vote buttons carry to say which way the reader has voted —
-       `aria-pressed="true"` on the active arrow. CANDIDATE (see SESSION below for what
-       that word means here): the attribute is the standard toggle-button state and the
-       obvious one for a control that is a toggle, but nothing has read it live yet. Read
+       `aria-pressed` on both arrows. VERIFIED LIVE 2026-09-05, signed in: present on both
+       buttons (`false` / `false` on an unvoted post). The `"true"` side is inferred from
+       the toggle-button convention — no voted post was on the probed page — and is read
        for MIRRORING only, never for deciding whether to vote: a button that lacks it
-       leaves our arrows on their own local toggle, which is the pre-0.34.0 behaviour
-       plus colour. */
+       leaves our arrows on their own local toggle. */
     voteState: 'aria-pressed',
     /* The per-comment "Reply" control, for opening Reddit's own composer on a logged-in
        session (account.js). CANDIDATE. Reddit's action row is a custom element with an

@@ -1699,12 +1699,28 @@ the way a question got settled is usually more useful than the answer.
       fired on ordinary page copy) and stopped before any account-layer section ran. The
       probe now reports the panel for what it is, retries on `/top/?t=all`, and never
       calls a page that carries `shreddit-app` a challenge.
-    - Reply control, composer, `execCommand`: the run did not visit a thread with the
-      account layer's probes yet (they were added after it, as the REPLY & COMPOSER block
-      of the comments section — read, never clicked). Still open.
+    - **The vote control — FOUND, third run of the day, with the own-root fix in.** In the
+      post's own open shadow root: `<button rpl aria-pressed class data-action-bar-action
+      style upvote>` "Upvote" and its `downvote` twin, `aria-pressed="false"` on both.
+      `C.NATIVE.upvote/downvote` and `C.NATIVE.voteState` are verified; 34 open shadow
+      roots hang under a logged-in post, and the buttons are in the one the old search
+      skipped. Delegation is live for a logged-in reader. Not yet exercised: the click
+      itself (the probe reads, it does not vote), and `aria-pressed="true"` on a post the
+      reader has voted on.
+    - **The logged-in listing is thin and unstable.** Three signed-in loads of
+      `/r/programming/` answered 27, 0 (the no-content panel) and 1 post; a logged-out load
+      answers 27 every time. The probe now counts posts at first sight and four seconds
+      later to tell "streams in after first paint" from "served thin", and picks its
+      thread from `/top/?t=all` when the listing is under five posts, because the third
+      run's busiest-of-one had no comments and the comment sections reported on nothing.
+      If the logged-in feed streams, gate.js's reading of `C.FEED_EMPTY` as a final answer
+      (bug 94) is wrong for a logged-in reader and needs a second look.
+    - Reply control, composer, `execCommand`: the REPLY & COMPOSER block threw on its first
+      outing (it leaned on the injected bundle, which had died with the listing document)
+      and is now self-contained. Still open.
 
-    Until the next run, the honest status is: session detection verified; the rest
-    designed, asserted against a model, and one measurement closer. Also unmeasured: what Reddit's
+    Status after three runs: session detection and the vote contracts verified; the reply
+    and composer contracts designed, asserted against a model, and one probe away. Also unmeasured: what Reddit's
     optimistic insert of a posted reply looks like (a new `shreddit-comment` under the
     parent is the assumption `compose()` waits on; if Reddit re-renders the branch instead,
     the arrival check falls through to "the editor emptied", which is the weaker signal).
