@@ -48,6 +48,10 @@ const JS = [
   'src/core/paginator.js',
   // Loaded before chrome.js, which subscribes to it as it evaluates.
   'src/core/update.js',
+  // Who is logged in, then what that changes. Both before listing.js and comments.js,
+  // which build their vote columns and reply links out of account.js.
+  'src/core/session.js',
+  'src/modules/account.js',
   'src/modules/listing.js',
   'src/modules/comments.js',
   'src/modules/chrome.js',

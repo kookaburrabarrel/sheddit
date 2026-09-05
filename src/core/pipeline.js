@@ -334,6 +334,8 @@ globalThis.SHD = globalThis.SHD || {};
     SHD.media.reset();
     SHD.chrome.reset();
     SHD.paginator.reset();
+    SHD.session.reset();
+    SHD.account.reset();
     queue.clear();
 
     if (mode === R.OTHER || !enabledFor(mode)) {

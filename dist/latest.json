@@ -1,6 +1,6 @@
 {
-  "version": "0.33.0",
-  "released": "2026-09-03",
+  "version": "0.34.0",
+  "released": "2026-09-05",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.33.0 catches a link to old.reddit.com — which now answers every page with a login wall — and sends it to www.reddit.com instead, behind a notice saying so, so a dead old-reddit link stops looking like Sheddit failing."
+  "notes": "0.34.0 adds an account layer for readers who are already logged in to Reddit: the vote arrows register, a reply opens an old-reddit reply box, and the sidebar offers submit buttons — every one of them a click forwarded to Reddit's own control on the page, with no request of Sheddit's own. Off with one checkbox; nothing changes for a logged-out reader."
 }
