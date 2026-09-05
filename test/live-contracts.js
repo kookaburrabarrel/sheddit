@@ -180,21 +180,56 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   // and the bail message below literally offers "could be a slow load" as an explanation for
   // a state this code would have created itself. Give it the full budget, then diagnose only
   // if the posts genuinely never arrive.
-  const havePosts = await page.waitForSelector(C.POST, { timeout: 30000 }).then(() => true, () => false);
+  let havePosts = await page.waitForSelector(C.POST, { timeout: 30000 }).then(() => true, () => false);
+
+  /* Reddit's OWN "there is nothing here" panel (C.FEED_EMPTY) is the one affirmative
+     answer a feed with no posts can give, and the diagnosis below never looked for it. The
+     2026-09-05 signed-in run met it on /r/programming/ — a real, logged-in, Reddit page
+     with the no-content panel up where 27 posts had been an hour earlier — and the text
+     test for a robot check fired on something in the page copy, so a run that had signed in
+     correctly was reported as "a bot-detection challenge" and stopped before any of the
+     account-layer sections. Say what is there instead, and go and find posts on the sorted
+     listing so the rest of the run still happens; only when THAT is empty too is the
+     listing given up on. */
+  if (!havePosts) {
+    const empty = await page.evaluate((C) => ({
+      panel: !!document.querySelector(C.FEED_EMPTY),
+      app: !!document.querySelector(C.APP),
+      loggedIn: !!document.querySelector(C.SESSION.loggedIn)
+    }), C);
+    if (empty.panel) {
+      console.log(`  \x1b[33mNOTE\x1b[0m Reddit's own no-content panel (C.FEED_EMPTY) is up on /r/${SUB}/ — ` +
+        `this IS a Reddit page (shreddit-app: ${empty.app}, logged in: ${empty.loggedIn}), not a challenge; ` +
+        `Reddit served an empty feed. Worth recording: a logged-in feed that comes up empty is a ` +
+        `page Sheddit renders as its own empty state (bug 94). Retrying on /r/${SUB}/top/?t=all.`);
+      try {
+        await page.goto(`https://www.reddit.com/r/${SUB}/top/?t=all`, { waitUntil: 'networkidle2', timeout: 60000 });
+        havePosts = await page.waitForSelector(C.POST, { timeout: 30000 }).then(() => true, () => false);
+      } catch { havePosts = false; }
+    }
+  }
 
   if (!havePosts) {
     // No posts is not automatically "blocked" — that word was doing more diagnosing than
     // the evidence supported. Narrow to signatures that actually mean a challenge page
-    // (Cloudflare's title, a captcha iframe, an explicit robot check), and otherwise say
-    // plainly that we do not know why, with the evidence attached instead of a label.
-    const diag = await page.evaluate(() => ({
+    // (Cloudflare's title, a captcha iframe, an explicit robot check on a page that is NOT
+    // shreddit — a real Reddit page can carry those words in its own copy), and otherwise
+    // say plainly that we do not know why, with the evidence attached instead of a label.
+    const diag = await page.evaluate((C) => ({
       title: document.title,
+      isShreddit: !!document.querySelector(C.APP),
+      feedEmptyPanel: !!document.querySelector(C.FEED_EMPTY),
       hasCaptchaFrame: !!document.querySelector('iframe[src*="captcha" i], iframe[title*="challenge" i]'),
       cloudflareChallenge: /just a moment/i.test(document.title),
       robotCheck: /are you a robot|automated (queries|requests)/i.test(document.body?.innerText || ''),
       looksLikeReddit: /reddit/i.test(document.body?.innerText?.slice(0, 400) || '')
-    }));
-    if (diag.cloudflareChallenge || diag.hasCaptchaFrame || diag.robotCheck) {
+    }), C);
+    const challenge = diag.cloudflareChallenge || diag.hasCaptchaFrame || (diag.robotCheck && !diag.isShreddit);
+    console.log(`  \x1b[2mdiagnosis: ${JSON.stringify(diag)}\x1b[0m`);
+    if (diag.feedEmptyPanel) {
+      await bail(`Reddit served an EMPTY feed twice (/r/${SUB}/ and its /top/?t=all), with its own ` +
+                 `no-content panel up each time — a Reddit page, not a challenge. Try --sub=<another busy sub>.`);
+    } else if (challenge) {
       await bail(`a bot-detection challenge, not a normal page (title: ${JSON.stringify(diag.title)}). ` +
                  `Try --headed and clear it by hand, or re-run later.`);
     } else if (!diag.looksLikeReddit) {
