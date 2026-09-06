@@ -5476,6 +5476,33 @@ async function boot(html, url, setup) {
   const click = (window, el) => el.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   const voteCol = (doc, id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"] > .midcol`);
 
+  console.log('\n\x1b[1mA SAME-PAGE URL REWRITE DOES NOT KILL THE RENDER (bug 95)\x1b[0m');
+  {
+    /* Reported 2026-09-05 from a logged-in thread: the failure card with 52 processed, 0
+       rendered, 0 errors, 0 rejected. The rows had been drawn; Reddit then rewrote the
+       thread's URL in place (replaceState — same page, same elements), route.js emitted for
+       a path that classifies the same, onRoute tore the layout down, and the sweep skipped
+       every source because every source was stamped. The deadline now re-adopts stamped
+       sources that are still connected before accusing anyone. */
+    const { doc, window } = await boot(commentsPage(), 'https://www.reddit.com/r/IdiotsTowingThings/comments/link1/nasa/', noAuto);
+    const before = doc.querySelectorAll('#shd-root .thing.comment').length;
+    check('the thread renders first', before === COMMENT_DEPTHS.length && !!doc.querySelector('#shd-root .shd-selfpost'));
+    window.history.replaceState(null, '', '/r/idiotstowingthings/comments/link1/nasa/');
+    await hold(50);
+    check('...and the rewrite tears it down, as a navigation would', doc.querySelectorAll('#shd-root .thing').length === 0);
+    check('the rows come back without a reload',
+      await waitFor(() => doc.querySelectorAll('#shd-root .thing.comment').length === before, { timeout: 6000 }),
+      `rows: ${doc.querySelectorAll('#shd-root .thing.comment').length}`);
+    check('...exactly once — no duplicates, the post included',
+      doc.querySelectorAll('#shd-root .thing.comment').length === before &&
+      doc.querySelectorAll('#shd-root .shd-selfpost').length === 1);
+    check('...and no failure card was raised',
+      !doc.querySelector('#shd-error') && !doc.documentElement.classList.contains('shd-failed') &&
+      doc.documentElement.classList.contains('shd-active'));
+    check('the header was rebuilt for the rewritten path',
+      !!doc.querySelector('#shd-header') && /idiotstowingthings/.test(doc.querySelector('#shd-header').textContent));
+  }
+
   console.log('\n\x1b[1mTHE ACCOUNT LAYER IS OFF FOR A LOGGED-OUT READER\x1b[0m');
   {
     // The primary use case, and the one this layer must not touch: every fixture before

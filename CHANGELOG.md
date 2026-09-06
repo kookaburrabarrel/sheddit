@@ -105,15 +105,33 @@ Reddit's composer with your draft in it. Also seen and recorded: the logged-in `
 27, then 0, then 1 post across three loads, where a logged-out load answers 27 every time —
 open, and measured from here on.
 
-**Tests.** Eighty-six new assertions across six sections in `test/run.js`, driving the layer
+**Tests.** Ninety-two new assertions across seven sections in `test/run.js`, driving the layer
 through a modelled logged-in Reddit (vote buttons carrying `aria-pressed` and a reply control
 in an open shadow root, a composer that mounts on click and inserts the posted comment); the
-logged-out sections assert nothing new appears. Twenty-three new mutation rows, each watched go
+logged-out sections assert nothing new appears. Twenty-four new mutation rows, each watched go
 red. Voting on a comment, a standing vote, a bar that exposes no state, a refused vote, a
 hidden score, both editor kinds, a composer that never opens, a missing reply control, a
 composer already open on a *descendant* (a comment's subtree holds its descendants'
 composers — §1.4 for composers), the top-level box, both submit doors classifying as routes
 Sheddit hands off.
+
+### Fixed — a logged-in thread came up as the failure card
+
+The first page opened signed in with this build was a comments page, and it raised the
+error card with numbers that contradicted the card's own copy: 52 elements processed, none
+rendered, no errors, none rejected. The rows had been drawn. Reddit then rewrote the
+thread's URL in place — the same page, the same elements — and Sheddit treated that as a
+navigation: tore its layout down and swept for new content, which skips everything it had
+already rendered (that skip is deliberate; it is what keeps an old sort from being drawn
+into a new one, bug 34). Nothing was left to draw, and the deadline called it a failure.
+
+Pre-commit, a rewrite and a navigation look the same. At the deadline they do not: a
+navigation has replaced the elements by then, a rewrite has left every one of them in the
+document. So the deadline now re-adopts stamped sources that are still connected — once,
+synchronously — before it accuses anything, and the thread comes back on its own. Not
+caused by the account layer, but found by it: this was the first signed-in page the
+renderer had ever been on, and a signed-in Reddit does more to the URL bar. Engineering log
+bug 95; pinned by a jsdom row that performs the rewrite and a mutation row.
 
 ### Changed — the scope statement
 

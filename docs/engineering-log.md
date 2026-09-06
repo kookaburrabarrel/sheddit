@@ -1413,6 +1413,41 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
       is the entire point, and the mutation that removes it leaves a feature that still
       "works".
 
+95. **A logged-in thread came up as the failure card — 52 processed, 0 rendered, 0
+    errors, 0 rejected.** Reported 2026-09-05 from `/r/IdiotsTowingThings/comments/…`,
+    the first page anyone had opened with the 0.34.0 build signed in, and the card's own
+    numbers ruled out everything the card suggests: the queue ran (stamped 52), no row
+    threw (errors 0), no model rejected anything (rejected none). The only way to hold
+    all four at once is that the rows WERE rendered and then removed.
+
+    They were. Reddit rewrites a thread's URL in place after rendering it —
+    `replaceState`, the same document, the same elements — and a logged-in session does
+    it where a logged-out one had not been seen to. route.js saw a path that classified
+    the same (`COMMENTS` → `COMMENTS`) but differed as a string, emitted, and `onRoute`
+    did what it does for a navigation: removed `#shd-root`, reset the modules, swept. The
+    sweep collects only UNSTAMPED sources, deliberately (bug 34: un-stamping pre-commit
+    re-renders the outgoing sort into the incoming root), and every source on the page
+    was stamped from the first render. Nothing queued, nothing rendered, and 1.5s later
+    the deadline read "sources present, processed, none rendered" and raised the card.
+    Reproduced in jsdom with one `history.replaceState` on a rendered comments page:
+    25 rows → 0 rows → `shd-failed`.
+
+    The fix is at the deadline, not in `onRoute`, and the placement is the point.
+    Pre-commit, nothing can tell a rewrite from a navigation — both leave the old
+    elements connected for the moment. At the deadline tick the distinction has made
+    itself: a real navigation has replaced the elements (measured live, 0 of 4 posts
+    survive a sort change), a rewrite has left every one of them in the document. So
+    before accusing anyone, the gate asks the pipeline to `readopt()`: un-stamp the
+    sources that are still connected, re-collect, flush synchronously, and only fail if
+    that too draws nothing. The reject tally is cleared first, or a stale-contract page
+    would report twice as many rejects as posts. Costs the reader the deadline's wait on
+    a rewrite — the `#shd-loading` line covers it — and nothing on any other page.
+
+    Not an account-layer bug, though the account layer is how it was found: nothing in
+    0.34.0 touches routing. It is the first time a signed-in page has been read with the
+    renderer on, and signed-in Reddit does more to `history` than signed-out Reddit does.
+    Whether logged-out Reddit ever rewrites in place is unmeasured; the fix does not care.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
