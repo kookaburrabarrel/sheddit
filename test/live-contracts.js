@@ -257,6 +257,22 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   const afterPause = await page.evaluate((C) => document.querySelectorAll(C.POST).length, C);
   console.log(`  \x1b[2mposts at first sight: ${firstSight}; four seconds later: ${afterPause}` +
     (afterPause > firstSight ? ' — THE FEED STREAMS IN after first paint on this session' : '') + '\x1b[0m');
+  /* Served thin and not streaming (measured 2026-09-05, logged in: 1 and 1). The question
+     that matters for a reader is whether Sheddit's paginator can fill it — so do what the
+     paginator does, once: call the programmatic partial's loadContent() from the page
+     realm and count again. */
+  if (afterPause < 5) {
+    const driven = await page.evaluate(async (C) => {
+      const fp = document.querySelector(C.FEED_PARTIAL);
+      if (!fp) return { partial: false };
+      if (typeof fp[C.PARTIAL_LOAD_METHOD] !== 'function') return { partial: true, method: false };
+      fp[C.PARTIAL_LOAD_METHOD]();
+      await new Promise(r => setTimeout(r, 5000));
+      return { partial: true, method: true, after: document.querySelectorAll(C.POST).length };
+    }, C);
+    console.log(`  \x1b[2mthin feed, one loadContent() driven: ${JSON.stringify(driven)}` +
+      (driven.after > afterPause ? ' — THE PAGINATOR FILLS IT, which is what the extension does' : '') + '\x1b[0m');
+  }
 
   const listing = await page.evaluate((C) => {
     const posts = [...document.querySelectorAll(C.POST)];
@@ -691,13 +707,19 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
      section already knows answers ~27 on ?t=all. */
   if (pick.n < 5 || pick.comments === 0) {
     console.log(`  \x1b[33mNOTE\x1b[0m the listing delivered ${pick.n} post(s) (busiest: ${pick.comments} comments) — ` +
-      `picking the thread from /r/${SUB}/top/?t=all instead`);
-    try {
-      await page.goto(`https://www.reddit.com/r/${SUB}/top/?t=all`, { waitUntil: 'networkidle2', timeout: 60000 });
-      await page.waitForSelector(C.POST, { timeout: 30000 }).catch(() => null);
-      const alt = await busiest();
-      if (alt.comments > pick.comments) pick = alt;
-    } catch { /* keep what we had */ }
+      `picking the thread from /r/${SUB}/top/ (this week, then all time) instead`);
+    // This week first: all-time top on an old community is a years-old megathread whose
+    // delivered slice has two top-level comments and an author with nothing on their
+    // profile, which starved the sort and profile sections (2026-09-05).
+    for (const t of ['week', 'all']) {
+      try {
+        await page.goto(`https://www.reddit.com/r/${SUB}/top/?t=${t}`, { waitUntil: 'networkidle2', timeout: 60000 });
+        await page.waitForSelector(C.POST, { timeout: 30000 }).catch(() => null);
+        const alt = await busiest();
+        if (alt.comments > pick.comments) pick = alt;
+        if (pick.comments >= 50) break;
+      } catch { /* keep what we had */ }
+    }
   }
   const permalink = pick.permalink;
   /* ---------------- the time window on `top` ----------------
@@ -921,6 +943,24 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
      already on the page (C.COMPOSER.host, the top-level one a logged-in thread carries),
      and inside it the editor and submit — and dumps the first comment's buttons the way
      the vote section does, so a wrong contract is corrected from the attribute names. */
+  /* The action row HYDRATES LATE, on scroll — read too soon, the only buttons under the
+     first comment are "N more replies" and a "Loading" placeholder, which is what the
+     first outing of this block (2026-09-05) reported as NOT FOUND. Bring the comment into
+     view and wait for anything labelled that is not the placeholder, then read. */
+  await page.evaluate((C) => document.querySelector(C.COMMENT)?.scrollIntoView({ block: 'center' }), C);
+  await page.waitForFunction((C) => {
+    const c = document.querySelector(C.COMMENT);
+    if (!c) return true;
+    const labelled = (root) => {
+      for (const b of root.querySelectorAll('button[aria-label]')) {
+        if (!/loading/i.test(b.getAttribute('aria-label')) && b.closest(C.COMMENT) === c) return true;
+      }
+      for (const el of root.querySelectorAll('*')) if (el.shadowRoot && labelled(el.shadowRoot)) return true;
+      return false;
+    };
+    return labelled(c);
+  }, { timeout: 8000 }, C).catch(() => null);
+
   const replyShape = await page.evaluate((C) => {
     /* Self-contained: the bundle is not injected on this page (the vote section's
        injection died with the listing document — the first run of this block threw
@@ -1119,11 +1159,15 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
               `(a branch's replies) vs ${inventory.count - insideComment} at tree level ` +
               `(a next page)\x1b[0m`);
 
-  check('COMMENT_PARTIAL\'s loading="programmatic" still matches something in a real tree',
-    anyProgrammatic || inventory.count === 0,
-    `${inventory.count} partials in the tree and NONE are programmatic — C.COMMENT_PARTIAL ` +
-    `matches nothing live, so paginator.js only works via its fallback selector. Either ` +
-    `drop the programmatic clause for comments or record why it is kept.`);
+  /* A NOTE, not a row, since 2026-09-05. This clause has now been observed three ways —
+     matching nothing (2026-08-14), matching two (2026-08-24), matching nothing again on a
+     logged-in thread carrying 88 partials — and contracts.js keeps it deliberately, as
+     documentation with a probe attached rather than a selector doing work (the fallback
+     clause is what drives). A red run over a fact that flips with the session trains the
+     reader to ignore the summary line; the count is what matters, and it is printed. */
+  console.log(`  \x1b[2mCOMMENT_PARTIAL's loading="programmatic" clause matches ${
+    inventory.rows.filter(r => r.loading === 'programmatic').length} of ${inventory.count} in-tree partials` +
+    (anyProgrammatic || inventory.count === 0 ? '' : ' — NONE on this thread; pagination runs on the fallback clause, as designed') + '\x1b[0m');
 
   /**
    * Drive it the way the shipped code does, five times, and watch the numbers.

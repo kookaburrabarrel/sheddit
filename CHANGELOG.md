@@ -93,9 +93,11 @@ root, only its descendants', for as long as it has existed. A custom element ren
 own action bar on its own root. Fixed, pinned by a jsdom row and a mutation row — and the
 run after the fix found them: `<button upvote aria-pressed>` and `<button downvote
 aria-pressed>` in the post's own shadow root, exactly the contracts shipped. **Voting is
-verified reachable for a logged-in reader.** The reply and composer contracts are still
-candidates; the probe that reads them off a thread without clicking anything is in place
-for the next run. Also seen and recorded: the logged-in `/r/programming/` listing answered
+verified reachable for a logged-in reader.** A fourth run verified the top-level composer
+too — every host clause matched, the editor is Reddit's Lexical rich-text field, the
+submit reads *Comment* — which is the shape the reply box drives. The per-comment reply
+control is the one contract still unread: the probe caught the action row before it had
+hydrated, and now waits for it. Also seen and recorded: the logged-in `/r/programming/` listing answered
 27, then 0, then 1 post across three loads, where a logged-out load answers 27 every time —
 open, and measured from here on.
 

@@ -1715,12 +1715,30 @@ the way a question got settled is usually more useful than the answer.
       run's busiest-of-one had no comments and the comment sections reported on nothing.
       If the logged-in feed streams, gate.js's reading of `C.FEED_EMPTY` as a final answer
       (bug 94) is wrong for a logged-in reader and needs a second look.
-    - Reply control, composer, `execCommand`: the REPLY & COMPOSER block threw on its first
-      outing (it leaned on the injected bundle, which had died with the listing document)
-      and is now self-contained. Still open.
+    - **The composer — verified, fourth run, for the top-level one.** All four `C.COMPOSER.host`
+      clauses matched one element each on a logged-in thread (nested, the async loader
+      outermost, outside any comment); the editor is `<div contenteditable
+      data-lexical-editor …>` — Lexical, so the `execCommand('insertText')` path is the
+      one that matters and the direct-text fallback is expected to be reconciled away —
+      and the submit is `<button slot type>` "Comment". Still unverified: the per-comment
+      composer that mounts after Reddit's reply control is clicked (the probe never
+      clicks), and `execCommand` landing in Lexical from a content script.
+    - **The reply control — read too early.** Under the first comment the probe found
+      only "59 more replies" and a "Loading" placeholder: the action row hydrates on
+      scroll, and the probe read it at load. It now scrolls the comment into view and
+      waits for a labelled button. account.js is unaffected — it resolves the control at
+      click time, when the reader has scrolled the row into view — but `learnInitial`'s
+      one look 1.5s after render will usually miss on comments below the fold, so a
+      standing comment vote lights on the first click rather than on load.
+    - **The thin logged-in feed does not stream**: 1 post at first sight, 1 four seconds
+      later, with Reddit's programmatic partial present. The probe now drives that partial
+      once, as the paginator would, and reports whether the feed fills — which is the
+      question that matters to a reader, since the extension's paginator is what fills a
+      three-post feed logged out too (§1.5).
 
-    Status after three runs: session detection and the vote contracts verified; the reply
-    and composer contracts designed, asserted against a model, and one probe away. Also unmeasured: what Reddit's
+    Status after four runs: session detection, the vote contracts and the top-level
+    composer verified; the per-comment reply control and composer one hydration-aware
+    probe away. Also unmeasured: what Reddit's
     optimistic insert of a posted reply looks like (a new `shreddit-comment` under the
     parent is the assumption `compose()` waits on; if Reddit re-renders the branch instead,
     the arrival check falls through to "the editor emptied", which is the weaker signal).
