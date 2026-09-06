@@ -83,6 +83,7 @@ output:
 | Route/tab consistency | **every href the chrome renders must classify as `LISTING`** |
 | Vote delegation | pierces an open shadow root; returns null (not a throw) on a closed one |
 | Native passthrough | the un-clipped ancestor is the body child, siblings hidden, cleanly reversible |
+| A same-page URL rewrite (bug 95) | a rendered thread survives a `replaceState` to a path that classifies the same: the rows come back once, the post included, no failure card, the header rebuilt for the new path |
 | The account layer, logged out | every pre-0.34.0 fixture (an empty header) reads as logged out; no status word, no submit doors, no comment box; a vote with no native control is a silent no-op, `reply` is the passthrough; a login button VETOES a logged-in signal; the setting off is 0.33.0 exactly |
 | Session detection | the avatar button reads as logged in, the report names the clause, the header says *logged in* before the theme bar, a reset re-reads |
 | Voting, logged in | a post arrow forwards to Reddit's button (in an open shadow root) and paints `likes`/`upmod`, the score moves, the lit arrow un-votes, a flip is two points, the keyboard works; a bar with no state keeps our toggle; a standing vote is picked up without a click and the delivered score left alone; a refused vote goes dark again; a miss warns ONCE naming the evidence; comment arrows move the tagline score and a hidden score stays hidden |

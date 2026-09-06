@@ -1827,6 +1827,15 @@ mutate "the reply control's text test is dropped" run \
   }' '    return null;
   }'
 
+# Bug 95: a same-page URL rewrite tears the render down and the sweep skips every stamped
+# source; without the deadline's re-adoption the reader gets the failure card.
+mutate "the deadline stops re-adopting stamped sources after a URL rewrite" run \
+  src/core/gate.js '        SHD.pipeline?.readopt?.();
+        if (renderedCount() > 0) return;    // reveal() ran inside the flush; we are done
+      }
+      return fail' '      }
+      return fail'
+
 # ---------------------------------------------------------------- the account layer ----
 # 0.34.0. The layer is ON only for a page that affirmatively reads as logged in, and every
 # action is a click on Reddit's own control. Each row below is one of the ways that story

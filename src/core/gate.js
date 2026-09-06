@@ -314,6 +314,14 @@ SHD.gate = (() => {
         SHD.pipeline?.kick?.();
         if (renderedCount() > 0) return;    // reveal() ran inside the flush; we are done
       }
+      // The other way to reach "processed, none rendered": the rows WERE drawn and a
+      // same-page URL rewrite tore them down, leaving every source stamped and still in
+      // the document (bug 95). By this tick a real navigation would have replaced those
+      // elements; connected ones are the page. Re-adopt them once before accusing.
+      if (stampedCount() > 0 && renderedCount() === 0) {
+        SHD.pipeline?.readopt?.();
+        if (renderedCount() > 0) return;    // reveal() ran inside the flush; we are done
+      }
       return fail('render-failed', { sources, stamped: stampedCount(),
                                     rejected: SHD.model?.rejectSummary?.() || '' });
     }
