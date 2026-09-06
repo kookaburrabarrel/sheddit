@@ -58,7 +58,11 @@ SHD.C = {
      clause with a match — so listing it first buys no preference. FEED_PARTIAL above
      sits in the same relationship to its own fallback.
 
-     Both are kept anyway, deliberately, for one reason: verify:live asserts on them, and
+     A THIRD observation, 2026-09-05 on a logged-in 2370-comment thread: 88 in-tree
+     partials, ZERO programmatic. verify:live reports the count as a note now rather than
+     failing the run over a fact that flips with the session.
+
+     Both are kept anyway, deliberately, for one reason: verify:live reports on them, and
      "the feed's partial is programmatic" is the fact that explains why pagination does not
      self-trigger at all. Comment continuation itself IS settled now — the WHAT DRIVES A
      COMMENT TREE section measured it live 2026-08-24: subthread expansion, with every
@@ -276,11 +280,16 @@ SHD.C = {
        leaves our arrows on their own local toggle. */
     voteState: 'aria-pressed',
     /* The per-comment "Reply" control, for opening Reddit's own composer on a logged-in
-       session (account.js). CANDIDATE. Reddit's action row is a custom element with an
-       open shadow root, so this is resolved with deepQuery like the vote buttons are;
-       the aria-label clause is the fallback for an attribute rename, and a miss is
-       fail-safe — the reply hands off to the native comment via passthrough, exactly as
-       every version before 0.34.0 did. */
+       session (account.js). CANDIDATE still: the 2026-09-05 signed-in probe read the
+       first comment before its action row had hydrated — the only buttons under it were
+       "N more replies" and a "Loading" placeholder — so NOT FOUND there says nothing yet;
+       the probe now scrolls the comment into view and waits for the row. The row itself
+       is a light-DOM <shreddit-comment-action-row> (28 on a live profile) with an open
+       shadow root, so this is resolved with deepQuery like the vote buttons are; the
+       aria-label clause is the fallback for an attribute rename, and a miss is fail-safe
+       — the reply hands off to the native comment via passthrough, exactly as every
+       version before 0.34.0 did. Because the row hydrates on scroll, account.js resolves
+       it at CLICK time, when the reader has necessarily scrolled it into view. */
     reply: 'button[data-post-click-location="comment-reply"], ' +
            'shreddit-comment-action-row button[aria-label*="reply" i], ' +
            'button[name="reply"], button[aria-label*="reply" i]',
@@ -533,20 +542,29 @@ SHD.C = {
    * division vote delegation has always had (ARCHITECTURE §5), and the reason the
    * extension still makes no request of its own.
    *
-   * CANDIDATES, all three, resolved with deepQuery. `host` is the element Reddit mounts
-   * the editor in; `editor` is the surface that takes text — a <textarea> in markdown
-   * mode, a contenteditable in the default rich-text mode, in that preference order
-   * because a textarea's value is a plain assignment while a contenteditable needs the
-   * page's editor to see an input event; `submit` is the button that posts it. Each miss
-   * has the same fail-safe: the native composer is revealed in place (passthrough) with
-   * whatever text did land, and the reader finishes in Reddit's UI. account.js's
-   * `compose()` measures the outcome — a new comment element arriving under the target —
-   * rather than assuming the click worked (the "N more replies" lesson, log bug 90).
+   * VERIFIED LIVE 2026-09-05, signed in, for the TOP-LEVEL composer a logged-in thread
+   * carries: every `host` clause matched exactly one element (nested — the async loader
+   * outermost, then comment-composer-host, shreddit-composer, faceplate-form), the first
+   * in document order being <shreddit-async-loader bundlename=…composer…>, outside any
+   * comment; the `editor` inside it is
+   *   <div slot name contenteditable role tabindex aria-placeholder data-lexical-editor dir>
+   * — Reddit's rich-text editor is Lexical, which is why account.js feeds a contenteditable
+   * through the browser's own editing command (Lexical listens for beforeinput; a direct
+   * text set is reconciled away) — and the `submit` is <button rpl slot type> "Comment".
+   * `[data-lexical-editor]` is listed so the contract names what was seen; the
+   * contenteditable clauses are the generic fallback. STILL UNVERIFIED: the per-comment
+   * composer Reddit mounts after its reply control is clicked (the probe reads, it never
+   * clicks), and whether `execCommand('insertText')` lands in Lexical from a content
+   * script — the account layer's fallback (reveal the composer with the draft kept) covers
+   * a no. Each miss has the same fail-safe: the native composer is revealed in place
+   * (passthrough), and the reader finishes in Reddit's UI. account.js's `compose()`
+   * measures the outcome — a new comment element arriving under the target — rather than
+   * assuming the click worked (the "N more replies" lesson, log bug 90).
    */
   COMPOSER: {
     host: 'comment-composer-host, shreddit-composer, shreddit-async-loader[bundlename*="composer" i], ' +
           'faceplate-form[action*="comment" i]',
-    editor: 'textarea, [contenteditable="true"], [contenteditable=""]',
+    editor: 'textarea, [data-lexical-editor], [contenteditable="true"], [contenteditable=""]',
     submit: 'button[type="submit"], [slot="submit-button"], button[slot*="submit" i]'
   },
 
