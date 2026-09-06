@@ -5404,7 +5404,9 @@ async function boot(html, url, setup) {
     if (!opts.noState && opts.initial === -1) state.down.setAttribute('aria-pressed', 'true');
     if (opts.reply) {
       const r = doc.createElement('button');
-      r.setAttribute('data-post-click-location', 'comment-reply');
+      // The live shape (2026-09-05) carries no naming attribute at all — the text is the
+      // handle. `bareReply` models it; the default keeps the attribute clause covered.
+      if (!opts.bareReply) r.setAttribute('data-post-click-location', 'comment-reply');
       r.textContent = 'Reply';
       r.addEventListener('click', () => {
         state.clicks.reply++;
@@ -5695,6 +5697,20 @@ async function boot(html, url, setup) {
       await waitFor(() => c1.clicks.submit === 1, { timeout: 1500 }) && c1.received[0] === 'Into a rich-text editor.',
       JSON.stringify(c1.received));
     check('...and that reply lands as well', await waitFor(() => !formOf('t1_c1') && !!row('t1_new_t1_c1'), { timeout: 1500 }));
+
+    // --- the LIVE reply control: a bare <button> whose only handle is the text "Reply" ---
+    const c5 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c5"]'),
+      { reply: true, bareReply: true, composer: 'textarea' });
+    // A decoy the text test must not take: "15 more replies" is a button too.
+    const decoy = doc.createElement('button'); decoy.textContent = '15 more replies';
+    doc.querySelector('shreddit-comment[thingid="t1_c5"]').prepend(decoy);
+    click(window, row('t1_c5').querySelector('a.reply'));
+    formOf('t1_c5').querySelector('textarea').value = 'Through the bare button.';
+    formOf('t1_c5').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a reply control with no attribute is found by its text, "Reply", and nothing else',
+      await waitFor(() => c5.clicks.reply === 1, { timeout: 1000 }) && c5.received.length === 0 || await waitFor(() => c5.clicks.submit === 1, { timeout: 1500 }));
+    check('...and the reply lands the same way',
+      await waitFor(() => !formOf('t1_c5') && !!row('t1_new_t1_c5'), { timeout: 1500 }) && c5.received[0] === 'Through the bare button.');
 
     // --- cancel ---
     click(window, row('t1_c2').querySelector('a.reply'));

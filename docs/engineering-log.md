@@ -1730,15 +1730,30 @@ the way a question got settled is usually more useful than the answer.
       click time, when the reader has scrolled the row into view — but `learnInitial`'s
       one look 1.5s after render will usually miss on comments below the fold, so a
       standing comment vote lights on the first click rather than on load.
-    - **The thin logged-in feed does not stream**: 1 post at first sight, 1 four seconds
-      later, with Reddit's programmatic partial present. The probe now drives that partial
-      once, as the paginator would, and reports whether the feed fills — which is the
-      question that matters to a reader, since the extension's paginator is what fills a
-      three-post feed logged out too (§1.5).
+    - **The reply control — FOUND, fifth run, once the row had hydrated — and it has no
+      name.** `<button rpl class style>` "Reply", light DOM, in the comment: nothing an
+      attribute selector can hold on to, so `C.NATIVE.replyText` (`/^reply$/i`, anchored so
+      "15 more replies" cannot match, scoped to buttons the comment owns) is the handle,
+      exactly as `MORE_REPLIES_TEXT` is for the expander. The comment's vote buttons were
+      confirmed in the same dump: `<button rpl aria-pressed class style upvote>` inside
+      its light-DOM `<shreddit-comment-action-row>`'s open shadow root. Adding the
+      ownership test surfaced a bug of its own before it shipped: `closest()` stops at a
+      shadow boundary, so a button inside the action row's root answered "no comment" and
+      twelve assertions went red at once — `ownerComment()` climbs out through each root's
+      host, and the probe's scan does the same.
+    - **The thin logged-in feed does not stream, and does not fill**: 1 post at first
+      sight, 1 four seconds later; the programmatic partial was present, exposed
+      `loadContent()`, was driven once — and delivered nothing, consuming itself. For that
+      session the community feed genuinely ended at one post, which is what a reader with
+      the extension would see (one row, "no more pages"). The first signed-in load of the
+      day answered 27. Unexplained; the probe now dumps the feed's direct children and the
+      custom elements inside it when it is thin, so the next such page says what Reddit
+      put there instead of posts.
 
-    Status after four runs: session detection, the vote contracts and the top-level
-    composer verified; the per-comment reply control and composer one hydration-aware
-    probe away. Also unmeasured: what Reddit's
+    Status after five runs: session detection, both vote contracts (post and comment), the
+    top-level composer and the reply control verified. Still unmeasured by a probe, by
+    design: the per-comment composer Reddit mounts after that control is clicked, and text
+    landing in Lexical — the by-hand check in TESTING.md is what settles those. Also unmeasured: what Reddit's
     optimistic insert of a posted reply looks like (a new `shreddit-comment` under the
     parent is the assumption `compose()` waits on; if Reddit re-renders the branch instead,
     the arrival check falls through to "the editor emptied", which is the weaker signal).
