@@ -257,23 +257,6 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   const afterPause = await page.evaluate((C) => document.querySelectorAll(C.POST).length, C);
   console.log(`  \x1b[2mposts at first sight: ${firstSight}; four seconds later: ${afterPause}` +
     (afterPause > firstSight ? ' — THE FEED STREAMS IN after first paint on this session' : '') + '\x1b[0m');
-  /* Served thin and not streaming (measured 2026-09-05, logged in: 1 and 1). The question
-     that matters for a reader is whether Sheddit's paginator can fill it — so do what the
-     paginator does, once: call the programmatic partial's loadContent() from the page
-     realm and count again. */
-  if (afterPause < 5) {
-    const driven = await page.evaluate(async (C) => {
-      const fp = document.querySelector(C.FEED_PARTIAL);
-      if (!fp) return { partial: false };
-      if (typeof fp[C.PARTIAL_LOAD_METHOD] !== 'function') return { partial: true, method: false };
-      fp[C.PARTIAL_LOAD_METHOD]();
-      await new Promise(r => setTimeout(r, 5000));
-      return { partial: true, method: true, after: document.querySelectorAll(C.POST).length };
-    }, C);
-    console.log(`  \x1b[2mthin feed, one loadContent() driven: ${JSON.stringify(driven)}` +
-      (driven.after > afterPause ? ' — THE PAGINATOR FILLS IT, which is what the extension does' : '') + '\x1b[0m');
-  }
-
   const listing = await page.evaluate((C) => {
     const posts = [...document.querySelectorAll(C.POST)];
     const missing = {};
@@ -333,6 +316,41 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   check('#main-content still exists', listing.main);
   check('the programmatic pagination partial is present', listing.partial);
   check('the partial still exposes loadContent()', listing.partialLoadable);
+  /* AFTER the partial checks above — driving consumes the partial, and the first version of
+     this block ran before them and failed them both on its own account (2026-09-05).
+     Served thin and not streaming (measured 2026-09-05, logged in: 1 and 1). The question
+     that matters for a reader is whether Sheddit's paginator can fill it — so do what the
+     paginator does, once: call the programmatic partial's loadContent() from the page
+     realm and count again. */
+  if (afterPause < 5) {
+    const driven = await page.evaluate(async (C) => {
+      const fp = document.querySelector(C.FEED_PARTIAL);
+      if (!fp) return { partial: false };
+      if (typeof fp[C.PARTIAL_LOAD_METHOD] !== 'function') return { partial: true, method: false };
+      fp[C.PARTIAL_LOAD_METHOD]();
+      await new Promise(r => setTimeout(r, 5000));
+      return { partial: true, method: true, after: document.querySelectorAll(C.POST).length };
+    }, C);
+    console.log(`  \x1b[2mthin feed, one loadContent() driven: ${JSON.stringify(driven)}` +
+      (driven.after > afterPause ? ' — THE PAGINATOR FILLS IT, which is what the extension does'
+        : ' — NOTHING ARRIVED: for this session the community feed genuinely ends here') + '\x1b[0m');
+    /* Measured 2026-09-05: partial present, method present, drive delivered nothing and the
+       partial consumed itself — so the reader with the extension sees a one-post feed and a
+       paginator reporting no more pages. What IS in the feed, then? Tag names only. */
+    const holds = await page.evaluate((C) => {
+      const feed = document.querySelector(C.FEED);
+      const tally = {};
+      for (const el of feed?.querySelectorAll('*') || []) {
+        const t = el.tagName.toLowerCase();
+        if (t.includes('-')) tally[t] = (tally[t] || 0) + 1;
+      }
+      return { children: [...(feed?.children || [])].map(c => c.tagName.toLowerCase()),
+               customElements: Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 15) };
+    }, C);
+    console.log(`  \x1b[2mthe feed's direct children: ${holds.children.join(' ')}\x1b[0m`);
+    console.log(`  \x1b[2mcustom elements inside it: ${JSON.stringify(holds.customElements)}\x1b[0m`);
+  }
+
   check('ads still contain no shreddit-post (the free ad filter)',
     listing.adsContainingPost === 0,
     `${listing.adsContainingPost} of ${listing.adPosts} ads contained one — ` +
@@ -951,9 +969,10 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   await page.waitForFunction((C) => {
     const c = document.querySelector(C.COMMENT);
     if (!c) return true;
+    const owner = (n) => { for (; n;) { const k = n.closest?.(C.COMMENT); if (k) return k; const r = n.getRootNode?.(); n = r?.host || null; } return null; };
     const labelled = (root) => {
       for (const b of root.querySelectorAll('button[aria-label]')) {
-        if (!/loading/i.test(b.getAttribute('aria-label')) && b.closest(C.COMMENT) === c) return true;
+        if (!/loading/i.test(b.getAttribute('aria-label')) && owner(b) === c) return true;
       }
       for (const el of root.querySelectorAll('*')) if (el.shadowRoot && labelled(el.shadowRoot)) return true;
       return false;
@@ -980,8 +999,27 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
     const c = document.querySelector(C.COMMENT);
     const out = { commentHasOwnShadow: !!c?.shadowRoot, hasComment: !!c, replyControl: null,
                   hosts: list(document, C.COMPOSER.host), editor: null, submit: null, buttons: [] };
-    const reply = c && deepQuery(c, C.NATIVE.reply);
-    if (reply) out.replyControl = { attrs: [...reply.attributes].map(a => a.name).join(' '),
+    let reply = c && deepQuery(c, C.NATIVE.reply);
+    let via = reply ? 'C.NATIVE.reply (attribute)' : null;
+    if (c && !reply) {
+      // The text test account.js falls back to, scoped to buttons this comment owns.
+      // Ownership THROUGH shadow roots: closest() stops at the boundary (account.js has the same helper).
+      const owner = (n) => { for (; n;) { const k = n.closest?.(C.COMMENT); if (k) return k; const r = n.getRootNode?.(); n = r?.host || null; } return null; };
+      const scan = (root, depth) => {
+        if (!root || depth > 8) return null;
+        for (const b of root.querySelectorAll('button')) {
+          if (owner(b) === c && C.NATIVE.replyText.test((b.textContent || '').trim())) return b;
+        }
+        if (root.shadowRoot) { const h = scan(root.shadowRoot, depth + 1); if (h) return h; }
+        for (const el of root.querySelectorAll('*')) {
+          if (el.shadowRoot && owner(el) === c) { const h = scan(el.shadowRoot, depth + 1); if (h) return h; }
+        }
+        return null;
+      };
+      reply = scan(c, 0);
+      if (reply) via = 'C.NATIVE.replyText (text)';
+    }
+    if (reply) out.replyControl = { via, attrs: [...reply.attributes].map(a => a.name).join(' '),
                                    label: (reply.getAttribute('aria-label') || reply.textContent || '').trim().slice(0, 40) };
     const host = document.querySelector(C.COMPOSER.host);
     if (host) {
@@ -1013,8 +1051,8 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   console.log('\n  \x1b[1mREPLY & COMPOSER (read, never clicked)\x1b[0m');
   if (!replyShape.hasComment) console.log('  \x1b[2mno comment on this thread — the per-comment half of this block has nothing to read\x1b[0m');
   console.log(`  \x1b[2mthe comment element has its OWN open shadow root: ${replyShape.commentHasOwnShadow}\x1b[0m`);
-  console.log(`  \x1b[2mC.NATIVE.reply on the first comment: ${replyShape.replyControl
-    ? `FOUND <${replyShape.replyControl.attrs}> "${replyShape.replyControl.label}"` : 'NOT FOUND'}\x1b[0m`);
+  console.log(`  \x1b[2mthe reply control on the first comment: ${replyShape.replyControl
+    ? `FOUND via ${replyShape.replyControl.via} — <${replyShape.replyControl.attrs}> "${replyShape.replyControl.label}"` : 'NOT FOUND'}\x1b[0m`);
   console.log(`  \x1b[2mcomposer hosts on the thread: ${JSON.stringify(replyShape.hosts)}\x1b[0m`);
   if (replyShape.hostTag) {
     console.log(`  \x1b[2mfirst host <${replyShape.hostTag}> inside a comment: ${replyShape.hostInsideComment}; ` +

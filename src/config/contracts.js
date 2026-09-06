@@ -266,7 +266,10 @@ SHD.C = {
          <button rpl aria-pressed class data-action-bar-action style upvote>   "Upvote"
          <button rpl aria-pressed class data-action-bar-action style downvote> "Downvote"
        The bare `upvote` / `downvote` attribute is the first clause and matched; the
-       aria-label clause is the fallback for the day it is renamed. Whether the same buttons
+       aria-label clause is the fallback for the day it is renamed. A COMMENT'S buttons
+       (verified the same day, once its action row had hydrated on scroll) are the same
+       shape one level down: <button rpl aria-pressed class style upvote> inside the open
+       shadow root of its light-DOM <shreddit-comment-action-row>. Whether the same buttons
        exist on a logged-out page is now an open question again — the "not reachable"
        findings were measured through the own-root hole — and does not matter to a
        logged-out reader either way: Reddit's own click handler decides what a click does. */
@@ -293,6 +296,16 @@ SHD.C = {
     reply: 'button[data-post-click-location="comment-reply"], ' +
            'shreddit-comment-action-row button[aria-label*="reply" i], ' +
            'button[name="reply"], button[aria-label*="reply" i]',
+    /* FOUND LIVE 2026-09-05, signed in, once the action row had hydrated: the reply
+       control is a LIGHT-DOM button in the comment carrying NOTHING that names it —
+         <button rpl class style> "Reply"
+       — so every attribute clause above misses it, and its text is the only handle. A TEXT
+       test, exactly as MORE_REPLIES_TEXT is and for the same reason; English-only, like
+       that one and the age gate; anchored (^…$) so "15 more replies" and "Reply" cannot be
+       confused; scoped by account.js to buttons the comment OWNS (closest(COMMENT) ===
+       target), because a comment's subtree holds its descendants' reply buttons too. The
+       attribute clauses stay first for the day Reddit names the control. */
+    replyText: /^reply$/i,
     overflow: 'shreddit-post-overflow-menu',
     textBody: 'shreddit-post-text-body',
     titleLink: 'a[slot="title"]',

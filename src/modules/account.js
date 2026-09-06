@@ -224,6 +224,50 @@ SHD.account = (() => {
 
   const hostsNow = () => new Set(document.querySelectorAll(C.COMPOSER.host));
 
+  /**
+   * Reddit's reply control for THIS comment. The attribute clauses first (C.NATIVE.reply),
+   * then the shape measured live 2026-09-05: a bare light-DOM <button> whose only handle
+   * is its text, "Reply" (C.NATIVE.replyText). Every button reachable through the comment
+   * — light DOM and open shadow roots — is a candidate, and only one the comment itself
+   * owns counts: a comment's subtree holds its descendants' reply buttons as surely as it
+   * holds their bodies (§1.4), and clicking a child's control would open a composer under
+   * the wrong comment.
+   */
+  /**
+   * The comment a node belongs to, THROUGH shadow roots. `closest()` stops at a shadow
+   * boundary and answers null for a button inside an action row's root — which is where
+   * the vote buttons live and where a named reply control would — so an ownership test
+   * built on closest() alone disowns exactly the controls it exists to find (it did:
+   * twelve assertions red at once). Climb out of each root to its host and ask again.
+   */
+  function ownerComment(node) {
+    for (let n = node; n;) {
+      const c = typeof n.closest === 'function' ? n.closest(C.COMMENT) : null;
+      if (c) return c;
+      const root = typeof n.getRootNode === 'function' ? n.getRootNode() : null;
+      n = root && root.host ? root.host : null;
+    }
+    return null;
+  }
+
+  function replyControl(target) {
+    const byAttr = SHD.dom.deepQuery(target, C.NATIVE.reply);
+    if (byAttr && ownerComment(byAttr) === target) return byAttr;
+    const owned = (b) => ownerComment(b) === target && C.NATIVE.replyText.test((b.textContent || '').trim());
+    const scan = (root, depth) => {
+      if (!root || depth > 8 || typeof root.querySelectorAll !== 'function') return null;
+      for (const b of root.querySelectorAll('button')) if (owned(b)) return b;
+      if (root.shadowRoot) { const hit = scan(root.shadowRoot, depth + 1); if (hit) return hit; }
+      for (const el of root.querySelectorAll('*')) {
+        if (el.shadowRoot && ownerComment(el) === target) {
+          const hit = scan(el.shadowRoot, depth + 1); if (hit) return hit;
+        }
+      }
+      return null;
+    };
+    return scan(target, 0);
+  }
+
   /** How many comments exist under the target — the measurement that says "it posted". */
   function commentsUnder(target, kind) {
     return kind === 'comment'
@@ -276,7 +320,7 @@ SHD.account = (() => {
     if (!host) {
       if (kind !== 'comment') return { ok: false, step: 'composer', host: null };
       const before = hostsNow();
-      const btn = SHD.dom.deepQuery(target, C.NATIVE.reply);
+      const btn = replyControl(target);
       if (!btn) return { ok: false, step: 'reply-control', host: null };
       btn.click();
       host = await waitFor(() => findHost(target, kind, before) || findHost(target, kind), timings.composeWaitMs);

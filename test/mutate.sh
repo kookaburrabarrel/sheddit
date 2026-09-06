@@ -1820,6 +1820,13 @@ mutate "deepQuery skips the host element's own shadow root again" run \
     }
 ' ''
 
+# The live reply control (2026-09-05) has no attribute at all; without the text test the
+# attribute clauses miss it and every reply hands off.
+mutate "the reply control's text test is dropped" run \
+  src/modules/account.js '    return scan(target, 0);
+  }' '    return null;
+  }'
+
 # ---------------------------------------------------------------- the account layer ----
 # 0.34.0. The layer is ON only for a page that affirmatively reads as logged in, and every
 # action is a click on Reddit's own control. Each row below is one of the ways that story

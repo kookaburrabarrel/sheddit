@@ -95,16 +95,20 @@ run after the fix found them: `<button upvote aria-pressed>` and `<button downvo
 aria-pressed>` in the post's own shadow root, exactly the contracts shipped. **Voting is
 verified reachable for a logged-in reader.** A fourth run verified the top-level composer
 too — every host clause matched, the editor is Reddit's Lexical rich-text field, the
-submit reads *Comment* — which is the shape the reply box drives. The per-comment reply
-control is the one contract still unread: the probe caught the action row before it had
-hydrated, and now waits for it. Also seen and recorded: the logged-in `/r/programming/` listing answered
+submit reads *Comment* — which is the shape the reply box drives. A fifth run, waiting for the
+action row to hydrate, found the per-comment reply control too — a bare `<button>` whose
+only handle is the text *Reply*, so it is matched by text, scoped to the comment, the way
+the *N more replies* expander already is — and the comment's own vote buttons beside it.
+Every contract a probe can read without posting is now read. What remains is the by-hand
+check: reply to a comment of your own and watch it land, or watch the box fall back to
+Reddit's composer with your draft in it. Also seen and recorded: the logged-in `/r/programming/` listing answered
 27, then 0, then 1 post across three loads, where a logged-out load answers 27 every time —
 open, and measured from here on.
 
-**Tests.** Eighty-four new assertions across six sections in `test/run.js`, driving the layer
+**Tests.** Eighty-six new assertions across six sections in `test/run.js`, driving the layer
 through a modelled logged-in Reddit (vote buttons carrying `aria-pressed` and a reply control
 in an open shadow root, a composer that mounts on click and inserts the posted comment); the
-logged-out sections assert nothing new appears. Twenty-two new mutation rows, each watched go
+logged-out sections assert nothing new appears. Twenty-three new mutation rows, each watched go
 red. Voting on a comment, a standing vote, a bar that exposes no state, a refused vote, a
 hidden score, both editor kinds, a composer that never opens, a missing reply control, a
 composer already open on a *descendant* (a comment's subtree holds its descendants'
