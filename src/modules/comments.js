@@ -151,7 +151,12 @@ SHD.comments = (() => {
            and the one where the phrase cannot collide with anything. */
         h('ul.flat-list.buttons', null, [
           h('li', null, h('a.permalink', { href: m.permalink || '#', text: 'permalink' })),
-          h('li', null, h('a.reply', { href: '#', text: 'reply', onclick: (e) => {
+          /* The handler is on the ROW, not the anchor — the same placement, for the same
+             reason, as the "N more replies" control below. An `<li>` is wider than the
+             short word inside it, so a click landing on the row's own box never reaches an
+             anchor-bound handler and the control silently ignores it. Anchor clicks still
+             bubble here, so this is strictly more forgiving. */
+          h('li', { onclick: (e) => {
             e.preventDefault();
             /* Auth-gated, and account.js owns which of two things happens. Logged out:
                hand off to Reddit's own composer via passthrough rather than reimplementing
@@ -160,7 +165,7 @@ SHD.comments = (() => {
                nothing. Logged in (0.34.0): an old-reddit reply box under this entry, whose
                save drives Reddit's composer and falls back to that same handoff. */
             SHD.account.reply(m, thing);
-          }}))
+          }}, h('a.reply', { href: '#', text: 'reply' }))
         ])
       ]),
       h('div.child', null, childListing)

@@ -1942,6 +1942,36 @@ mutate "account.js is delivered after the modules built from it" run \
         "src/core/session.js",
         "src/modules/account.js",'
 
+# ------------------------------------------- carrying the draft across the handoff ---
+# Reported from a signed-in session: save failed at `reply-control`, the layout swapped to
+# Reddit's comment, and its composer opened EMPTY. The draft was never lost — it sat in our
+# form behind a hidden #shd-root, under a sentence saying so that the reader could not see.
+# Dropping the carry puts them back in front of an empty box.
+mutate "the handoff reveals Reddit's composer but leaves the draft behind" run \
+  src/modules/account.js '      try { carried = await handoff(m.source, kind, text, r); }' \
+                         '      try { await handoff(m.source, kind, text, r); }'
+
+# The reveal is what MAKES the control exist: suppressed, the native tree is a clipped 1x1
+# box, so Reddit never hydrates the action row. Re-running the chain without revealing
+# finds exactly what the first attempt found — nothing.
+mutate "the handoff re-runs the chain without revealing first" run \
+  src/modules/account.js '    if (!reveal || !SHD.dom.passthrough(reveal)) return false;' \
+                         '    if (!reveal) return false;'
+
+# Telling a reader their words are in Reddit's box when they are not is worse than the bug
+# it replaces: they press Reddit's reply on an empty composer and lose the draft for real.
+mutate "the status claims the draft was carried whether or not it was" run \
+  src/modules/account.js "      form.dataset.shdCarried = carried ? 'yes' : 'no';" \
+                         "      form.dataset.shdCarried = 'yes';"
+
+# Bug 62's placement, at the reply link: an <li> is wider than the word inside it, so an
+# anchor-bound handler misses every click landing on the row's own box.
+mutate "the reply handler moves back onto the anchor" run \
+  src/modules/comments.js "          h('li', { onclick: (e) => {" \
+                          "          h('li', null, h('a.reply', { href: '#', text: 'reply', onclick: (e) => {" \
+  src/modules/comments.js "          }}, h('a.reply', { href: '#', text: 'reply' }))" \
+                          "          }}))"
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it
