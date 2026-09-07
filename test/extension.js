@@ -82,6 +82,7 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     return {
       rows: document.querySelectorAll('#shd-root .thing.link').length,
       rootIsBodyChild: document.querySelector('#shd-root')?.parentElement === document.body,
+      version: document.documentElement.getAttribute('data-shd-version'),
       active: document.documentElement.classList.contains('shd-active'),
       fail: document.documentElement.getAttribute('data-shd-fail'),
       header: !!document.querySelector('#shd-header'),
@@ -101,6 +102,14 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
   check('content scripts run on a reddit.com origin', listing.rows > 0, JSON.stringify(listing));
   check(`renders one row per post (${POSTS.length})`, listing.rows === POSTS.length, `got ${listing.rows}`);
   check('mounts #shd-root as a direct child of <body>', listing.rootIsBodyChild);
+  /* Which build is this? The failure card has always printed the version, but a card only
+     appears when something fails — so on a page that WORKS, nothing said. Two rounds of
+     live diagnosis went at the wrong build for want of this, and it can only be tested
+     here: chrome.runtime.getManifest() does not exist in the dev bundle, so the value
+     reaching <html> is exactly the packed extension's own. */
+  check('stamps <html> with the build version, on a working page',
+    listing.version === require('../manifest.json').version,
+    `data-shd-version=${listing.version} vs manifest ${require('../manifest.json').version}`);
   check('activates the skin', listing.active);
   check('does not fail', !listing.fail, listing.fail);
   check('header and sidebar are built', listing.header && listing.sidebar,
@@ -159,6 +168,24 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
       `reveal at ${revealAt}ms — if this fails, the no-flash check below proves nothing`);
     check('the blackout held from first paint to reveal — no native-feed flash',
       flashes.length === 0, `blackout dropped at ${JSON.stringify(flashes.map(e => e.t))}ms`);
+
+    /* The other half of that hold. Holding the blackout is right (it is what stops the
+       native-feed flash above), but an empty black viewport for the length of a slow
+       stream reads as a dead page — reported from live use as 6-8 seconds of nothing.
+       The line has to be VISIBLE, not merely present: the blackout sets
+       `visibility: hidden` on body, and old-reddit.css's own #shd-loading rule is scoped
+       under .shd-active — which is not set yet — and is a document_idle stylesheet that
+       may not even have arrived. Both facts are why the rule lives in suppress.css, and
+       `loadingShown` is what would catch either mistake. */
+    const shown = gateTrace.filter(e => e.gate && !e.active && e.loadingShown);
+    check('the held blackout says the page is coming, rather than sitting black',
+      shown.length > 0,
+      `loading line never visible during the hold; trace ${JSON.stringify(
+        gateTrace.map(e => [e.t, e.gate, e.active, e.loading, e.loadingShown]))}`);
+    check('...not before the first tick, so a fast page never flickers one',
+      shown.every(e => e.t >= 1400), `first shown at ${shown[0] && shown[0].t}ms`);
+    check('...and it is gone by the time the layout is up',
+      gateTrace.filter(e => e.active && e.loading).length === 0);
     await pageF.close();
 
     const pageO = await browser.newPage();
@@ -168,6 +195,12 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     check('an unhandled route still unblanks at the first tick, not at stream end',
       !!drop && drop.t > 1300 && drop.t < 2400,
       `gate dropped at ${drop && drop.t}ms — bug 36's protection must survive the hold`);
+    /* The counterweight, and the same rule as the hold it accompanies: on a route we are
+       about to hand back, our own text must never land on Reddit's page. */
+    check('...and never shows our loading line over a page we do not take',
+      otherTrace.every(e => !e.loading),
+      `loading line appeared at ${JSON.stringify(
+        otherTrace.filter(e => e.loading).map(e => e.t))}ms on an unhandled route`);
     await pageO.close();
   }
 

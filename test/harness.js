@@ -493,14 +493,25 @@ function serveFixtures() {
           const t0 = performance.now();
           const log = () => {
             const c = document.documentElement.classList;
+            /* The loading line is a BODY CHILD, so the class observer below cannot see it
+               arrive, and it is transient by design — a poll after the fact finds nothing
+               either way. Sampled, so the trace can answer "was it ever up, and was it
+               ever VISIBLE", the second half being the one the CSS can get wrong: the
+               blackout sets visibility:hidden on body, so a line with no rule to
+               re-show itself is present in the DOM and invisible on screen.
+               NOTE: this block is inside a template literal — no backticks. */
+            const el = document.getElementById('shd-loading');
             window.__shdGateTrace.push({
               t: Math.round(performance.now() - t0),
               gate: c.contains('shd-gate'),
-              active: c.contains('shd-active')
+              active: c.contains('shd-active'),
+              loading: !!el,
+              loadingShown: !!el && getComputedStyle(el).visibility === 'visible'
             });
           };
           new MutationObserver(log).observe(document.documentElement,
             { attributes: true, attributeFilter: ['class'] });
+          setInterval(log, 100);
           log();
         })();
       </script>`);

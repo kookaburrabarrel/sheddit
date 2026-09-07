@@ -20,6 +20,30 @@
 html.shd-gate { background: var(--shd-blank, #ffffff); }
 html.shd-gate body { visibility: hidden !important; }
 
+/* The blackout's occupant on a FIRST load, once it has lasted long enough to need one.
+ *
+ * Three things force this rule to live HERE rather than beside its sibling in
+ * old-reddit.css. The blackout hides `body` outright, and `visibility` is the one hiding
+ * mechanism a descendant can undo — so the line has to re-show itself. `.shd-active` is
+ * not set yet (reveal() adds it), so the sibling rule cannot match. And old-reddit.css is
+ * a document_idle stylesheet: on precisely the slow streaming pages this exists for, it
+ * may not have arrived when the line goes up, which would paint unstyled text on the
+ * blackout. suppress.css is document_start, like the blackout it is painting on.
+ *
+ * Literals for the fallbacks, not tokens alone: themes.css supplies --shd-* at
+ * document_start too, but a first paint that lost the race must still be legible. */
+html.shd-gate #shd-loading {
+  visibility: visible !important;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--shd-meta, #888888);
+  font: 13px Verdana, Arial, Helvetica, sans-serif;
+}
+html.shd-gate #shd-loading p { margin: 0; }
+
 /* --- phase 2: our layout is live ---
  *
  * ONE rule, at body level. We mount #shd-root and #shd-header as direct children of

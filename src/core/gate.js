@@ -116,8 +116,20 @@ SHD.gate = (() => {
    * lifecycle
    * ------------------------------------------------------------------ */
 
+  /**
+   * The build, read once. `chrome.runtime` does not exist in the dev bundle, and a version
+   * nothing can read is worse than none — the failure card has always printed this, but a
+   * card only appears when something FAILS. Two rounds of live diagnosis were spent on the
+   * wrong build because nothing on a WORKING page said which one it was: a report can now
+   * answer it with one attribute read, and so can `verify:live`.
+   */
+  const VERSION = (() => {
+    try { return chrome.runtime.getManifest().version; } catch { return 'unknown'; }
+  })();
+
   function arm() {
     document.documentElement.classList.add('shd-gate');
+    document.documentElement.setAttribute('data-shd-version', VERSION);
     scheduleCheck();
     watchNativeModal();
     // The first scheduled check is 1500ms out, but an interstitial is usually `complete`
@@ -274,6 +286,26 @@ SHD.gate = (() => {
   function check() {
     if (revealed || stopped()) return;
     waited += FIRST_CHECK_MS;
+
+    /* Bug 86's loading line, extended to a FIRST load.
+     *
+     * showLoading() was written for the SPA gap and mounted only mid-session, on the
+     * reasoning that a first load's blackout is brief. On a heavy thread it is not:
+     * reported from live use as 6-8 seconds of black screen, because real Reddit streams
+     * its document, the pipeline waits for DOMContentLoaded, and bug 83's fix deliberately
+     * HOLDS the blackout for a route we are going to take rather than flashing the native
+     * feed. That hold is right; leaving the window empty is what is not. A blank viewport
+     * says nothing about whether anything is coming — it reads identically to a page that
+     * has died.
+     *
+     * At the FIRST tick, not immediately: a page that renders inside 1500ms should never
+     * show a spinner it then removes, which is a flicker rather than an explanation.
+     * Gated on the route being one the pipeline will take, for exactly bug 83's reason —
+     * on a route we are about to hand back, this would put OUR text over Reddit's page.
+     * Every exit clears it: reveal(), unblank(), fail() and standDown() all hide or remove
+     * it, so it cannot outlive the window it describes. */
+    const takes = SHD.route?.classify?.(location.pathname);
+    if (takes && takes !== SHD.route.OTHER) showLoading();
 
     const sources = sourceCount();
     if (sources > 0) {
@@ -804,8 +836,7 @@ SHD.gate = (() => {
       what: 'Sheddit could not render this page.', why: `Reason: ${reason}`
     })))(detail);
 
-    let version = 'unknown';
-    try { version = chrome.runtime.getManifest().version; } catch { /* dev harness */ }
+    const version = VERSION;
 
     const diagnostics = [
       `reason:     ${reason}`,
