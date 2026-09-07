@@ -342,6 +342,46 @@ SHD.account = (() => {
     return arrived ? { ok: true, step: 'done', host } : { ok: false, step: 'arrival', host };
   }
 
+  /**
+   * The handoff, after compose() has missed. Reveals Reddit's own UI and CARRIES THE
+   * DRAFT INTO IT, which is the difference between a fallback and a dead end.
+   *
+   * Reported from a signed-in session: `save` on a real thread failed at `reply-control`,
+   * the layout swapped to Reddit's comment, and its composer opened EMPTY — the reader
+   * retyped their reply there. Our form kept the draft and said so, but passthrough hides
+   * #shd-root, so both the text and the sentence promising it were on the side of the page
+   * the reader had just been taken off. A message nobody can read is not a fallback.
+   *
+   * Why re-running the chain works when the first attempt did not, and this is the whole
+   * mechanism: suppress.css collapses the native body child to a 1x1 absolutely-positioned
+   * box with `overflow: hidden` and `clip: rect(0 0 0 0)`, so every comment inside it has
+   * no usable geometry and Reddit never hydrates the lazy <shreddit-comment-action-row>
+   * that holds `Reply`. THE READER SCROLLS OUR ROWS, NEVER REDDIT'S — so "resolved at
+   * click time, when the reader has necessarily scrolled it into view" was never true
+   * inside this layout. passthrough() restores position/width/height/clip on that same
+   * body child; the row hydrates against real geometry, and the control that was
+   * unreachable a moment ago is reachable now. Same shape as the paginator's programmatic
+   * partial, which also never fires while the native tree is hidden.
+   *
+   * Never the submit: this hands the reader Reddit's box with their words in it and stops.
+   * Posting stays a deliberate press of Reddit's own button.
+   */
+  async function handoff(target, kind, text, r) {
+    const reveal = r.host || (kind === 'comment' ? target : document.querySelector(C.MAIN));
+    if (!reveal || !SHD.dom.passthrough(reveal)) return false;
+    reveal.scrollIntoView?.({ block: 'center' });
+    let host = r.host;
+    if (!host && kind === 'comment') {
+      const btn = await waitFor(() => replyControl(target), timings.composeWaitMs);
+      if (!btn) return false;
+      btn.click();
+    }
+    host = host || await waitFor(() => findHost(target, kind), timings.composeWaitMs);
+    if (!host) return false;
+    const editor = await waitFor(() => SHD.dom.deepQuery(host, C.COMPOSER.editor), timings.composeWaitMs);
+    return !!editor && insertText(editor, text);
+  }
+
   const STEP_COPY = {
     'reply-control': 'could not find Reddit\'s reply button for this comment',
     composer: 'Reddit did not open its reply box',
@@ -389,9 +429,19 @@ SHD.account = (() => {
       save.disabled = false;
       form.dataset.shdState = 'failed';
       form.dataset.shdStep = r.step;
-      status.textContent = `sheddit ${STEP_COPY[r.step] || 'could not post this'} — Reddit\'s own reply box is shown instead; your text is kept here`;
-      const reveal = r.host || (kind === 'comment' ? m.source : document.querySelector(C.MAIN));
-      if (reveal && SHD.dom.passthrough(reveal)) reveal.scrollIntoView?.({ block: 'center' });
+      /* Say what happened BEFORE the handoff, so the sentence is on screen if the reveal
+         takes the layout with it, and correct it after with what actually happened to the
+         draft. `carried` is the fact the reader needs: their words are either in Reddit's
+         box or still in ours, and those need different next steps. */
+      status.textContent = `sheddit ${STEP_COPY[r.step] || 'could not post this'} — opening Reddit's own reply box`;
+      let carried = false;
+      try { carried = await handoff(m.source, kind, text, r); }
+      catch { carried = false; }
+      if (!form.isConnected) return;
+      form.dataset.shdCarried = carried ? 'yes' : 'no';
+      status.textContent = carried
+        ? `sheddit ${STEP_COPY[r.step] || 'could not post this'} — your text is in Reddit's reply box; press its own reply button to post it`
+        : `sheddit ${STEP_COPY[r.step] || 'could not post this'} — your text is still here, behind “← back to sheddit”`;
     });
     return form;
   }

@@ -5413,8 +5413,26 @@ async function boot(html, url, setup) {
         if (opts.composer === 'none') return;
         setTimeout(() => mountComposer(doc, source, opts, state), 30);
       });
-      shadow.appendChild(r);
-      state.replyBtn = r;
+      /* `hydrateOnReveal` is the LIVE delivery, and the reason the reported bug existed.
+         Reddit builds a comment's action row lazily off the native tree's viewport
+         position, and suppress.css collapses that tree to a clipped 1x1 box — so while our
+         layout is up the row never hydrates and the Reply button is simply not there.
+         Revealing the comment restores its geometry and the row appears. A fixture that
+         mounts the button up front cannot tell a handoff that re-runs the chain from one
+         that gives up, which is exactly the gap the reported failure fell through: the
+         suite was green with the composer opening EMPTY on a real thread. */
+      if (opts.hydrateOnReveal) {
+        const obs = new window.MutationObserver(() => {
+          if (!source.classList.contains('shd-passthrough')) return;
+          obs.disconnect();
+          shadow.appendChild(r);
+          state.replyBtn = r;
+        });
+        obs.observe(source, { attributes: true, attributeFilter: ['class'] });
+      } else {
+        shadow.appendChild(r);
+        state.replyBtn = r;
+      }
     }
     return state;
   }
@@ -5687,7 +5705,12 @@ async function boot(html, url, setup) {
     // --- the happy path, markdown mode (a textarea) ---
     const c0 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c0"]'),
       { reply: true, composer: 'textarea' });
-    click(window, row('t1_c0').querySelector('a.reply'));
+    /* Clicked on the ROW, not the anchor — the only click that can tell the two handler
+       placements apart, and the reason bug 62 went unnoticed at this call site: every
+       other test here clicks the <a>, which reaches an anchor-bound handler and a
+       row-bound one alike. An <li> is wider than the short word inside it, so a real
+       click landing beside the text is the ordinary case, not an edge one. */
+    click(window, row('t1_c0').querySelector('a.reply').parentElement);
     check('reply opens an old-reddit reply box under the comment, not a passthrough',
       !!formOf('t1_c0') && !doc.documentElement.classList.contains('shd-passthrough-active'));
     check('...with a textarea, save and cancel',
@@ -5771,6 +5794,50 @@ async function boot(html, url, setup) {
       await waitFor(() => formOf('t1_c4')?.dataset.shdState === 'failed', { timeout: 2000 }) &&
       formOf('t1_c4').dataset.shdStep === 'reply-control' &&
       doc.documentElement.classList.contains('shd-passthrough-active'));
+    window.SHD.dom.passthroughClear();
+
+    /* --- the reported failure: the control exists only ONCE REDDIT'S SIDE IS REVEALED ---
+       Reported from a signed-in session and reproduced with data-shd-step=reply-control:
+       save failed, the layout swapped to Reddit's comment, and its composer opened EMPTY,
+       so the reader retyped their reply there. The draft was never lost — it sat in our
+       form behind a hidden #shd-root, under a sentence saying so that the reader could no
+       longer see. A message on the side of the page you have just been taken off is not a
+       fallback. handoff() reveals FIRST, which is what lets the row hydrate, then re-runs
+       the chain as far as the text and stops — posting stays Reddit's own button. */
+    const c7 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c7"]'),
+      { reply: true, hydrateOnReveal: true, composer: 'textarea' });
+    click(window, row('t1_c7').querySelector('a.reply'));
+    formOf('t1_c7').querySelector('textarea').value = 'Carry me across.';
+    check('the control really is absent while our layout is up', c7.replyBtn === null);
+    formOf('t1_c7').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a control that only hydrates on reveal still reports the step it failed at',
+      await waitFor(() => formOf('t1_c7')?.dataset.shdCarried, { timeout: 4000 }) &&
+      formOf('t1_c7').dataset.shdStep === 'reply-control');
+    check('...and the draft is carried into Reddit\'s own composer rather than dropped',
+      formOf('t1_c7').dataset.shdCarried === 'yes' &&
+      c7.editor && c7.editor.value === 'Carry me across.',
+      `carried=${formOf('t1_c7').dataset.shdCarried} editor=${c7.editor && c7.editor.value}`);
+    check('...by clicking the control the reveal brought into being',
+      c7.clicks.reply === 1 && c7.replyBtn !== null);
+    check('...and the reader is told where their words went',
+      /in Reddit's reply box/.test(formOf('t1_c7').querySelector('.shd-reply-status').textContent),
+      formOf('t1_c7').querySelector('.shd-reply-status').textContent);
+    check('...and nothing was submitted on the reader\'s behalf', c7.clicks.submit === 0);
+    check('...while the draft also stays in our form, for the way back',
+      formOf('t1_c7').querySelector('textarea').value === 'Carry me across.');
+    window.SHD.dom.passthroughClear();
+
+    /* The counterweight: when the handoff cannot reach a composer either, the copy must
+       NOT claim the text went somewhere. Same failure, opposite advice. */
+    installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c8"]'),
+      { reply: false, composer: 'none' });
+    click(window, row('t1_c8').querySelector('a.reply'));
+    formOf('t1_c8').querySelector('textarea').value = 'Nowhere to go.';
+    formOf('t1_c8').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a handoff that reaches no composer says the text is still ours',
+      await waitFor(() => formOf('t1_c8')?.dataset.shdCarried === 'no', { timeout: 6000 }) &&
+      /still here/.test(formOf('t1_c8').querySelector('.shd-reply-status').textContent),
+      formOf('t1_c8')?.querySelector('.shd-reply-status')?.textContent);
     window.SHD.dom.passthroughClear();
 
     check('no console errors while replying',

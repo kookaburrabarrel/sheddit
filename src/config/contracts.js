@@ -291,8 +291,19 @@ SHD.C = {
        shadow root, so this is resolved with deepQuery like the vote buttons are; the
        aria-label clause is the fallback for an attribute rename, and a miss is fail-safe
        — the reply hands off to the native comment via passthrough, exactly as every
-       version before 0.34.0 did. Because the row hydrates on scroll, account.js resolves
-       it at CLICK time, when the reader has necessarily scrolled it into view. */
+       version before 0.34.0 did.
+
+       THE ROW DOES NOT HYDRATE WHILE OUR LAYOUT IS UP, and an earlier version of this note
+       said the opposite — that resolving at click time is enough "because the reader has
+       necessarily scrolled it into view". They have not: the reader scrolls OUR rows, and
+       suppress.css collapses the native body child to a 1x1 absolutely-positioned box with
+       `overflow: hidden` and `clip: rect(0 0 0 0)`, so no comment inside it has geometry to
+       be scrolled into view WITH. Reported from a signed-in session and reproduced with
+       `data-shd-step=reply-control`: the control is simply never built. Resolving at click
+       time is still right — it is just not sufficient, and the answer is account.js's
+       handoff(), which reveals first and re-runs the chain against restored geometry.
+       Same shape as the paginator's programmatic partial: Reddit's own lazy loading is
+       driven by the native tree's viewport position, and we hide the native tree. */
     reply: 'button[data-post-click-location="comment-reply"], ' +
            'shreddit-comment-action-row button[aria-label*="reply" i], ' +
            'button[name="reply"], button[aria-label*="reply" i]',
