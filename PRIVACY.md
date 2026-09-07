@@ -102,6 +102,16 @@ the extension removes them.
 - **No account, no login, no API key.** Sheddit never sees your Reddit credentials or
   session, and never acts on your behalf.
 - **No selling, sharing, or transfer.** There is nothing to sell, share, or transfer.
+- **If you are logged in to Reddit yourself, that stays between you and Reddit.** Since
+  0.34.0 Sheddit notices a logged-in page (the avatar button in Reddit's own header) and
+  makes old reddit's arrows, reply box and submit buttons work for you. It does that by
+  clicking the vote button, reply control and submit button Reddit already rendered for
+  the same item, and by typing your reply into Reddit's own editor — Reddit's page code
+  then sends the request it would have sent had you used Reddit's button, with the
+  session it already holds. Sheddit never sees that session, never reads a cookie, never
+  builds a request, and never acts without a click from you. The layer is on by default,
+  does nothing at all when you are logged out, and has its own checkbox on the options
+  page.
 
 ## Permissions, and why each one exists
 

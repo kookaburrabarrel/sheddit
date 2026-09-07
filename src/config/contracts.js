@@ -58,7 +58,11 @@ SHD.C = {
      clause with a match — so listing it first buys no preference. FEED_PARTIAL above
      sits in the same relationship to its own fallback.
 
-     Both are kept anyway, deliberately, for one reason: verify:live asserts on them, and
+     A THIRD observation, 2026-09-05 on a logged-in 2370-comment thread: 88 in-tree
+     partials, ZERO programmatic. verify:live reports the count as a note now rather than
+     failing the run over a fact that flips with the session.
+
+     Both are kept anyway, deliberately, for one reason: verify:live reports on them, and
      "the feed's partial is programmatic" is the fact that explains why pagination does not
      self-trigger at all. Comment continuation itself IS settled now — the WHAT DRIVES A
      COMMENT TREE section measured it live 2026-08-24: subthread expansion, with every
@@ -249,11 +253,59 @@ SHD.C = {
    */
   POST_BODY: '[slot="text-body"]',
 
+  /* The element Reddit hydrates a post's action bar into — the place the vote buttons
+     appear, late (ARCHITECTURE §1.3), and the one named in the miss report so a reader
+     can say whether the bar was there at all when a delegated click found nothing. */
+  ASYNC_LOADER: 'shreddit-async-loader',
   /* Native controls we delegate clicks to. Resolved AT CLICK TIME — the action bar
      lives inside a shreddit-async-loader and is not present at first paint. */
   NATIVE: {
+    /* VERIFIED LIVE 2026-09-05, signed in: both buttons sit in the POST'S OWN open shadow
+       root (not a descendant's — which is why every earlier probe, searching only the
+       descendants' roots, reported them unreachable), as
+         <button rpl aria-pressed class data-action-bar-action style upvote>   "Upvote"
+         <button rpl aria-pressed class data-action-bar-action style downvote> "Downvote"
+       The bare `upvote` / `downvote` attribute is the first clause and matched; the
+       aria-label clause is the fallback for the day it is renamed. A COMMENT'S buttons
+       (verified the same day, once its action row had hydrated on scroll) are the same
+       shape one level down: <button rpl aria-pressed class style upvote> inside the open
+       shadow root of its light-DOM <shreddit-comment-action-row>. Whether the same buttons
+       exist on a logged-out page is now an open question again — the "not reachable"
+       findings were measured through the own-root hole — and does not matter to a
+       logged-out reader either way: Reddit's own click handler decides what a click does. */
     upvote: 'button[upvote], button[aria-label*="upvote" i]',
     downvote: 'button[downvote], button[aria-label*="downvote" i]',
+    /* The attribute Reddit's vote buttons carry to say which way the reader has voted —
+       `aria-pressed` on both arrows. VERIFIED LIVE 2026-09-05, signed in: present on both
+       buttons (`false` / `false` on an unvoted post). The `"true"` side is inferred from
+       the toggle-button convention — no voted post was on the probed page — and is read
+       for MIRRORING only, never for deciding whether to vote: a button that lacks it
+       leaves our arrows on their own local toggle. */
+    voteState: 'aria-pressed',
+    /* The per-comment "Reply" control, for opening Reddit's own composer on a logged-in
+       session (account.js). CANDIDATE still: the 2026-09-05 signed-in probe read the
+       first comment before its action row had hydrated — the only buttons under it were
+       "N more replies" and a "Loading" placeholder — so NOT FOUND there says nothing yet;
+       the probe now scrolls the comment into view and waits for the row. The row itself
+       is a light-DOM <shreddit-comment-action-row> (28 on a live profile) with an open
+       shadow root, so this is resolved with deepQuery like the vote buttons are; the
+       aria-label clause is the fallback for an attribute rename, and a miss is fail-safe
+       — the reply hands off to the native comment via passthrough, exactly as every
+       version before 0.34.0 did. Because the row hydrates on scroll, account.js resolves
+       it at CLICK time, when the reader has necessarily scrolled it into view. */
+    reply: 'button[data-post-click-location="comment-reply"], ' +
+           'shreddit-comment-action-row button[aria-label*="reply" i], ' +
+           'button[name="reply"], button[aria-label*="reply" i]',
+    /* FOUND LIVE 2026-09-05, signed in, once the action row had hydrated: the reply
+       control is a LIGHT-DOM button in the comment carrying NOTHING that names it —
+         <button rpl class style> "Reply"
+       — so every attribute clause above misses it, and its text is the only handle. A TEXT
+       test, exactly as MORE_REPLIES_TEXT is and for the same reason; English-only, like
+       that one and the age gate; anchored (^…$) so "15 more replies" and "Reply" cannot be
+       confused; scoped by account.js to buttons the comment OWNS (closest(COMMENT) ===
+       target), because a comment's subtree holds its descendants' reply buttons too. The
+       attribute clauses stay first for the day Reddit names the control. */
+    replyText: /^reply$/i,
     overflow: 'shreddit-post-overflow-menu',
     textBody: 'shreddit-post-text-body',
     titleLink: 'a[slot="title"]',
@@ -463,6 +515,86 @@ SHD.C = {
     nodes: '#desktop-dynamic-upsell-dialog, desktop-dynamic-upsell-modal'
   },
 
+  /* ---------- the account layer (0.34.0) ---------- */
+  /**
+   * Is the reader logged in to Reddit? Two selector LISTS, and the decision is:
+   *
+   *     logged in  =  something in `loggedIn` matches  AND  nothing in `loggedOut` does
+   *
+   * Presence-based on purpose. An absence-based test ("no login link, so logged in")
+   * turns the account layer ON for the primary, logged-out reader the moment Reddit
+   * moves its login button — which is the one direction of error this must never take.
+   * A wrong guess here therefore costs the FEATURE (a logged-in reader gets 0.33.0's
+   * behaviour, with the native controls still one passthrough away), never the page,
+   * and never a logged-out reader's experience.
+   *
+   * VERIFIED LIVE 2026-09-05, signed in (`verify:live -- --headed --login`, /r/programming/):
+   * `shreddit-app[user-logged-in="true"]` matched 1, `#expand-user-drawer-button` matched 1,
+   * `reddit-header-large [id*="user-drawer" i]` matched 3, and both logged-out veto clauses
+   * matched 0 — so the page read as LOGGED IN through three independent signals. A fourth
+   * candidate, `user-drawer-app`, matched nothing and was deleted (the rule this comment
+   * used to end with). The attribute is the strongest of the three: it is on the app
+   * element itself, in the initial HTML, and sits beside `loid` in a list of session
+   * bookkeeping — the header buttons are the fallback for the day it is renamed. The
+   * logged-out veto is the header's own login button, which logged-out captures have shown
+   * (a `faceplate-tracker[noun="login"]` wrapping an anchor onto /login).
+   *
+   * Do not add an absence-based clause — see above.
+   */
+  SESSION: {
+    loggedIn: 'shreddit-app[user-logged-in="true"], #expand-user-drawer-button, ' +
+              'reddit-header-large [id*="user-drawer" i]',
+    loggedOut: 'reddit-header-large a[href*="/login"], faceplate-tracker[noun="login"]'
+  },
+
+  /**
+   * Reddit's own comment composer, which account.js DRIVES rather than replaces: the
+   * reader types into an old-reddit reply box of ours, and on save the text is handed to
+   * Reddit's editor and Reddit's submit button is clicked. Reddit's code then owns the
+   * request, the auth, the error handling and the optimistic insert — exactly the
+   * division vote delegation has always had (ARCHITECTURE §5), and the reason the
+   * extension still makes no request of its own.
+   *
+   * VERIFIED LIVE 2026-09-05, signed in, for the TOP-LEVEL composer a logged-in thread
+   * carries: every `host` clause matched exactly one element (nested — the async loader
+   * outermost, then comment-composer-host, shreddit-composer, faceplate-form), the first
+   * in document order being <shreddit-async-loader bundlename=…composer…>, outside any
+   * comment; the `editor` inside it is
+   *   <div slot name contenteditable role tabindex aria-placeholder data-lexical-editor dir>
+   * — Reddit's rich-text editor is Lexical, which is why account.js feeds a contenteditable
+   * through the browser's own editing command (Lexical listens for beforeinput; a direct
+   * text set is reconciled away) — and the `submit` is <button rpl slot type> "Comment".
+   * `[data-lexical-editor]` is listed so the contract names what was seen; the
+   * contenteditable clauses are the generic fallback. STILL UNVERIFIED: the per-comment
+   * composer Reddit mounts after its reply control is clicked (the probe reads, it never
+   * clicks), and whether `execCommand('insertText')` lands in Lexical from a content
+   * script — the account layer's fallback (reveal the composer with the draft kept) covers
+   * a no. Each miss has the same fail-safe: the native composer is revealed in place
+   * (passthrough), and the reader finishes in Reddit's UI. account.js's `compose()`
+   * measures the outcome — a new comment element arriving under the target — rather than
+   * assuming the click worked (the "N more replies" lesson, log bug 90).
+   */
+  COMPOSER: {
+    host: 'comment-composer-host, shreddit-composer, shreddit-async-loader[bundlename*="composer" i], ' +
+          'faceplate-form[action*="comment" i]',
+    editor: 'textarea, [data-lexical-editor], [contenteditable="true"], [contenteditable=""]',
+    submit: 'button[type="submit"], [slot="submit-button"], button[slot*="submit" i]'
+  },
+
+  /**
+   * Where a new post is written: Reddit's own composer, on its own route, which Sheddit
+   * never renders (route.js classifies it OTHER and the gate never suppresses it — it is
+   * one of the routes CONTRIBUTING says to leave completely untouched). Old reddit's
+   * sidebar offered the two doors to it, "Submit a new link" and "Submit a new text
+   * post", and that is what the account layer offers: a link onto this path, with the
+   * type Reddit's composer reads from the query. The values are Reddit's; `/submit` with
+   * no subreddit is the front page's, where Reddit asks which community.
+   */
+  SUBMIT: {
+    path: 'submit',
+    types: { link: 'LINK', text: 'TEXT' }
+  },
+
   /* ---------- our own markers ---------- */
   MARK: 'data-shd',                  // stamped "done" on consumed source elements
   ROOT_ID: 'shd-root',
@@ -517,6 +649,19 @@ SHD.settings = {
      rather than being handed 500 lines of selectors for a page it is leaving. test/run.js
      asserts the two agree — the arrangement bridge.js has with BRIDGE. */
   redirectOldReddit: true,
+  /* The account layer: vote arrows that register, an old-reddit reply box, and the
+     sidebar's "submit" buttons — for a reader who is ALREADY logged in to Reddit. On by
+     default because it does nothing at all for a logged-out reader (SHD.session decides,
+     and every one of its signals is presence-based, so the primary use case is untouched
+     by construction), and because a logged-in reader who installed an old-reddit skin
+     expects old reddit's arrows to work. Off here and a logged-in session reads exactly
+     as 0.33.0 did: arrows decorative, `reply` a handoff to Reddit's own comment.
+
+     Nothing in this layer makes a request of Sheddit's own, logged in or out. Every action
+     is a click forwarded to the control Reddit rendered for the same purpose, and text
+     handed to Reddit's own editor; Reddit's page code makes the request it would have made
+     had the reader used Reddit's button — see PRIVACY.md. */
+  account: true,
   /* Which palette to paint in. The ids live in src/config/themes.js, which also owns the
      fallback: anything not on that list resolves to 'classic'. This is the one setting
      that is not a boolean, and the only one a page can change by itself — the header's

@@ -70,6 +70,12 @@ SHD.gate = (() => {
   function engage(softMode = false) { engaged = true; soft = !!softMode; }
   let errors = 0;
   let firstError = null;
+  /* The first error of the whole PAGE, kept across route resets. `firstError` above is
+     per-route so a fresh navigation gets a fresh tally — but a logged-in home page churns
+     the router (replaceState on load, on scroll), and every churn zeroed the count that
+     would have tripped the render-errors screen. The reader then met "render-failed" with
+     no error on it, and the one line that explained the page was gone (2026-09-05). */
+  let anyError = null;
   let timer = null;
   let waited = 0;
 
@@ -306,6 +312,14 @@ SHD.gate = (() => {
       // tried to run.
       if (stampedCount() === 0) {
         SHD.pipeline?.kick?.();
+        if (renderedCount() > 0) return;    // reveal() ran inside the flush; we are done
+      }
+      // The other way to reach "processed, none rendered": the rows WERE drawn and a
+      // same-page URL rewrite tore them down, leaving every source stamped and still in
+      // the document (bug 95). By this tick a real navigation would have replaced those
+      // elements; connected ones are the page. Re-adopt them once before accusing.
+      if (stampedCount() > 0 && renderedCount() === 0) {
+        SHD.pipeline?.readopt?.();
         if (renderedCount() > 0) return;    // reveal() ran inside the flush; we are done
       }
       return fail('render-failed', { sources, stamped: stampedCount(),
@@ -680,9 +694,18 @@ SHD.gate = (() => {
   }
 
   /** Called by render sites on caught exceptions. Fails the page past a budget. */
+  /** Message plus the first three frames of the stack, on one indented block. */
+  function describeError(err) {
+    if (!err) return 'none';
+    const msg = String(err && err.message || err);
+    const stack = String(err && err.stack || '').split('\n').slice(1, 4).map(l => l.trim()).filter(Boolean);
+    return stack.length ? `${msg}\n             ${stack.join('\n             ')}` : msg;
+  }
+
   function reportError(err) {
     errors++;
     if (!firstError) firstError = err;
+    if (!anyError) anyError = err;
     console.warn('[sheddit] render error', errors, err);
     if (errors >= ERROR_BUDGET) {
       fail('render-errors', { errors, first: String(firstError && firstError.message || firstError) });
@@ -792,7 +815,11 @@ SHD.gate = (() => {
       `rendered:   ${renderedCount()} rows`,
       `stamped:    ${stampedCount()} processed by the renderer (0 here means the render queue never ran)`,
       `rejected:   ${(SHD.model && SHD.model.rejectSummary()) || 'none recorded'}`,
-      `errors:     ${errors}${firstError ? ' — ' + (firstError.message || firstError) : ''}`,
+      `errors:     ${errors} on this route${firstError ? ' — ' + (firstError.message || firstError) : ''}`,
+      /* The stack is what makes a report actionable: the message alone says "x is not a
+         function", the stack says WHICH LINE of which module asked. Three frames is
+         enough to name the caller and costs nothing to paste. */
+      `first error: ${describeError(anyError || firstError)}`,
       `version:    ${version}`,
       `user agent: ${navigator.userAgent}`
     ].join('\n');
@@ -808,7 +835,11 @@ SHD.gate = (() => {
       })
     ]);
 
-    const details = el('details', null, [
+    /* OPEN by default. A collapsed block reads as tidy and pastes as nothing: the first
+       report from a logged-in page arrived with an empty details section, because the
+       reader copied the card and the browser copied what was visible. The block is the
+       whole point of the card; it is not optional reading. */
+    const details = el('details', { open: true }, [
       el('summary', { textContent: 'Details for a bug report' }),
       el('pre', { textContent: diagnostics })
     ]);

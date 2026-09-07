@@ -5,8 +5,9 @@
  * NOT part of `npm test`: it needs the network, and Reddit serves an anti-bot
  * interstitial to datacenter IPs, so it only works from an ordinary machine.
  *
- *   npm run verify:live              # logged out, headless
- *   npm run verify:live -- --headed  # watch it, and/or log in first
+ *   npm run verify:live                       # logged out, headless
+ *   npm run verify:live -- --headed           # watch it
+ *   npm run verify:live -- --headed --login   # SIGN IN first — the run the account layer needs
  *
  * WHY THIS EXISTS
  * Every other suite runs against synthetic fixtures. TESTING.md is explicit about the
@@ -34,6 +35,16 @@ const puppeteer = require('puppeteer');
 const { resolveChrome, noChromeMessage, makeChecker } = require('./harness');
 
 const HEADED = process.argv.includes('--headed');
+/* --login: the signed-in run 0.34.0's account layer waits on. Puppeteer opens a FRESH
+   profile, so `--headed` alone is always a logged-out session — nobody could have run the
+   LOGGED-IN SESSION section from the instructions as they stood, and the first attempt
+   (2026-09-05) reported the vote control NOT FOUND for exactly that reason. With --login
+   the browser keeps a profile under dist/live-profile/ (gitignored with the rest of dist),
+   opens Reddit's login page first, and waits for you: press Enter in the terminal once you
+   are signed in, or it continues by itself when a C.SESSION signal appears — whichever is
+   first, up to five minutes. Sign in once; the next --login run is already signed in. */
+const LOGIN = process.argv.includes('--login');
+const PROFILE_DIR = path.join(__dirname, '..', 'dist', 'live-profile');
 const SUB = (process.argv.find(a => a.startsWith('--sub=')) || '--sub=programming').split('=')[1];
 
 /* A malformed flag must FAIL, not silently mean "the default". A live run typed
@@ -42,11 +53,11 @@ const SUB = (process.argv.find(a => a.startsWith('--sub=')) || '--sub=programmin
    the run lost to a typo that nothing reported. These runs need a human and a residential
    connection, so a wasted one costs a person's time, not CI minutes. */
 {
-  const KNOWN = [/^--sub=.+$/, /^--user=.+$/, /^--headed$/];
+  const KNOWN = [/^--sub=.+$/, /^--user=.+$/, /^--headed$/, /^--login$/];
   const bad = process.argv.slice(2).filter(a => a.startsWith('-') && !KNOWN.some(r => r.test(a)));
   if (bad.length) {
     console.error(`\n  unrecognised option(s): ${bad.join(', ')}` +
-      '\n  known options: --sub=<subreddit>   --user=<name>   --headed' +
+      '\n  known options: --sub=<subreddit>   --user=<name>   --headed   --login' +
       '\n  (the likely slip: --sub-aww for --sub=aww)\n');
     process.exit(1);
   }
@@ -69,9 +80,17 @@ const { check, report } = makeChecker();
 const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.js'), 'utf8');
 
 (async () => {
+  if (LOGIN && !HEADED) {
+    console.error('\n  --login needs --headed: you have to be able to see the login page to sign in on it.\n');
+    process.exit(1);
+  }
   const browser = await puppeteer.launch({
     executablePath: EXE,
     headless: !HEADED,
+    // A persistent profile ONLY when asked to sign in: the ordinary run stays what it has
+    // always been, one anonymous fresh profile, so its findings keep describing the
+    // logged-out reader.
+    ...(LOGIN ? { userDataDir: PROFILE_DIR } : {}),
     args: [
       '--no-sandbox', '--disable-dev-shm-usage',
       // A single, well-known Chrome flag (not a stealth plugin) that turns off the
@@ -87,6 +106,35 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   await page.setUserAgent(
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
     '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
+
+  /* ---------------- sign in first, if asked ---------------- */
+  if (LOGIN) {
+    console.log('\n\x1b[1mSIGN IN\x1b[0m');
+    try {
+      await page.goto('https://www.reddit.com/login/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    } catch (e) {
+      console.log(`  \x1b[33mNOTE\x1b[0m could not open the login page (${String(e).split('\n')[0]}) — ` +
+                  'sign in on whatever the window shows, then press Enter here.');
+    }
+    console.log('  sign in to Reddit in the browser window, then press Enter in this terminal.');
+    console.log('  \x1b[2m(the run also continues by itself once the page carries a C.SESSION.loggedIn ' +
+                'signal, and gives up waiting after five minutes; the profile is kept in ' +
+                path.relative(process.cwd(), PROFILE_DIR) + ' so the next --login run is already signed in)\x1b[0m');
+    const deadline = Date.now() + 5 * 60 * 1000;
+    await new Promise((resolve) => {
+      let done = false;
+      const finish = (how) => { if (done) return; done = true; clearInterval(poll); process.stdin.pause(); console.log(`  continuing: ${how}`); resolve(); };
+      process.stdin.resume();
+      process.stdin.once('data', () => finish('Enter pressed'));
+      const poll = setInterval(async () => {
+        if (Date.now() > deadline) return finish('five minutes passed — running whatever the session now is');
+        try {
+          const hit = await page.evaluate((sel) => !!document.querySelector(sel), C.SESSION.loggedIn);
+          if (hit) finish('a logged-in signal appeared on the page');
+        } catch { /* mid-navigation — try again next tick */ }
+      }, 1000);
+    });
+  }
 
   /* ---------------- listing ---------------- */
   console.log(`\n\x1b[1mLIVE CONTRACTS — /r/${SUB}/\x1b[0m`);
@@ -132,21 +180,56 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   // and the bail message below literally offers "could be a slow load" as an explanation for
   // a state this code would have created itself. Give it the full budget, then diagnose only
   // if the posts genuinely never arrive.
-  const havePosts = await page.waitForSelector(C.POST, { timeout: 30000 }).then(() => true, () => false);
+  let havePosts = await page.waitForSelector(C.POST, { timeout: 30000 }).then(() => true, () => false);
+
+  /* Reddit's OWN "there is nothing here" panel (C.FEED_EMPTY) is the one affirmative
+     answer a feed with no posts can give, and the diagnosis below never looked for it. The
+     2026-09-05 signed-in run met it on /r/programming/ — a real, logged-in, Reddit page
+     with the no-content panel up where 27 posts had been an hour earlier — and the text
+     test for a robot check fired on something in the page copy, so a run that had signed in
+     correctly was reported as "a bot-detection challenge" and stopped before any of the
+     account-layer sections. Say what is there instead, and go and find posts on the sorted
+     listing so the rest of the run still happens; only when THAT is empty too is the
+     listing given up on. */
+  if (!havePosts) {
+    const empty = await page.evaluate((C) => ({
+      panel: !!document.querySelector(C.FEED_EMPTY),
+      app: !!document.querySelector(C.APP),
+      loggedIn: !!document.querySelector(C.SESSION.loggedIn)
+    }), C);
+    if (empty.panel) {
+      console.log(`  \x1b[33mNOTE\x1b[0m Reddit's own no-content panel (C.FEED_EMPTY) is up on /r/${SUB}/ — ` +
+        `this IS a Reddit page (shreddit-app: ${empty.app}, logged in: ${empty.loggedIn}), not a challenge; ` +
+        `Reddit served an empty feed. Worth recording: a logged-in feed that comes up empty is a ` +
+        `page Sheddit renders as its own empty state (bug 94). Retrying on /r/${SUB}/top/?t=all.`);
+      try {
+        await page.goto(`https://www.reddit.com/r/${SUB}/top/?t=all`, { waitUntil: 'networkidle2', timeout: 60000 });
+        havePosts = await page.waitForSelector(C.POST, { timeout: 30000 }).then(() => true, () => false);
+      } catch { havePosts = false; }
+    }
+  }
 
   if (!havePosts) {
     // No posts is not automatically "blocked" — that word was doing more diagnosing than
     // the evidence supported. Narrow to signatures that actually mean a challenge page
-    // (Cloudflare's title, a captcha iframe, an explicit robot check), and otherwise say
-    // plainly that we do not know why, with the evidence attached instead of a label.
-    const diag = await page.evaluate(() => ({
+    // (Cloudflare's title, a captcha iframe, an explicit robot check on a page that is NOT
+    // shreddit — a real Reddit page can carry those words in its own copy), and otherwise
+    // say plainly that we do not know why, with the evidence attached instead of a label.
+    const diag = await page.evaluate((C) => ({
       title: document.title,
+      isShreddit: !!document.querySelector(C.APP),
+      feedEmptyPanel: !!document.querySelector(C.FEED_EMPTY),
       hasCaptchaFrame: !!document.querySelector('iframe[src*="captcha" i], iframe[title*="challenge" i]'),
       cloudflareChallenge: /just a moment/i.test(document.title),
       robotCheck: /are you a robot|automated (queries|requests)/i.test(document.body?.innerText || ''),
       looksLikeReddit: /reddit/i.test(document.body?.innerText?.slice(0, 400) || '')
-    }));
-    if (diag.cloudflareChallenge || diag.hasCaptchaFrame || diag.robotCheck) {
+    }), C);
+    const challenge = diag.cloudflareChallenge || diag.hasCaptchaFrame || (diag.robotCheck && !diag.isShreddit);
+    console.log(`  \x1b[2mdiagnosis: ${JSON.stringify(diag)}\x1b[0m`);
+    if (diag.feedEmptyPanel) {
+      await bail(`Reddit served an EMPTY feed twice (/r/${SUB}/ and its /top/?t=all), with its own ` +
+                 `no-content panel up each time — a Reddit page, not a challenge. Try --sub=<another busy sub>.`);
+    } else if (challenge) {
       await bail(`a bot-detection challenge, not a normal page (title: ${JSON.stringify(diag.title)}). ` +
                  `Try --headed and clear it by hand, or re-run later.`);
     } else if (!diag.looksLikeReddit) {
@@ -164,6 +247,16 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
     return;
   }
 
+  /* Three signed-in loads of /r/programming/ on 2026-09-05 answered 27, then 0 (the
+     no-content panel), then 1 post, where a logged-out load answers 27 every time. Whether
+     the logged-in feed STREAMS its posts in after a thin first paint, or genuinely serves a
+     thin page, decides how gate.js should read an empty feed for a logged-in reader — so
+     count at first sight and again after a pause, and print both. */
+  const firstSight = await page.evaluate((C) => document.querySelectorAll(C.POST).length, C);
+  await new Promise(r => setTimeout(r, 4000));
+  const afterPause = await page.evaluate((C) => document.querySelectorAll(C.POST).length, C);
+  console.log(`  \x1b[2mposts at first sight: ${firstSight}; four seconds later: ${afterPause}` +
+    (afterPause > firstSight ? ' — THE FEED STREAMS IN after first paint on this session' : '') + '\x1b[0m');
   const listing = await page.evaluate((C) => {
     const posts = [...document.querySelectorAll(C.POST)];
     const missing = {};
@@ -223,6 +316,41 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   check('#main-content still exists', listing.main);
   check('the programmatic pagination partial is present', listing.partial);
   check('the partial still exposes loadContent()', listing.partialLoadable);
+  /* AFTER the partial checks above — driving consumes the partial, and the first version of
+     this block ran before them and failed them both on its own account (2026-09-05).
+     Served thin and not streaming (measured 2026-09-05, logged in: 1 and 1). The question
+     that matters for a reader is whether Sheddit's paginator can fill it — so do what the
+     paginator does, once: call the programmatic partial's loadContent() from the page
+     realm and count again. */
+  if (afterPause < 5) {
+    const driven = await page.evaluate(async (C) => {
+      const fp = document.querySelector(C.FEED_PARTIAL);
+      if (!fp) return { partial: false };
+      if (typeof fp[C.PARTIAL_LOAD_METHOD] !== 'function') return { partial: true, method: false };
+      fp[C.PARTIAL_LOAD_METHOD]();
+      await new Promise(r => setTimeout(r, 5000));
+      return { partial: true, method: true, after: document.querySelectorAll(C.POST).length };
+    }, C);
+    console.log(`  \x1b[2mthin feed, one loadContent() driven: ${JSON.stringify(driven)}` +
+      (driven.after > afterPause ? ' — THE PAGINATOR FILLS IT, which is what the extension does'
+        : ' — NOTHING ARRIVED: for this session the community feed genuinely ends here') + '\x1b[0m');
+    /* Measured 2026-09-05: partial present, method present, drive delivered nothing and the
+       partial consumed itself — so the reader with the extension sees a one-post feed and a
+       paginator reporting no more pages. What IS in the feed, then? Tag names only. */
+    const holds = await page.evaluate((C) => {
+      const feed = document.querySelector(C.FEED);
+      const tally = {};
+      for (const el of feed?.querySelectorAll('*') || []) {
+        const t = el.tagName.toLowerCase();
+        if (t.includes('-')) tally[t] = (tally[t] || 0) + 1;
+      }
+      return { children: [...(feed?.children || [])].map(c => c.tagName.toLowerCase()),
+               customElements: Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 15) };
+    }, C);
+    console.log(`  \x1b[2mthe feed's direct children: ${holds.children.join(' ')}\x1b[0m`);
+    console.log(`  \x1b[2mcustom elements inside it: ${JSON.stringify(holds.customElements)}\x1b[0m`);
+  }
+
   check('ads still contain no shreddit-post (the free ad filter)',
     listing.adsContainingPost === 0,
     `${listing.adsContainingPost} of ${listing.adPosts} ads contained one — ` +
@@ -487,23 +615,131 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
     console.log('  \x1b[2mnot reachable — the documented logged-out state (voting is out ' +
                 'of scope; the arrows are decorative for a logged-out session)\x1b[0m');
   }
+  /* THE SHAPE, whatever it is. A NOT FOUND above says only that C.NATIVE.upvote matched
+     nothing; it does not say what IS there. The 2026-09-05 signed-in run reported NOT FOUND
+     with 23 open shadow roots searched — and deepQuery at the time never looked in the
+     post's OWN shadow root, so that number described the wrong tree. This dumps every
+     button reachable through the post and its open shadow roots, with attribute names and
+     labels (never user content), so contracts.js can be corrected from evidence rather
+     than another guess. */
+  const buttons = await page.evaluate((C) => {
+    const out = [];
+    const walk = (root, where, depth) => {
+      if (!root || depth > 8 || out.length > 40) return;
+      for (const b of root.querySelectorAll('button, [role="button"]')) {
+        out.push({ where, tag: b.tagName.toLowerCase(),
+                   attrs: [...b.attributes].map(a => a.name).join(' '),
+                   label: (b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 40) });
+      }
+      if (root.shadowRoot) walk(root.shadowRoot, where + '#shadow', depth + 1);
+      for (const el of root.querySelectorAll('*')) {
+        if (el.shadowRoot) walk(el.shadowRoot, where + '>' + el.tagName.toLowerCase() + '#shadow', depth + 1);
+      }
+    };
+    const post = document.querySelector(C.POST);
+    walk(post, 'post', 0);
+    return { hostHasOwnShadow: !!post?.shadowRoot, buttons: out };
+  }, C);
+  console.log(`  \x1b[2mthe post element has its OWN open shadow root: ${buttons.hostHasOwnShadow}\x1b[0m`);
+  console.log(`  \x1b[2mbuttons reachable through the post (${buttons.buttons.length}):\x1b[0m`);
+  for (const b of buttons.buttons) {
+    console.log(`  \x1b[2m  [${b.where}] <${b.tag} ${b.attrs}> "${b.label}"\x1b[0m`);
+  }
+
+  /* ---------------- the account layer (0.34.0) ---------------- */
+  console.log('\n\x1b[1mLIVE CONTRACTS — LOGGED-IN SESSION\x1b[0m');
+  /* THE SECTION THAT SETTLES 0.34.0. Every contract the account layer stands on is a
+     candidate (engineering log, open question 11): shaped from ordinary use of the site,
+     driven only against fixtures that model it. This section reads each one off the real
+     page and reports it, logged out or in — run with --headed and sign in when the window
+     opens to get the answer that matters.
+
+     Mostly NOTES rather than pass/fail rows, for the reason the vote section above went
+     that way: a logged-out run cannot fail on "not logged in". The two hard rows are the
+     ones that must hold on EVERY session — a page carrying Reddit's login button reads as
+     logged out (the veto), and the detector never says logged in on nothing (the
+     presence rule). Everything else is the evidence to edit contracts.js with. */
+  const session = await page.evaluate((C) => {
+    const list = (sel) => sel.split(',').map(x => x.trim()).filter(Boolean)
+      .map(x => { try { return [x, document.querySelectorAll(x).length]; } catch { return [x, 'invalid']; } });
+    const r = SHD.session.signals();
+    const post = document.querySelector(C.POST);
+    const up = post && SHD.dom.deepQuery(post, C.NATIVE.upvote);
+    const down = post && SHD.dom.deepQuery(post, C.NATIVE.downvote);
+    return {
+      loggedIn: r.loggedIn, matched: r.matched, vetoed: r.vetoed,
+      loggedInClauses: list(C.SESSION.loggedIn),
+      loggedOutClauses: list(C.SESSION.loggedOut),
+      voteState: up ? { up: up.getAttribute(C.NATIVE.voteState), down: down?.getAttribute(C.NATIVE.voteState),
+                        upAttrs: [...up.attributes].map(a => a.name) } : null,
+      composers: list(C.COMPOSER.host),
+      appAttrs: [...(document.querySelector(C.APP)?.attributes || [])].map(a => a.name)
+    };
+  }, C);
+  console.log(`  \x1b[2msession reads as: ${session.loggedIn ? 'LOGGED IN' : 'logged out'}\x1b[0m`);
+  console.log(`  \x1b[2mloggedIn clauses  ${JSON.stringify(session.loggedInClauses)}\x1b[0m`);
+  console.log(`  \x1b[2mloggedOut clauses ${JSON.stringify(session.loggedOutClauses)}\x1b[0m`);
+  console.log(`  \x1b[2mshreddit-app attributes: ${session.appAttrs.join(' ')}\x1b[0m`);
+  check('a page carrying Reddit\'s login button is read as logged out (the veto)',
+    session.vetoed.length === 0 || session.loggedIn === false, JSON.stringify(session));
+  check('the detector never says logged in without an affirmative signal',
+    !session.loggedIn || session.matched.length > 0, JSON.stringify(session));
+  if (session.loggedIn) {
+    console.log(`  \x1b[33mNOTE\x1b[0m logged in via ${session.matched.join(' | ')} — ` +
+      'these are the C.SESSION.loggedIn clauses to KEEP; delete the ones reporting 0 above.');
+  } else if (session.vetoed.length === 0 && session.matched.length === 0) {
+    console.log('  \x1b[2mno signal either way. If this browser IS signed in, C.SESSION.loggedIn is wrong: ' +
+      'the shreddit-app attribute list above and the header\'s buttons are where the real signal is.\x1b[0m');
+  }
+  if (session.voteState) {
+    const exposes = session.voteState.up != null || session.voteState.down != null;
+    console.log(`  \x1b[33mNOTE\x1b[0m vote buttons ${exposes ? 'EXPOSE' : 'do NOT expose'} ` +
+      `${C.NATIVE.voteState} (up=${session.voteState.up}, down=${session.voteState.down}); ` +
+      `upvote attributes: ${session.voteState.upAttrs.join(' ')}` +
+      (exposes ? '' : ' — the arrows will run on their local toggle; pick the state attribute from that list'));
+  }
+  console.log(`  \x1b[2mcomposer hosts on the listing: ${JSON.stringify(session.composers)}\x1b[0m`);
 
   /* ---------------- comments ---------------- */
   // The BUSIEST post on the listing, not the first one. Comment continuation is only
   // observable on a thread big enough to be truncated, and picking post[0] made that a
   // coin toss — the previous run happened to land on one and reported "arrived whole" as
   // an equally likely outcome, which tells us nothing about the mechanism.
-  const permalink = await page.evaluate((C) => {
-    const posts = [...document.querySelectorAll(C.POST)];
-    const best = posts.reduce((a, b) =>
-      Number(b.getAttribute(C.POST_ATTR.comments) || 0) >
-      Number(a?.getAttribute(C.POST_ATTR.comments) || -1) ? b : a, null);
-    return best?.getAttribute(C.POST_ATTR.permalink);
-  }, C);
   // Grabbed NOW, while the listing is still loaded — the USER PROFILES section at the
   // bottom visits this author's profile, and by then the page is a comment thread.
   const postAuthorForProfile = await page.evaluate((C) =>
     document.querySelector(C.POST)?.getAttribute(C.POST_ATTR.author), C);
+  const busiest = () => page.evaluate((C) => {
+    const posts = [...document.querySelectorAll(C.POST)];
+    const best = posts.reduce((a, b) =>
+      Number(b.getAttribute(C.POST_ATTR.comments) || 0) >
+      Number(a?.getAttribute(C.POST_ATTR.comments) || -1) ? b : a, null);
+    return { permalink: best?.getAttribute(C.POST_ATTR.permalink), n: posts.length,
+             comments: Number(best?.getAttribute(C.POST_ATTR.comments) || 0) };
+  }, C);
+  let pick = await busiest();
+  /* A THIN listing picks a thin thread. The 2026-09-05 signed-in runs delivered 1 post
+     (and once 0) on /r/programming/ where a logged-out load delivers 27, so "the busiest of
+     what is here" was a post with no comments and every comment section below reported on
+     nothing. Under five posts, pick from the sorted listing instead, which the time-window
+     section already knows answers ~27 on ?t=all. */
+  if (pick.n < 5 || pick.comments === 0) {
+    console.log(`  \x1b[33mNOTE\x1b[0m the listing delivered ${pick.n} post(s) (busiest: ${pick.comments} comments) — ` +
+      `picking the thread from /r/${SUB}/top/ (this week, then all time) instead`);
+    // This week first: all-time top on an old community is a years-old megathread whose
+    // delivered slice has two top-level comments and an author with nothing on their
+    // profile, which starved the sort and profile sections (2026-09-05).
+    for (const t of ['week', 'all']) {
+      try {
+        await page.goto(`https://www.reddit.com/r/${SUB}/top/?t=${t}`, { waitUntil: 'networkidle2', timeout: 60000 });
+        await page.waitForSelector(C.POST, { timeout: 30000 }).catch(() => null);
+        const alt = await busiest();
+        if (alt.comments > pick.comments) pick = alt;
+        if (pick.comments >= 50) break;
+      } catch { /* keep what we had */ }
+    }
+  }
+  const permalink = pick.permalink;
   /* ---------------- the time window on `top` ----------------
    *
    * This section answers a question the code deliberately does not: WHICH window Reddit
@@ -718,6 +954,117 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   }
   check('shreddit-comment-tree still exists', comments.tree);
   console.log(`  \x1b[2mobserved depths: ${comments.depths.join(', ')}\x1b[0m`);
+
+  /* The account layer's reply protocol, read off a real thread and never driven: NOTHING
+     here is clicked, because on a signed-in session a click would post. It reports what
+     account.js would find — the per-comment reply control (C.NATIVE.reply), a composer
+     already on the page (C.COMPOSER.host, the top-level one a logged-in thread carries),
+     and inside it the editor and submit — and dumps the first comment's buttons the way
+     the vote section does, so a wrong contract is corrected from the attribute names. */
+  /* The action row HYDRATES LATE, on scroll — read too soon, the only buttons under the
+     first comment are "N more replies" and a "Loading" placeholder, which is what the
+     first outing of this block (2026-09-05) reported as NOT FOUND. Bring the comment into
+     view and wait for anything labelled that is not the placeholder, then read. */
+  await page.evaluate((C) => document.querySelector(C.COMMENT)?.scrollIntoView({ block: 'center' }), C);
+  await page.waitForFunction((C) => {
+    const c = document.querySelector(C.COMMENT);
+    if (!c) return true;
+    const owner = (n) => { for (; n;) { const k = n.closest?.(C.COMMENT); if (k) return k; const r = n.getRootNode?.(); n = r?.host || null; } return null; };
+    const labelled = (root) => {
+      for (const b of root.querySelectorAll('button[aria-label]')) {
+        if (!/loading/i.test(b.getAttribute('aria-label')) && owner(b) === c) return true;
+      }
+      for (const el of root.querySelectorAll('*')) if (el.shadowRoot && labelled(el.shadowRoot)) return true;
+      return false;
+    };
+    return labelled(c);
+  }, { timeout: 8000 }, C).catch(() => null);
+
+  const replyShape = await page.evaluate((C) => {
+    /* Self-contained: the bundle is not injected on this page (the vote section's
+       injection died with the listing document — the first run of this block threw
+       "SHD is not defined" and aborted the run). Same algorithm as dom.deepQuery, own
+       root first. */
+    const deepQuery = (root, sel) => {
+      if (!root || typeof root.querySelector !== 'function') return null;
+      const d = root.querySelector(sel); if (d) return d;
+      if (root.shadowRoot) { const o = deepQuery(root.shadowRoot, sel); if (o) return o; }
+      for (const el of root.querySelectorAll('*')) {
+        if (el.shadowRoot) { const hit = deepQuery(el.shadowRoot, sel); if (hit) return hit; }
+      }
+      return null;
+    };
+    const list = (root, sel) => sel.split(',').map(x => x.trim()).filter(Boolean)
+      .map(x => { try { return [x, root.querySelectorAll(x).length]; } catch { return [x, 'invalid']; } });
+    const c = document.querySelector(C.COMMENT);
+    const out = { commentHasOwnShadow: !!c?.shadowRoot, hasComment: !!c, replyControl: null,
+                  hosts: list(document, C.COMPOSER.host), editor: null, submit: null, buttons: [] };
+    let reply = c && deepQuery(c, C.NATIVE.reply);
+    let via = reply ? 'C.NATIVE.reply (attribute)' : null;
+    if (c && !reply) {
+      // The text test account.js falls back to, scoped to buttons this comment owns.
+      // Ownership THROUGH shadow roots: closest() stops at the boundary (account.js has the same helper).
+      const owner = (n) => { for (; n;) { const k = n.closest?.(C.COMMENT); if (k) return k; const r = n.getRootNode?.(); n = r?.host || null; } return null; };
+      const scan = (root, depth) => {
+        if (!root || depth > 8) return null;
+        for (const b of root.querySelectorAll('button')) {
+          if (owner(b) === c && C.NATIVE.replyText.test((b.textContent || '').trim())) return b;
+        }
+        if (root.shadowRoot) { const h = scan(root.shadowRoot, depth + 1); if (h) return h; }
+        for (const el of root.querySelectorAll('*')) {
+          if (el.shadowRoot && owner(el) === c) { const h = scan(el.shadowRoot, depth + 1); if (h) return h; }
+        }
+        return null;
+      };
+      reply = scan(c, 0);
+      if (reply) via = 'C.NATIVE.replyText (text)';
+    }
+    if (reply) out.replyControl = { via, attrs: [...reply.attributes].map(a => a.name).join(' '),
+                                   label: (reply.getAttribute('aria-label') || reply.textContent || '').trim().slice(0, 40) };
+    const host = document.querySelector(C.COMPOSER.host);
+    if (host) {
+      out.hostTag = host.tagName.toLowerCase();
+      out.hostInsideComment = !!host.closest(C.COMMENT);
+      const ed = deepQuery(host, C.COMPOSER.editor);
+      out.editor = ed ? { tag: ed.tagName.toLowerCase(), attrs: [...ed.attributes].map(a => a.name).join(' ') } : null;
+      const sub = deepQuery(host, C.COMPOSER.submit);
+      out.submit = sub ? { tag: sub.tagName.toLowerCase(), attrs: [...sub.attributes].map(a => a.name).join(' '),
+                           label: (sub.textContent || '').trim().slice(0, 30) } : null;
+    }
+    const walk = (root, where, depth) => {
+      if (!root || depth > 6 || out.buttons.length > 30) return;
+      for (const b of root.querySelectorAll('button, [role="button"]')) {
+        if (b.closest(C.COMMENT) && b.closest(C.COMMENT) !== c) continue;   // this comment's own, not a child's
+        out.buttons.push({ where, attrs: [...b.attributes].map(a => a.name).join(' '),
+                           label: (b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 40) });
+      }
+      if (root.shadowRoot) walk(root.shadowRoot, where + '#shadow', depth + 1);
+      for (const el of root.querySelectorAll('*')) {
+        if (el.shadowRoot && (!el.closest(C.COMMENT) || el.closest(C.COMMENT) === c)) {
+          walk(el.shadowRoot, where + '>' + el.tagName.toLowerCase() + '#shadow', depth + 1);
+        }
+      }
+    };
+    if (c) walk(c, 'comment', 0);
+    return out;
+  }, C);
+  console.log('\n  \x1b[1mREPLY & COMPOSER (read, never clicked)\x1b[0m');
+  if (!replyShape.hasComment) console.log('  \x1b[2mno comment on this thread — the per-comment half of this block has nothing to read\x1b[0m');
+  console.log(`  \x1b[2mthe comment element has its OWN open shadow root: ${replyShape.commentHasOwnShadow}\x1b[0m`);
+  console.log(`  \x1b[2mthe reply control on the first comment: ${replyShape.replyControl
+    ? `FOUND via ${replyShape.replyControl.via} — <${replyShape.replyControl.attrs}> "${replyShape.replyControl.label}"` : 'NOT FOUND'}\x1b[0m`);
+  console.log(`  \x1b[2mcomposer hosts on the thread: ${JSON.stringify(replyShape.hosts)}\x1b[0m`);
+  if (replyShape.hostTag) {
+    console.log(`  \x1b[2mfirst host <${replyShape.hostTag}> inside a comment: ${replyShape.hostInsideComment}; ` +
+      `editor: ${replyShape.editor ? `<${replyShape.editor.tag} ${replyShape.editor.attrs}>` : 'NOT FOUND'}; ` +
+      `submit: ${replyShape.submit ? `<${replyShape.submit.tag} ${replyShape.submit.attrs}> "${replyShape.submit.label}"` : 'NOT FOUND'}\x1b[0m`);
+  } else {
+    console.log('  \x1b[2mno composer on the page — logged out, that is expected; logged in, C.COMPOSER.host is wrong ' +
+                'and the top-level composer\'s tag is what to look for below the post\x1b[0m');
+  }
+  console.log(`  \x1b[2mbuttons reachable through the first comment (${replyShape.buttons.length}):\x1b[0m`);
+  for (const b of replyShape.buttons) console.log(`  \x1b[2m  [${b.where}] <button ${b.attrs}> "${b.label}"\x1b[0m`);
+
   /* Not a pass/fail — a measurement the codebase is waiting on. See C.COMMENT_SCORE_HIDDEN:
      the attribute name is a candidate, and this line is the evidence that confirms or
      retires it. A young thread (inside the subreddit's hide-scores window) with many
@@ -850,11 +1197,15 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
               `(a branch's replies) vs ${inventory.count - insideComment} at tree level ` +
               `(a next page)\x1b[0m`);
 
-  check('COMMENT_PARTIAL\'s loading="programmatic" still matches something in a real tree',
-    anyProgrammatic || inventory.count === 0,
-    `${inventory.count} partials in the tree and NONE are programmatic — C.COMMENT_PARTIAL ` +
-    `matches nothing live, so paginator.js only works via its fallback selector. Either ` +
-    `drop the programmatic clause for comments or record why it is kept.`);
+  /* A NOTE, not a row, since 2026-09-05. This clause has now been observed three ways —
+     matching nothing (2026-08-14), matching two (2026-08-24), matching nothing again on a
+     logged-in thread carrying 88 partials — and contracts.js keeps it deliberately, as
+     documentation with a probe attached rather than a selector doing work (the fallback
+     clause is what drives). A red run over a fact that flips with the session trains the
+     reader to ignore the summary line; the count is what matters, and it is printed. */
+  console.log(`  \x1b[2mCOMMENT_PARTIAL's loading="programmatic" clause matches ${
+    inventory.rows.filter(r => r.loading === 'programmatic').length} of ${inventory.count} in-tree partials` +
+    (anyProgrammatic || inventory.count === 0 ? '' : ' — NONE on this thread; pagination runs on the fallback clause, as designed') + '\x1b[0m');
 
   /**
    * Drive it the way the shipped code does, five times, and watch the numbers.

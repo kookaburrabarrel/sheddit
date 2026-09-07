@@ -126,44 +126,14 @@ SHD.listing = (() => {
     box.appendChild(node);
   }
 
-  /* A miss is either "not hydrated yet" (retry works) or "contracts.js is stale"
-     (retry never works). The first cut logged console.debug for both, which made a
-     permanent break indistinguishable from a timing miss. Warn once, with the evidence
-     needed to tell them apart. */
-  let missWarned = false;
-  function reportMiss(kind, source) {
-    if (missWarned) return;
-    missWarned = true;
-    const loader = source.querySelector('shreddit-async-loader');
-    console.warn(
-      `[sheddit] no ${kind} control found on ${source.getAttribute(C.POST_ATTR.id)}. ` +
-      `async-loader present: ${!!loader}; open shadow roots searched: ${SHD.dom.shadowRoots(source)}. ` +
-      `If the action bar is visibly hydrated on the page, C.NATIVE.${kind} in contracts.js ` +
-      `is stale, or the control sits in a CLOSED shadow root and cannot be delegated to.`);
-  }
-
   /**
-   * Vote arrows. We own no auth state, so a click resolves the NATIVE control inside the
-   * hidden source element at click time and forwards to it. Reddit then handles auth,
-   * optimistic UI and the request. If the action bar hasn't hydrated yet, this no-ops.
-   *
-   * The lookup pierces open shadow roots: the action bar hydrates inside a
-   * shreddit-async-loader, which ARCHITECTURE §1.2 records as having a shadow root, so a
-   * light-DOM-only querySelector can miss the button permanently rather than transiently.
+   * Vote arrows. Built by account.js since 0.34.0, which owns the whole delegation story
+   * (ARCHITECTURE §5 tier 2, now with the vote state mirrored back): a click resolves the
+   * NATIVE control inside the hidden source element at click time and forwards to it, and
+   * Reddit handles auth, optimistic UI and the request. Logged out the control does not
+   * exist (measured, §7d) and the arrows are decorative, exactly as before.
    */
-  function midcol(m) {
-    const delegate = (sel, kind) => (ev) => {
-      ev.preventDefault();
-      const native = SHD.dom.deepQuery(m.source, sel);
-      if (native) native.click();
-      else reportMiss(kind, m.source);
-    };
-    return h('div.midcol.unvoted', null, [
-      h('div.arrow.up', { role: 'button', 'aria-label': 'upvote', onclick: delegate(C.NATIVE.upvote, 'upvote') }),
-      h('div.score.unvoted', { text: score(m.score), title: m.upvoteRatio != null ? `${Math.round(m.upvoteRatio * 100)}% upvoted` : null }),
-      h('div.arrow.down', { role: 'button', 'aria-label': 'downvote', onclick: delegate(C.NATIVE.downvote, 'downvote') })
-    ]);
-  }
+  const midcol = (m) => SHD.account.midcol(m, 'post');
 
   function thumb(m) {
     if (!SHD.settings.showThumbnails) return null;
