@@ -1413,6 +1413,41 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
       is the entire point, and the mutation that removes it leaves a feature that still
       "works".
 
+95. **A logged-in thread came up as the failure card — 52 processed, 0 rendered, 0
+    errors, 0 rejected.** Reported 2026-09-05 from `/r/IdiotsTowingThings/comments/…`,
+    the first page anyone had opened with the 0.34.0 build signed in, and the card's own
+    numbers ruled out everything the card suggests: the queue ran (stamped 52), no row
+    threw (errors 0), no model rejected anything (rejected none). The only way to hold
+    all four at once is that the rows WERE rendered and then removed.
+
+    They were. Reddit rewrites a thread's URL in place after rendering it —
+    `replaceState`, the same document, the same elements — and a logged-in session does
+    it where a logged-out one had not been seen to. route.js saw a path that classified
+    the same (`COMMENTS` → `COMMENTS`) but differed as a string, emitted, and `onRoute`
+    did what it does for a navigation: removed `#shd-root`, reset the modules, swept. The
+    sweep collects only UNSTAMPED sources, deliberately (bug 34: un-stamping pre-commit
+    re-renders the outgoing sort into the incoming root), and every source on the page
+    was stamped from the first render. Nothing queued, nothing rendered, and 1.5s later
+    the deadline read "sources present, processed, none rendered" and raised the card.
+    Reproduced in jsdom with one `history.replaceState` on a rendered comments page:
+    25 rows → 0 rows → `shd-failed`.
+
+    The fix is at the deadline, not in `onRoute`, and the placement is the point.
+    Pre-commit, nothing can tell a rewrite from a navigation — both leave the old
+    elements connected for the moment. At the deadline tick the distinction has made
+    itself: a real navigation has replaced the elements (measured live, 0 of 4 posts
+    survive a sort change), a rewrite has left every one of them in the document. So
+    before accusing anyone, the gate asks the pipeline to `readopt()`: un-stamp the
+    sources that are still connected, re-collect, flush synchronously, and only fail if
+    that too draws nothing. The reject tally is cleared first, or a stale-contract page
+    would report twice as many rejects as posts. Costs the reader the deadline's wait on
+    a rewrite — the `#shd-loading` line covers it — and nothing on any other page.
+
+    Not an account-layer bug, though the account layer is how it was found: nothing in
+    0.34.0 touches routing. It is the first time a signed-in page has been read with the
+    renderer on, and signed-in Reddit does more to `history` than signed-out Reddit does.
+    Whether logged-out Reddit ever rewrites in place is unmeasured; the fix does not care.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
@@ -1482,8 +1517,11 @@ the way a question got settled is usually more useful than the answer.
    was. See the `gateModal` fixture. What is still unseen is whether **quarantined** and
    **rate-limited** pages use the same modal pattern or genuinely replace the feed.
 3. **Whether a logged-in session exposes the vote control.** Logged out it is confirmed
-   unreachable (21 open shadow roots searched, nothing). Out of scope, but `deepQuery` is
-   kept for it.
+   unreachable (21 open shadow roots searched, nothing). **But see question 11: that search never
+   covered the post's own shadow root, so "unreachable" was a statement about the probe.** ~~Out of scope, but `deepQuery` is
+   kept for it.~~ **In scope since 0.34.0** and still unmeasured: the account layer
+   (ARCHITECTURE §5.3) forwards to the control if it is there and reports a miss once on a
+   session that reads as logged in. It widens into question 11 below.
 4. **`gate.js`'s deadline against a genuinely slow real page** — only synthetic stalls have
    been tested.
 5. **Real quarantine / rate-limit pages** have never been seen by the suite. `gated` and
@@ -1654,6 +1692,106 @@ the way a question got settled is usually more useful than the answer.
     and a strip built on guessed selectors is how pages get eaten. Needs one capture:
     the collapsed selftext's subtree skeleton (tags + classes, no text), from a thread
     Reddit happens to serve collapsed. Until then, recorded rather than guessed at.
+
+11. **Everything the account layer stands on (0.34.0).** Five contracts, all candidates,
+    none measured against a signed-in reddit.com: `C.SESSION.loggedIn` (which of the
+    logged-in header signals exists — the avatar button, the drawer app, an attribute on
+    `shreddit-app`), `C.NATIVE.voteState` (whether Reddit's vote buttons carry
+    `aria-pressed`), `C.NATIVE.reply` (the per-comment reply control's attribute),
+    `C.COMPOSER` (the composer's host, editor and submit), and whether a contenteditable
+    editor accepts text through `execCommand('insertText')` at all — Reddit's rich-text
+    editor may reconcile a direct text set away, in which case the markdown-mode textarea
+    is the path that works and the reader should be told to switch. Every one is built to
+    fail towards Reddit's own controls (the box stays with the draft; passthrough reveals
+    the composer), and the suite asserts that it does — but "fails safe" is not "works".
+    The settle is `npm run verify:live -- --headed --login`, signed in, whose LOGGED-IN
+    SESSION section reports each of the five.
+
+    **First signed-in run, 2026-09-05** (/r/programming/, a 504-comment thread, u/ profile),
+    and it moved two of the five:
+
+    - **`C.SESSION` — settled.** `shreddit-app[user-logged-in="true"]` 1, the avatar button
+      `#expand-user-drawer-button` 1, `[id*="user-drawer"]` 3, both veto clauses 0; the
+      page read as LOGGED IN through three independent signals. `user-drawer-app` matched
+      nothing and is gone. The `shreddit-app` attribute list the probe dumped puts
+      `user-logged-in` beside `loid` and the correlation ids — session bookkeeping on the
+      app element, in the initial HTML, which is the strongest of the three.
+    - **The vote control — NOT FOUND, logged in, 23 open shadow roots searched.** The same
+      answer every logged-out run gave, and it turned out to be an answer about the probe:
+      `dom.deepQuery` searched the shadow roots of the post's *descendants* and never the
+      post's *own*, for the whole life of the function — and a custom element's own root is
+      where it renders its own action bar. Every "unreachable" recorded in §7d and question
+      3 was measured through that hole. Fixed (own root first, a jsdom row and a mutation
+      row pin it); whether the buttons are actually there, and under what attributes, is
+      what the next signed-in run reports — its VOTE DELEGATION section now dumps every
+      button reachable through a post with its attribute names.
+    - **A logged-in feed that comes up empty.** The second signed-in run of the day loaded
+      `/r/programming/` and got Reddit's own no-content panel (`C.FEED_EMPTY`, bug 94's
+      copy: *This community doesn't have any posts yet*) with no `shreddit-post` for 30s,
+      on the page that had answered 27 posts an hour earlier on the same session. Whether
+      that is a transient or a shape the logged-in feed can take is unknown; what is known
+      is that the probe called it "a bot-detection challenge" (its robot-check text test
+      fired on ordinary page copy) and stopped before any account-layer section ran. The
+      probe now reports the panel for what it is, retries on `/top/?t=all`, and never
+      calls a page that carries `shreddit-app` a challenge.
+    - **The vote control — FOUND, third run of the day, with the own-root fix in.** In the
+      post's own open shadow root: `<button rpl aria-pressed class data-action-bar-action
+      style upvote>` "Upvote" and its `downvote` twin, `aria-pressed="false"` on both.
+      `C.NATIVE.upvote/downvote` and `C.NATIVE.voteState` are verified; 34 open shadow
+      roots hang under a logged-in post, and the buttons are in the one the old search
+      skipped. Delegation is live for a logged-in reader. Not yet exercised: the click
+      itself (the probe reads, it does not vote), and `aria-pressed="true"` on a post the
+      reader has voted on.
+    - **The logged-in listing is thin and unstable.** Three signed-in loads of
+      `/r/programming/` answered 27, 0 (the no-content panel) and 1 post; a logged-out load
+      answers 27 every time. The probe now counts posts at first sight and four seconds
+      later to tell "streams in after first paint" from "served thin", and picks its
+      thread from `/top/?t=all` when the listing is under five posts, because the third
+      run's busiest-of-one had no comments and the comment sections reported on nothing.
+      If the logged-in feed streams, gate.js's reading of `C.FEED_EMPTY` as a final answer
+      (bug 94) is wrong for a logged-in reader and needs a second look.
+    - **The composer — verified, fourth run, for the top-level one.** All four `C.COMPOSER.host`
+      clauses matched one element each on a logged-in thread (nested, the async loader
+      outermost, outside any comment); the editor is `<div contenteditable
+      data-lexical-editor …>` — Lexical, so the `execCommand('insertText')` path is the
+      one that matters and the direct-text fallback is expected to be reconciled away —
+      and the submit is `<button slot type>` "Comment". Still unverified: the per-comment
+      composer that mounts after Reddit's reply control is clicked (the probe never
+      clicks), and `execCommand` landing in Lexical from a content script.
+    - **The reply control — read too early.** Under the first comment the probe found
+      only "59 more replies" and a "Loading" placeholder: the action row hydrates on
+      scroll, and the probe read it at load. It now scrolls the comment into view and
+      waits for a labelled button. account.js is unaffected — it resolves the control at
+      click time, when the reader has scrolled the row into view — but `learnInitial`'s
+      one look 1.5s after render will usually miss on comments below the fold, so a
+      standing comment vote lights on the first click rather than on load.
+    - **The reply control — FOUND, fifth run, once the row had hydrated — and it has no
+      name.** `<button rpl class style>` "Reply", light DOM, in the comment: nothing an
+      attribute selector can hold on to, so `C.NATIVE.replyText` (`/^reply$/i`, anchored so
+      "15 more replies" cannot match, scoped to buttons the comment owns) is the handle,
+      exactly as `MORE_REPLIES_TEXT` is for the expander. The comment's vote buttons were
+      confirmed in the same dump: `<button rpl aria-pressed class style upvote>` inside
+      its light-DOM `<shreddit-comment-action-row>`'s open shadow root. Adding the
+      ownership test surfaced a bug of its own before it shipped: `closest()` stops at a
+      shadow boundary, so a button inside the action row's root answered "no comment" and
+      twelve assertions went red at once — `ownerComment()` climbs out through each root's
+      host, and the probe's scan does the same.
+    - **The thin logged-in feed does not stream, and does not fill**: 1 post at first
+      sight, 1 four seconds later; the programmatic partial was present, exposed
+      `loadContent()`, was driven once — and delivered nothing, consuming itself. For that
+      session the community feed genuinely ended at one post, which is what a reader with
+      the extension would see (one row, "no more pages"). The first signed-in load of the
+      day answered 27. Unexplained; the probe now dumps the feed's direct children and the
+      custom elements inside it when it is thin, so the next such page says what Reddit
+      put there instead of posts.
+
+    Status after five runs: session detection, both vote contracts (post and comment), the
+    top-level composer and the reply control verified. Still unmeasured by a probe, by
+    design: the per-comment composer Reddit mounts after that control is clicked, and text
+    landing in Lexical — the by-hand check in TESTING.md is what settles those. Also unmeasured: what Reddit's
+    optimistic insert of a posted reply looks like (a new `shreddit-comment` under the
+    parent is the assumption `compose()` waits on; if Reddit re-renders the branch instead,
+    the arrival check falls through to "the editor emptied", which is the weaker signal).
 
 Two settled things, so nobody reopens them: the **staircase indentation report does not
 reproduce** (measured at 10 widths), and **comments being DOM-nested was a non-event**

@@ -334,6 +334,8 @@ globalThis.SHD = globalThis.SHD || {};
     SHD.media.reset();
     SHD.chrome.reset();
     SHD.paginator.reset();
+    SHD.session.reset();
+    SHD.account.reset();
     queue.clear();
 
     if (mode === R.OTHER || !enabledFor(mode)) {
@@ -491,7 +493,44 @@ globalThis.SHD = globalThis.SHD || {};
     }
   }
 
-  SHD.pipeline = { kick() { if (queue.size) flush(); }, setSetting, renderEmpty };
+  /**
+   * Re-adopt the page's stamped sources — bug 95.
+   *
+   * onRoute() deliberately leaves data-shd="done" in place (see the note there): it runs
+   * pre-commit, and un-stamping the OUTGOING page's elements would re-render the old sort
+   * into the new root before Reddit swaps them (bug 34). That reasoning assumes Reddit
+   * swaps them. It does not always: a logged-in Reddit rewrites a thread's URL in place
+   * after rendering it (replaceState — the same page, the same elements), route.js sees a
+   * path that classifies the same and emits, onRoute tears our layout down, the sweep
+   * finds every source already stamped and renders nothing — and the deadline meets 52
+   * processed, 0 rendered, 0 errors, 0 rejected. Reported 2026-09-05 from exactly that
+   * card, reproduced in jsdom with one replaceState.
+   *
+   * So the gate asks, at its deadline, before accusing anyone: are the stamped sources
+   * STILL CONNECTED? A real navigation has replaced them long before the deadline tick
+   * (measured live: 0 of 4 posts survive a sort change); a URL rewrite leaves every one
+   * of them in the document. Connected-and-stamped-and-unrendered means they ARE the
+   * page, so they are un-stamped, re-collected and flushed synchronously, here, once.
+   * Returns how many were re-adopted.
+   */
+  function readopt() {
+    if (SHD.gate.stopped || !mode || mode === R.OTHER) return 0;
+    let n = 0;
+    for (const sel of selectorsFor(mode)) {
+      document.querySelectorAll(`${sel}[${C.MARK}]`).forEach(el => {
+        if (el.isConnected) { el.removeAttribute(C.MARK); n++; }
+      });
+    }
+    if (!n) return 0;
+    // A fresh attempt on the same page: the first pass's reject tally would otherwise be
+    // counted twice, and the card would report 22 rejects for 11 posts.
+    SHD.model?.clearRejects?.();
+    collect(document.documentElement);
+    flush();
+    return n;
+  }
+
+  SHD.pipeline = { kick() { if (queue.size) flush(); }, readopt, setSetting, renderEmpty };
 
   (async function boot() {
     await loadSettings();

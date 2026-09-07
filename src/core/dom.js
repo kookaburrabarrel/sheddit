@@ -152,6 +152,18 @@ SHD.dom = (() => {
     if (!root || typeof root.querySelector !== 'function') return null;
     const direct = root.querySelector(selector);
     if (direct) return direct;
+    /* The ROOT'S OWN shadow root, first. This was missing for the whole life of the
+       function: it searched the shadow roots of the root's DESCENDANTS and never the one on
+       the element it was handed — and a custom element's own shadow root is exactly where
+       that element renders its own UI. Measured 2026-09-05, logged in: 23 open shadow
+       roots searched under a live shreddit-post, upvote control NOT FOUND, which is the
+       same answer the logged-out runs gave and, with this gap, could not have been anything
+       else if the action bar lives on the post's own root. Whether it does is what the next
+       verify:live run reports (its VOTE DELEGATION section now dumps the host's own root). */
+    if (root.shadowRoot) {
+      const own = deepQuery(root.shadowRoot, selector);
+      if (own) return own;
+    }
     for (const el of root.querySelectorAll('*')) {
       if (!el.shadowRoot) continue;
       const hit = deepQuery(el.shadowRoot, selector);
@@ -160,10 +172,10 @@ SHD.dom = (() => {
     return null;
   }
 
-  /** How many open shadow roots hang below `root`. Diagnostics only. */
+  /** How many open shadow roots hang at or below `root`, its own included. Diagnostics only. */
   function shadowRoots(root) {
     if (!root || typeof root.querySelectorAll !== 'function') return 0;
-    let n = 0;
+    let n = root.shadowRoot ? 1 + shadowRoots(root.shadowRoot) : 0;
     for (const el of root.querySelectorAll('*')) {
       if (el.shadowRoot) n += 1 + shadowRoots(el.shadowRoot);
     }
