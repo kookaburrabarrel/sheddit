@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
 
-[![version 0.34.0](https://img.shields.io/badge/version-0.34.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.35.0](https://img.shields.io/badge/version-0.35.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.34.0 is out — everyone is welcome to try it
+### Beta 0.35.0 is out — everyone is welcome to try it
 
 Works in Chrome and Firefox, [installed by hand](#install) in about a minute — **Chrome is
 the better-tested of the two**, so start there if you have the choice.
@@ -55,6 +55,13 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 Full detail in the [changelog](CHANGELOG.md). The three most recent builds:
 
+**0.35.0 — the wait, explained**
+- **Fixed:** a slow-loading page sat black for several seconds with nothing to say whether
+  anything was coming. It says `loading…` now, once the wait is long enough to need it —
+  never on a page that arrives quickly, and never on a page Sheddit does not render.
+- **Added:** every page stamps the build it is running on `<html>`, so a bug report can
+  name its own version instead of guessing.
+
 **0.34.0 — your account, if you have one**
 - **Added:** already logged in to Reddit? The vote arrows register, `reply` opens an
   old-reddit reply box, and the sidebar gets *submit a new link / text post*. Each one is a
@@ -73,14 +80,6 @@ Full detail in the [changelog](CHANGELOG.md). The three most recent builds:
   notice saying so. Off with one checkbox.
 - **Fixed:** the release script rebuilt the Firefox download and never committed it, so
   that link had been serving an older build than the Chrome one beside it.
-
-**0.32.0 — pages that looked broken and were not**
-- **Fixed:** a quiet community came up as Reddit's own page claiming it had never had a
-  post. An empty feed is now drawn in the old-reddit layout, with a line naming the
-  community and the time window actually in force.
-- **Added:** `top` and `controversial` carry old Reddit's *links from* strip — past hour
-  through all time.
-- **Fixed:** a video post that showed nothing at all, and never said why.
 
 ---
 
@@ -178,7 +177,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.34.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.35.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

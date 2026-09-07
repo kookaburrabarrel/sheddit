@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.34.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.35.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,34 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.35.0
+
+### Fixed — a slow page sat black with nothing to say it was loading
+
+Reported from live use: a heavy thread showed nothing at all for six to eight seconds
+before the layout appeared. Nothing was wrong — the page was arriving — but a blank
+viewport says exactly as much as a dead one, and the reader has no way to tell them apart.
+
+The blackout itself is deliberate and stays. Real Reddit streams its HTML, so the moment
+the page is readable comes well after the moment it starts painting; dropping the blackout
+early shows the native feed and then snatches it away, which is worse. What was missing was
+an occupant for the window it holds. There has been a `loading…` line since the sort tabs
+got one, but it was only ever mounted mid-session, on the reasoning that a first load's
+wait is short — which is true right up until it isn't.
+
+It appears on a first load now, and only when it earns its place: not until the wait has
+already run past the first check, so a page that arrives quickly never flickers one, and
+never on a route Sheddit hands back to Reddit, where our own text over Reddit's page would
+be the bug rather than the fix.
+
+### Added — every page says which build it is
+
+The failure card has always printed the version, and that covers the case where something
+breaks. It does not cover the far more common one: a report about a page that WORKS, where
+the first question is which build produced it. Two rounds of live diagnosis were spent on
+the wrong version for want of an answer. `<html>` now carries `data-shd-version` on every
+page, so the question takes one look instead of a guess.
 
 ## 0.34.0
 

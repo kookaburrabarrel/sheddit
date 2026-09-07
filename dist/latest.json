@@ -1,6 +1,6 @@
 {
-  "version": "0.34.0",
-  "released": "2026-09-05",
+  "version": "0.35.0",
+  "released": "2026-09-07",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.34.0 adds an account layer for readers who are already logged in to Reddit: the vote arrows register, a reply opens an old-reddit reply box, and the sidebar offers submit buttons — every one of them a click forwarded to Reddit's own control on the page, with no request of Sheddit's own. Off with one checkbox; nothing changes for a logged-out reader."
+  "notes": "0.35.0 fills the wait: a page that takes seconds to arrive now says loading instead of holding a blank screen, and every page stamps the build it is running so a bug report can name its own version."
 }

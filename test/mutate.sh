@@ -1972,6 +1972,36 @@ mutate "the reply handler moves back onto the anchor" run \
   src/modules/comments.js "          }}, h('a.reply', { href: '#', text: 'reply' }))" \
                           "          }}))"
 
+# ------------------------------------- the held blackout, and which build is holding it ---
+# Bug 83's hold stops the native-feed flash and is right; leaving the window black is not.
+# Reported from live use as 6-8 seconds of nothing on a heavy thread, which reads as a dead
+# page rather than a loading one. Reverting to mid-session-only is the state that shipped.
+mutate "the first-load blackout goes back to being an empty black screen" extension \
+  src/core/gate.js '    if (takes && takes !== SHD.route.OTHER) showLoading();' '    ;'
+
+# The blackout hides body with visibility:hidden, and old-reddit.css's #shd-loading rule is
+# scoped under .shd-active (not set yet) AND delivered at document_idle (may not have
+# arrived on the slow pages this exists for). Without the document_start rule the line is
+# in the DOM and invisible — the failure a presence-only assertion cannot see.
+mutate "the loading line loses the rule that makes it visible on the blackout" extension \
+  src/styles/suppress.css 'html.shd-gate #shd-loading {
+  visibility: visible !important;' 'html.shd-gate #shd-loading:not(*) {
+  visibility: visible !important;'
+
+# The failure card prints the version, but a card only appears when something FAILS. On a
+# working page nothing said which build it was, and two rounds of live diagnosis went at
+# the wrong one.
+mutate "a working page stops saying which build it is" extension \
+  src/core/gate.js "    document.documentElement.setAttribute('data-shd-version', VERSION);" '    ;'
+
+# ALSO NOT MUTATED, same reasoning, recorded so nobody adds it back and watches it survive:
+# the route guard on the first-load loading line. Dropping it (showLoading() unconditionally)
+# leaves every assertion green, CORRECTLY — on a route we hand back, unblank('not-started')
+# runs later in the SAME tick and calls hideLoading(), so the line is added and removed
+# before any paint and no sampler can see it. The guard is defence against a future
+# reordering, not behaviour a reader can observe today; a row for it would survive and read
+# as a hole. This was measured, not assumed: the row existed, ran, and scored 0 failures.
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it

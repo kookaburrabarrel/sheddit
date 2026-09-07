@@ -14,7 +14,7 @@ summary over this table when they disagree, and update the table when they do.)
 | 1 | `node test/css-lint.js` | nothing | 39 |
 | 2 | `node test/run.js` | jsdom | 837 |
 | 3 | `node test/geometry.js` | Chromium | 219 |
-| 4 | `node test/extension.js` | Chromium | 162 |
+| 4 | `node test/extension.js` | Chromium | 167 |
 | 5 | `node test/extension-firefox.js` | Firefox + geckodriver | 50 |
 | 6 | `node test/media-sync.js` | Chromium | 9 |
 | 7 | `npm run verify:live` | real network | manual |
