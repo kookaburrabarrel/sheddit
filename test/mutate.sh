@@ -1772,6 +1772,46 @@ mutate "the README's stated version drifts from the manifest" run \
   manifest.json '  "icons": {' '  "version": "9.9.9",
   "icons": {'
 
+# ------------------------------------------- the release half of refresh-zip.sh ---
+# GitHub builds "Source code (zip)" from the TAG, so a release step that uploads the zips
+# and leaves the tag where it is republishes the current binaries against stale source —
+# the shape measured on 2026-09-01, 0.30.0 assets beside a 0.25.0 archive. The upload is
+# the visible half and the tag is the load-bearing one, which is the wrong way round for
+# noticing, hence the row.
+mutate "the release uploads new zips but leaves the tag behind" run \
+  refresh-zip.sh '  git tag -f Release HEAD -m "Sheddit $VERSION" >/dev/null || return 1' \
+                 '  :'
+
+# An unannotated tag cannot carry a signature, and a signing config refuses to write one,
+# so dropping -m fails at the last step of a release rather than at the first.
+mutate "the Release tag stops being annotated" run \
+  refresh-zip.sh 'git tag -f Release HEAD -m "Sheddit $VERSION"' \
+                 'git tag -f Release HEAD'
+
+# A literal note is a fourth place a version string can go stale, and the only one nothing
+# checks — latest.json's is asserted to name its own version, so reading it inherits that.
+# Anchored on the EXTRACTION, which occurs once; `--notes "$notes"` appears twice, once per
+# branch, and a row anchored there would silently mutate one call site and leave the other
+# holding the assertion up — bug 48's duplicate anchor, caught before it shipped this time.
+mutate "the release note is written in the script instead of read from latest.json" run \
+  refresh-zip.sh '  notes=$(node -e '"'"'const j=require("./dist/latest.json");process.stdout.write(j.notes||"")'"'"')' \
+                 '  notes="A new build of Sheddit."'
+
+# A tag naming a commit the remote has not been given is rejected on push, so syncing
+# before the push of main inverts the only ordering that works.
+mutate "the release is cut before main is pushed" run \
+  refresh-zip.sh 'git push --quiet origin main
+echo
+echo "Pushed. Both README downloads now serve $VERSION."
+
+# After the push, never before: the tag has to name a commit the remote already has.
+sync_release' \
+                 'sync_release
+git push --quiet origin main
+echo
+echo "Pushed. Both README downloads now serve $VERSION."
+:'
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it

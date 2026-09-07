@@ -3072,6 +3072,30 @@ async function boot(html, url, setup) {
     for (const f of ['dist/sheddit.zip', 'dist/sheddit-firefox.zip'])
       check(`refresh-zip.sh commits ${f}, or its README link goes stale`,
         new RegExp(`git add[^\\n]*(\\\\\\n[^\\n]*)*${f.replace('.', '\\.')}`).test(refresh), f);
+
+    /* The GitHub release is the same build published a second way, and the tag is the half
+       that is easy to leave out — GitHub builds "Source code (zip)" from the TAG, not from
+       the uploaded assets, so a run that only re-uploads zips republishes them against
+       whatever commit the tag still names. Measured 2026-09-01: 0.30.0 binaries beside a
+       0.25.0 source archive, seven versions apart. `-m` is part of the contract rather than
+       a detail — an unannotated tag cannot carry a signature, and a signing config rejects
+       it outright, so a tag written without one fails at the last step of a release. */
+    check('refresh-zip.sh moves an annotated Release tag, or the source archive stays behind',
+      /git tag -f Release[^\n]*-m /.test(refresh));
+    check('...and pushes the moved tag, or only the local copy knows',
+      /git push -f[^\n]*origin Release/.test(refresh));
+
+    /* The release body is read from dist/latest.json instead of written here. A literal
+       would be a fourth place a version string can go stale, and the one place nothing
+       checks it — latest.json's note is already asserted above to name its own version. */
+    check('refresh-zip.sh takes the release note from dist/latest.json, not a literal',
+      /notes=\$\([^\n]*latest\.json/.test(refresh) && /--notes "\$notes"/.test(refresh));
+
+    /* Ordering, which no amount of reading the function can establish: a tag naming a
+       commit the remote has not been given is rejected on push, so the sync has to follow
+       the push of main rather than precede it. */
+    check('...and syncs the release only after main is pushed',
+      refresh.lastIndexOf('sync_release') > refresh.indexOf('git push --quiet origin main'));
   }
 
   console.log('\n\x1b[1mTHE FIREFOX MANIFEST\x1b[0m');
