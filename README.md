@@ -51,6 +51,39 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 ---
 
+## What's new
+
+Full detail in the [changelog](CHANGELOG.md). The three most recent builds:
+
+**0.34.0 — your account, if you have one**
+- **Added:** already logged in to Reddit? The vote arrows register, `reply` opens an
+  old-reddit reply box, and the sidebar gets *submit a new link / text post*. Each one is a
+  click passed to Reddit's own control on the page — still no API, no token, no request of
+  Sheddit's own. On by default, does nothing at all logged out, off with one checkbox.
+- **Added:** when a reply cannot be handed to Reddit's composer, your draft is carried into
+  Reddit's own box rather than left behind the layout you were just taken off.
+- **Fixed:** a thread came up as the *couldn't render this page* card. Reddit rewrites a
+  thread's URL in place after loading it, and Sheddit read that as leaving the page.
+- **Fixed:** that card's diagnostics block is open by default and names the first error, so
+  a bug report carries the one line that explains it.
+
+**0.33.0 — old links that used to dead-end**
+- **Added:** `old.reddit.com` answers every page with a login wall now, so a link there is
+  opened on `www.reddit.com` instead — the same page, the same layout — behind a short
+  notice saying so. Off with one checkbox.
+- **Fixed:** the release script rebuilt the Firefox download and never committed it, so
+  that link had been serving an older build than the Chrome one beside it.
+
+**0.32.0 — pages that looked broken and were not**
+- **Fixed:** a quiet community came up as Reddit's own page claiming it had never had a
+  post. An empty feed is now drawn in the old-reddit layout, with a line naming the
+  community and the time window actually in force.
+- **Added:** `top` and `controversial` carry old Reddit's *links from* strip — past hour
+  through all time.
+- **Fixed:** a video post that showed nothing at all, and never said why.
+
+---
+
 ## What it is
 
 Sheddit is a browser extension that turns modern Reddit back into old Reddit, on every
