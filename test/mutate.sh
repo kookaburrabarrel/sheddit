@@ -2029,6 +2029,48 @@ mutate "a removed post in a listing loses its stamp" run \
   src/modules/listing.js "          m.removedNotice ? h('span.shd-removed-stamp', { text: 'removed', title: m.removedNotice }) : null," \
                          '          null,'
 
+# ------------------------------------------------- the startup update check ---
+# The switch is the whole justification for a request that leaves on its own. Checking it
+# AFTER the network, or not at all, sends the request the reader turned off.
+mutate "the startup check ignores the reader's switch" run \
+  src/core/background.js '  if (!(await enabled())) return;' '  ;'
+
+# Storage that will not answer is not consent: a browser that cannot tell us the setting
+# cannot tell us it was left on, and the safe direction is to send nothing.
+mutate "unreadable settings are treated as permission to check" run \
+  src/core/background.js '    return false;
+  }
+}' '    return true;
+  }
+}'
+
+# "At browser start" is not a rate. Without the floor, six restarts in an afternoon are six
+# requests — the periodic-ping shape the click-only design existed to avoid.
+mutate "the startup check loses its rate limit" run \
+  src/core/background.js '  if ((await sinceLast()) < MIN_INTERVAL_MS) return;' '  ;'
+
+# An answer with no version is not an answer. Storing it stamps `at`, which silences the
+# next twenty hours of checks on the strength of nothing.
+mutate "an unusable answer is stored anyway and silences the next check" run \
+  src/core/background.js '    if (!j || typeof j.version !== '"'"'string'"'"') return;' '    if (!j) return; j.version = String(j.version);'
+
+# The worker writes the record the header turns into an href; a non-https answer must not
+# become a link. update.js's rule, repeated where the answer is actually written.
+mutate "the worker links whatever url the answer supplies" run \
+  src/core/background.js 'url: safeUrl(j.url),' 'url: j.url,'
+
+# The header repaints by replacing ALL children, so a repaint that rebuilds only the update
+# body eats the switch that governs the next check.
+mutate "a finished check removes the toggle that governs the next one" run \
+  src/modules/chrome.js '    if (host) host.replaceChildren(updateBody(), autoToggle());' \
+                        '    if (host) host.replaceChildren(updateBody());'
+
+# Gecko ignores Chrome's service_worker key, so shipping it unchanged means the startup
+# check never runs on Firefox and nothing says why — bug 82's silence, in the packaging.
+mutate "the Firefox build ships Chrome's worker key, which Gecko ignores" run \
+  package-extension.js '    out.background = { scripts: [out.background.service_worker], persistent: false };' \
+                       '    out.background = { ...out.background };'
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it

@@ -51,6 +51,15 @@ const GECKO_ID = 'sheddit@kookaburrabarrel.github.io';
 function firefoxManifest(m) {
   const out = { ...m };
   delete out.minimum_chrome_version;
+  /* Gecko's MV3 background is an event page, not a service worker. `background.scripts`
+     with `persistent: false` is the shape Firefox documents and the one its ESR line
+     accepts; shipping Chrome's `service_worker` key instead is silently ignored there, so
+     the startup check simply never runs and nothing says why. Same class of difference as
+     the manifest keys above, handled in the same place — this function is the only
+     licence the two stores have to differ. */
+  if (out.background && out.background.service_worker) {
+    out.background = { scripts: [out.background.service_worker], persistent: false };
+  }
   out.browser_specific_settings = {
     gecko: {
       id: GECKO_ID,

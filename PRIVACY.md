@@ -12,8 +12,11 @@ there is no such server. It reads the Reddit page already open in your browser a
 re-draws it. That is the whole program.
 
 Two things leave your browser at all, both of them optional, neither of them about you: the
-manifest of a video you are watching, and — only if you press the button that asks — a file
-on GitHub stating the current version number. Both are described in full below.
+manifest of a video you are watching, and a file on GitHub stating the current version
+number. The version check happens when you press the **updates** button, and — since
+0.37.0, unless you switch it off right beside that button — once when your browser starts,
+at most one request a day. Both are described in full below, including what GitHub can see
+and how to stop it.
 
 ## What Sheddit stores
 
@@ -31,7 +34,7 @@ pressed **updates** in the header:
 
 | Key | What it is |
 | --- | --- |
-| `update` | the answer to the last update check: the version number GitHub stated, the link it gave, its release note, and when you asked |
+| `update` | the answer to the last update check: the version number GitHub stated, the link it gave, its release note, and when it was asked |
 
 That is the complete list. There is no identifier in either object, nothing derived from
 your browsing, and nothing about you. `chrome.storage.local` is deliberate for the second
@@ -76,7 +79,7 @@ the extension removes them.
   image servers the same way any page loads its images — Sheddit only writes the `<img>`
   tag, and listing pictures are not fetched at all until you open them. Untick *"Show
   images inline"* to turn the full-size ones off.
-- **The update check, and why it waits for you.** Sheddit is installed by hand and never
+- **The update check, and how to switch it off.** Sheddit is installed by hand and never
   updates itself, so since 0.29.0 the header carries an **updates** control. Pressing it
   makes one request: a GET of
   [`dist/latest.json`](https://github.com/kookaburrabarrel/sheddit/blob/main/dist/latest.json)
@@ -86,15 +89,32 @@ the extension removes them.
   pressed it. Nothing is sent about you, your browser beyond what any HTTP request carries,
   or what you were looking at.
 
-  **It never fires on its own.** Not on page load, not on a timer, not in the background,
-  not once a day. That is the entire design and not an accident of the first version: a
-  check that ran by itself would make every install emit a periodic request carrying an IP
-  and a timestamp, which is telemetry whatever it is called and whatever it asks for. The
-  press is the consent, and the answer is remembered so one press lasts.
+  **Since 0.37.0 it also runs once when your browser starts, and you can turn that off.**
+  Earlier versions fired only on a press, and the reason was that a request leaving on its
+  own is a request you did not ask for. What changed is the judgement, not the analysis: a
+  hand-installed copy never updates itself, so the reader most likely to be running a build
+  that no longer works is the one who set this up months ago and has not thought about it
+  since — and a notice that has to be pressed is a notice they never see.
 
-  Beside it, and costing nothing at all, is the part that needs no network: the build date
-  is stamped into the extension, so it can tell you this copy is two months old without
-  asking anyone. That is arithmetic, not a request.
+  So it is a switch rather than a fact of life. **auto: on / off** sits directly under the
+  updates control in Sheddit's own header, and the same setting is on the options page.
+  Turn it off and nothing leaves at startup at all; the button still answers when pressed,
+  exactly as before. It is on by default.
+
+  What it does when on: one request, at most once a day, no matter how often you restart.
+  The same request the button makes — the same static file, no cookies, no referrer,
+  nothing about you. **What is honest to say about it:** Sheddit still collects nothing and
+  still has no server of its own, so there is nothing here that could gather anything even
+  if it wanted to. GitHub, who serve the file, see what any host sees when your browser
+  asks it for something — an IP address and a timestamp. That is the whole exposure, it is
+  the same exposure the button always had, and the difference is only that it can now
+  happen without you pressing anything. If you would rather it did not, the switch is two
+  clicks away and it is remembered.
+
+  Beside all of it, and costing nothing at all, is the part that needs no network: the
+  build date is stamped into the extension, so it can tell you this copy is two months old
+  without asking anyone. That is arithmetic, not a request.
+
 - **No remote code.** Everything that runs ships inside the extension. Nothing is
   downloaded, evaluated, or updated out of band — the update check reads a version
   *number*, and cannot deliver anything that runs. (Manifest V3 forbids it; Sheddit would
@@ -142,8 +162,11 @@ update check widened what Sheddit is allowed to reach. Both requests are sent wi
 `credentials: 'omit'`, so your cookies never go with them, and the update check adds
 `referrerPolicy: 'no-referrer'`.
 
-Sheddit requests no other permissions. It has no background service worker, no tabs
-access, no cookie access, and no host access to any other site.
+Sheddit requests no other permissions. Since 0.37.0 it has a background worker, and it
+exists for exactly one thing: asking GitHub for a version number when your browser starts,
+if you have left that switch on. It does not read pages, watch tabs, or run while you
+browse — it wakes at startup, asks or doesn't, and stops. Sheddit has no tabs access, no
+cookie access, and no host access to any other site.
 
 ## Your data rights
 

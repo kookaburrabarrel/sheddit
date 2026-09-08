@@ -99,13 +99,15 @@ PRIVACY
 For an extension whose point is reading without being profiled, privacy is the product,
 not the fine print. Sheddit collects nothing and transmits nothing about you. It makes
 no API calls, has no analytics, and stores two things: your display preferences, in
-Chrome's own settings storage, and — only if you press the update button — the version
-number that answered it. It never sees your Reddit login or session. Two static files are
-fetched, both optional and neither about you: the manifest of a video you are watching,
-from Reddit's own media server, switchable off in the options; and, only when you press
-"updates" in the header, a file on GitHub stating the current version, sent without cookies
-and without a referrer. Neither ever runs on a timer or in the background, and the test
-suite counts those requests, so a change that quietly fetched more would fail the build.
+Chrome's own settings storage, and the version number the last update check returned. It
+never sees your Reddit login or session. Two static files are fetched, both optional and
+neither about you: the manifest of a video you are watching, from Reddit's own media
+server, switchable off in the options; and a file on GitHub stating the current version —
+asked when you press "updates" in the header, and once when your browser starts unless you
+switch that off beside the button. Both are sent without cookies
+and without a referrer. Neither runs on a timer, neither carries anything about you, and
+the test suite counts those requests, so a change that quietly fetched more would fail the
+build.
 The full policy is at
 https://github.com/kookaburrabarrel/sheddit/blob/main/PRIVACY.md
 

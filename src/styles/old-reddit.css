@@ -202,6 +202,30 @@ html.shd-active body {
   text-decoration: none;
 }
 .shd-update-btn:hover { background: var(--shd-hover-bg); }
+
+/* The startup check's switch, sitting under the control it governs.
+ *
+ * Smaller and dimmer than the button beside it on purpose: it is a preference, not a
+ * notice, and it must never compete with "update to 0.37.0" for the reader's eye. Existing
+ * tokens only — a new one would be owed to the base palette and all four themes (bug 43),
+ * and this needs no colour those do not already carry. */
+.shd-update-auto {
+  display: block;
+  font: inherit;
+  font-size: 9px;
+  line-height: 12px;
+  padding: 0 4px;
+  margin: 1px 6px 0 0;
+  border: 1px solid transparent;
+  border-radius: var(--shd-radius);
+  background: none;
+  color: var(--shd-dim);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.shd-update-auto:hover { background: var(--shd-hover-bg); color: var(--shd-meta); }
+.shd-update-auto.selected { color: var(--shd-meta); border-color: var(--shd-border); }
 /* Mid-check. Not a hover target and not a click target — the request is already out. */
 .shd-update-btn[disabled] { cursor: default; opacity: 0.7; }
 .shd-update-btn[disabled]:hover { background: none; }

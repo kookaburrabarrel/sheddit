@@ -3443,6 +3443,17 @@ async function boot(html, url, setup) {
       check('...and refusing a cached answer, which would claim currency it cannot know',
         calls[0].init.cache === 'no-store', String(calls[0].init.cache));
 
+      /* The switch lives inside the same live region as the control it governs, and that
+         region repaints by REPLACING ALL ITS CHILDREN on every state change. So the check
+         completing is exactly the moment the toggle can be lost — and losing it takes away
+         the reader's way to stop the next one. Asserted after a real repaint rather than by
+         reading the source, which is what a source-only check missed. */
+      const auto = () => host()?.querySelector('.shd-update-auto');
+      check('the startup-check switch survives the repaint the answer triggers',
+        !!auto() && /^auto: (on|off)$/.test(auto().textContent), auto()?.textContent);
+      check('...and reports the shipped default, which is on',
+        auto().getAttribute('aria-pressed') === 'true');
+
       const a = btn();
       check('a newer version turns the control into a link you can act on',
         a.tagName === 'A' && a.getAttribute('href') === LATEST.url &&
@@ -5246,6 +5257,165 @@ async function boot(html, url, setup) {
         oldDefault === String(ctx.SHD.settings.redirectOldReddit),
         `oldreddit.js=${oldDefault} contracts.js=${ctx.SHD.settings.redirectOldReddit}`);
     }
+  }
+
+  /* The startup check runs in a service worker — a script with no DOM, no page, and no
+     shared scope with anything else the extension ships. Every property below is therefore
+     unreachable from every other suite: jsdom has no worker, the packed-extension suite
+     cannot make a browser restart, and the dev bundle deliberately excludes the file. A vm
+     context with stubbed globals is what is left, and it is enough, because what matters
+     here is the GATING rather than the fetch. */
+  console.log('\n\x1b[1mTHE STARTUP UPDATE CHECK\x1b[0m');
+  {
+    const vm = require('vm');
+    const BG_SRC = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'core', 'background.js'), 'utf8');
+    const UP_SRC = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'core', 'update.js'), 'utf8');
+
+    /* Two scripts, no shared module scope, so the URL and the storage key are written
+       twice — the arrangement bridge.js has with its protocol literals, and asserted the
+       same way. A worker fetching a different file, or writing under a different key than
+       the header reads, fails silently in both directions: no error, no answer, no clue. */
+    const lit = (src, name) => (src.match(new RegExp(`${name} =\\s*\\n?\\s*'([^']+)'`)) || [])[1];
+    for (const name of ['LATEST_URL', 'KEY', 'HOME']) {
+      check(`background.js and update.js agree on ${name}`,
+        lit(BG_SRC, name) && lit(BG_SRC, name) === lit(UP_SRC, name),
+        `background=${lit(BG_SRC, name)} update=${lit(UP_SRC, name)}`);
+    }
+
+    /* Load it with the two listeners stubbed. Registering them is the whole entry point,
+       so a file that stopped registering would still pass every behavioural check below. */
+    const registered = [];
+    const mkCtx = (opts = {}) => {
+      const local = opts.local || {};
+      const sync = opts.sync || {};
+      const ctx = {
+        setTimeout, clearTimeout, AbortController, Date, Infinity, JSON,
+        fetch: opts.fetch || (() => Promise.reject(new Error('no fetch'))),
+        chrome: {
+          runtime: {
+            onStartup: { addListener: (fn) => registered.push(['onStartup', fn]) },
+            onInstalled: { addListener: (fn) => registered.push(['onInstalled', fn]) }
+          },
+          storage: {
+            sync: { get: async () => (opts.syncThrows ? Promise.reject(new Error('no')) : { ...sync }) },
+            local: {
+              get: async () => ({ ...local }),
+              set: async (o) => Object.assign(local, o)
+            }
+          }
+        }
+      };
+      ctx.globalThis = ctx;
+      vm.createContext(ctx);
+      vm.runInContext(BG_SRC, ctx, { filename: 'background.js' });
+      ctx.__local = local;
+      return ctx;
+    };
+
+    const base = mkCtx();
+    check('the worker registers on browser start, not only on install',
+      registered.some(r => r[0] === 'onStartup') && registered.some(r => r[0] === 'onInstalled'),
+      registered.map(r => r[0]).join(','));
+
+    /* The switch. Default-on means an ABSENT key is on — a reader who has never opened the
+       options page has never said no, and the shipped default is yes. Only an explicit
+       false is off, which is what the options page and the header both write. */
+    check('an absent setting reads as on, because the shipped default is on',
+      await base.SHD_BG.enabled() === true);
+    check('...an explicit false is off', await mkCtx({ sync: { settings: { autoUpdateCheck: false } } })
+      .SHD_BG.enabled() === false);
+    check('...an explicit true is on', await mkCtx({ sync: { settings: { autoUpdateCheck: true } } })
+      .SHD_BG.enabled() === true);
+    /* Storage that will not answer is not consent. A browser that cannot tell us the
+       setting cannot tell us it was left on, and the safe direction for a request the
+       reader is entitled to refuse is to not send it. */
+    check('storage that refuses to answer is treated as off, not as on',
+      await mkCtx({ syncThrows: true }).SHD_BG.enabled() === false);
+
+    /* The rate limit, which is the whole difference between "at browser start" and a rate.
+       A machine restarted six times in an afternoon must send one request, not six. */
+    let fetches = 0;
+    const ok = () => { fetches++; return Promise.resolve({
+      ok: true, json: async () => ({ version: '9.9.9', url: 'https://example.com/x', notes: 'n' })
+    }); };
+
+    fetches = 0;
+    const fresh = mkCtx({ fetch: ok });
+    await fresh.SHD_BG.maybeCheck();
+    check('a browser start with no stored answer asks once', fetches === 1);
+    await fresh.SHD_BG.maybeCheck();
+    check('...and a second start straight after asks nothing', fetches === 1);
+
+    fetches = 0;
+    const old = mkCtx({ fetch: ok, local: { update: { at: Date.now() - 25 * 3600 * 1000, version: '0.0.1' } } });
+    await old.SHD_BG.maybeCheck();
+    check('a stored answer older than the interval is refreshed', fetches === 1);
+
+    fetches = 0;
+    const recent = mkCtx({ fetch: ok, local: { update: { at: Date.now() - 3600 * 1000, version: '0.0.1' } } });
+    await recent.SHD_BG.maybeCheck();
+    check('...a recent one is left alone', fetches === 0);
+
+    fetches = 0;
+    const off = mkCtx({ fetch: ok, sync: { settings: { autoUpdateCheck: false } } });
+    await off.SHD_BG.maybeCheck();
+    check('off means NO REQUEST LEAVES — the setting is checked before the network, not after',
+      fetches === 0);
+
+    /* What it writes is what the header reads: same key, same four fields, or the answer
+       arrives and nothing shows it. */
+    const rec = fresh.__local.update;
+    check('the answer is stored in the shape the header already reads',
+      rec && rec.version === '9.9.9' && typeof rec.at === 'number' &&
+      rec.url === 'https://example.com/x' && rec.notes === 'n', JSON.stringify(rec));
+
+    /* update.js's safeUrl rule, repeated here because the worker writes the record the
+       header will turn into an href. A non-https answer must not become a link. */
+    fetches = 0;
+    const hostile = mkCtx({ fetch: () => Promise.resolve({
+      ok: true, json: async () => ({ version: '9.9.9', url: 'javascript:alert(1)' })
+    }) });
+    await hostile.SHD_BG.maybeCheck();
+    check('a non-https url in the answer is replaced with the download page, never linked',
+      hostile.__local.update.url === lit(BG_SRC, 'HOME'), hostile.__local.update.url);
+
+    /* An answer with no version is not an answer. Storing it would stamp `at`, which
+       silences the next twenty hours of checks on the strength of nothing. */
+    const junk = mkCtx({ fetch: () => Promise.resolve({ ok: true, json: async () => ({}) }) });
+    await junk.SHD_BG.maybeCheck();
+    check('an answer with no version is not stored at all', junk.__local.update === undefined);
+
+    /* Packaging. The worker is not a content script and must never be bundled into one —
+       it would run in a page, where chrome.runtime.onStartup does not exist — but it does
+       have to SHIP, and build.js only cross-checks content_scripts, so nothing else here
+       would notice it being dropped from the manifest. */
+    const mf = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'));
+    check('the manifest ships a background worker',
+      mf.background && mf.background.service_worker === 'src/core/background.js',
+      JSON.stringify(mf.background));
+    check('...and it is NOT also delivered as a content script',
+      !mf.content_scripts.flatMap(cs => cs.js || []).includes('src/core/background.js'));
+    check('...nor bundled into the dev build, which runs in a page',
+      !fs.readFileSync(path.join(__dirname, '..', 'build.js'), 'utf8')
+        .includes('src/core/background.js'));
+
+    /* Gecko's MV3 background is an event page. Chrome's service_worker key is ignored
+       there, so shipping it unchanged means the startup check never runs on Firefox and
+       nothing reports it — the packaging half of the same silence bug 82 was. */
+    const pkg = fs.readFileSync(path.join(__dirname, '..', 'package-extension.js'), 'utf8');
+    check('the Firefox manifest converts the worker to an event page',
+      /background\s*=\s*\{\s*scripts:\s*\[[^\]]*service_worker[^\]]*\]/.test(pkg) ||
+      /scripts:\s*\[out\.background\.service_worker\]/.test(pkg), 'firefoxManifest()');
+
+    /* The reader's two ways to refuse it must both exist and write the same key. */
+    const optHtml = fs.readFileSync(path.join(__dirname, '..', 'options', 'options.html'), 'utf8');
+    check('the options page carries the switch', /data-k="autoUpdateCheck"/.test(optHtml));
+    const chromeSrc = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'modules', 'chrome.js'), 'utf8');
+    check('...and so does the header, beside the control it governs',
+      /setSetting\('autoUpdateCheck'/.test(chromeSrc) && /shd-update-auto/.test(chromeSrc));
   }
 
   console.log('\n\x1b[1mOPTIONS PAGE\x1b[0m');

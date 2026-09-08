@@ -46,13 +46,43 @@ SHD.chrome = (() => {
    *
    * Quiet by default. It says nothing but its own name until either the copy is old enough
    * to be worth a look (arithmetic, no network) or the reader has clicked and been told
-   * there is something newer (one request, on that click). It never checks by itself.
+   * there is something newer. The request is one GET of a version file, made on that click
+   * or once at browser start when the switch below it is on.
    */
   function updateControl() {
     /* Kick the stored answer off on first paint. A promise that has already run is a no-op,
        and when it does land it repaints through the watcher below rather than here. */
     SHD.update.load();
-    return h('span.shd-update', { role: 'status', 'aria-live': 'polite' }, updateBody());
+    return h('span.shd-update', { role: 'status', 'aria-live': 'polite' },
+      [updateBody(), autoToggle()]);
+  }
+
+  /**
+   * The startup check's switch, beside the control it feeds.
+   *
+   * It lives here for the reason the update control itself does: this bar is the surface a
+   * reader sees, and a request that leaves on its own should be refusable from the same
+   * place that tells you it happened — not from an options page nobody opens. The options
+   * page carries it too, like every other setting, and both write the same key.
+   *
+   * `aria-pressed` rather than a checkbox, matching the nsfw toggle three lines down: this
+   * is a two-state button in a bar of buttons, and old reddit had no checkboxes in it.
+   */
+  function autoToggle() {
+    const on = !(SHD.settings && SHD.settings.autoUpdateCheck === false);
+    return h('button.shd-update-auto', {
+      type: 'button',
+      'aria-pressed': on ? 'true' : 'false',
+      class: on ? 'selected' : null,
+      title: on
+        ? 'Sheddit asks GitHub for the current version number once when your browser '
+          + 'starts, at most once a day. Nothing about you is sent, and there is no server '
+          + 'of Sheddit\'s own — GitHub sees an IP and a timestamp, as any host does. '
+          + 'Click to turn it off; the button beside this one still works on a click.'
+        : 'The startup check is off — nothing leaves unless you press the button beside '
+          + 'this one. Click to turn it back on.',
+      onclick: () => SHD.pipeline.setSetting('autoUpdateCheck', !on)
+    }, `auto: ${on ? 'on' : 'off'}`);
   }
 
   /** The control's one child, chosen from update state. A link when there is somewhere to
@@ -112,8 +142,9 @@ SHD.chrome = (() => {
           + 'extension never updates itself, so it stays this old until you replace it. '
           + 'Click to ask GitHub whether a newer one exists — one request for a version '
           + 'file, no cookies, no referrer, nothing about you.'
-        : 'Ask GitHub whether a newer build exists. One request for a version file, sent '
-          + 'only when you click: no cookies, no referrer, nothing about you.',
+        : 'Ask GitHub whether a newer build exists. One request for a version file: no '
+          + 'cookies, no referrer, nothing about you. The switch below decides whether it '
+          + 'is also asked once when your browser starts.',
       onclick: () => SHD.update.check(),
       text: s.stale ? 'update?' : 'updates'
     });
@@ -126,7 +157,10 @@ SHD.chrome = (() => {
      does nothing when there is none. */
   SHD.update.onChange(() => {
     const host = document.querySelector('#shd-header .shd-update');
-    if (host) host.replaceChildren(updateBody());
+    /* BOTH children, or the repaint silently eats the toggle: replaceChildren() replaces
+       everything, and the update body is only half of what lives here. A check that
+       finished would have removed the switch that governs the next one. */
+    if (host) host.replaceChildren(updateBody(), autoToggle());
   });
 
   /**

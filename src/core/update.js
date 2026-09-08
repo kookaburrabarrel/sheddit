@@ -16,12 +16,14 @@
  *   nothing, works offline, and cannot be wrong about the network. What it cannot know is
  *   whether a newer build actually exists — only that this one has been sitting a while.
  *
- *   THE CHECK is one GET of a static JSON file, and it happens ONLY when the reader clicks
- *   the control. Never on load, never on a timer, never in the background. That restraint
- *   is the whole design and not an oversight to be optimised away later: PRIVACY.md promises
- *   Sheddit contacts no server of its own, and a check that fired by itself would turn every
- *   install into a periodic ping carrying an IP and a timestamp — telemetry in everything but
- *   name, and indistinguishable from it at the receiving end. The click is the consent.
+ *   THE CHECK is one GET of a static JSON file. This module still only ever performs it on
+ *   a click — nothing here fires on load, on a timer, or from a page. Since 0.37.0 the
+ *   OTHER caller is background.js, once when the browser starts, gated on
+ *   `settings.autoUpdateCheck` and rate-limited to once a day; that file carries the
+ *   reasoning for the change. The distinction to keep is where the request can originate:
+ *   a content script must never start one by itself, because a check fired from a page
+ *   would carry the referrer of the Reddit page being read, and the worker has no page to
+ *   leak. Consent is the switch now rather than the click, and it is still consent.
  *
  * A STORE INSTALL NEEDS NONE OF THIS, AND IS NOT HARMED BY IT. Once the listings land, a
  * store-installed copy updates itself — which means its BUILT is always recent, so the nudge
@@ -43,7 +45,7 @@ SHD.update = (() => {
      package.json and dist/latest.json. run.js asserts that the script still rewrites all
      four, because a BUILT that quietly stops moving does not fail — it turns the nudge into
      a permanent false alarm on a perfectly current copy, which is worse than no nudge. */
-  const BUILT = '2026-09-07';
+  const BUILT = '2026-09-08';
 
   /* Served out of the repository, not from a server of ours — there still is no such
      server. raw.githubusercontent.com answers with `access-control-allow-origin: *`, so

@@ -676,6 +676,15 @@ SHD.settings = {
      Reddit applies for logged-out readers and a full-size copy is that same bypass. Both
      settings must say yes. */
   inlineImages: true,
+  /* Ask GitHub for the current version number once when the browser starts, instead of
+     waiting for the header's control to be pressed. On by default, and the reason is the
+     failure it prevents: a hand-installed copy never updates itself, so the reader most
+     likely to be running a broken build is the one who set this up months ago and has not
+     thought about it since — and a notice that has to be pressed is a notice they never
+     see. Off means off: no request leaves at startup, and the button still answers on a
+     click exactly as it did before. Rate-limited in background.js, because "at browser
+     start" is not a rate. */
+  autoUpdateCheck: true,
   /* Send a link to old.reddit.com to www.reddit.com instead, behind an interstitial that
      says so. On by default because old.reddit.com stopped serving logged-out readers —
      every path there answers with a login wall — and a Reddit link that dead-ends is
