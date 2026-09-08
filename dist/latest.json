@@ -1,6 +1,6 @@
 {
-  "version": "0.35.0",
+  "version": "0.36.0",
   "released": "2026-09-07",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.35.0 fills the wait: a page that takes seconds to arrive now says loading instead of holding a blank screen, and every page stamps the build it is running so a bug report can name its own version."
+  "notes": "0.36.0 tells you when a thread is dead: a post Reddit has deleted or removed now says so in Reddit's own words instead of rendering as an ordinary post with a [deleted] author."
 }

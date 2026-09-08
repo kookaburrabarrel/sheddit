@@ -253,6 +253,34 @@ SHD.C = {
    */
   POST_BODY: '[slot="text-body"]',
 
+  /* A post Reddit has taken down, which we rendered as an ordinary one.
+   *
+   * Reported from live use: a deleted thread came out with a `[deleted]` author and a
+   * self-post body and nothing else — no way to tell a dead thread from a live one, while
+   * modern Reddit says so plainly. The cause is the one idea's third consequence (log 49
+   * was selftext, 79 was images): removal is NOT AN ATTRIBUTE. Nothing on shreddit-post
+   * flags it; Reddit states it in rendered copy, so the copy is the contract.
+   *
+   * A TEXT test, like MORE_REPLIES_TEXT and the age gate's buttons, and for the same
+   * reason — no stable attribute has been captured. English-only, like both of those.
+   * The phrase is the reported one verbatim ("Sorry, this post was deleted by the person
+   * who originally posted it"), widened only to its known sibling: Reddit uses the same
+   * sentence shape for a moderator or filter removal ("...was removed by..."). Anchored on
+   * the middle of the sentence so the leading "Sorry," and whatever follows "by" are both
+   * free to change.
+   *
+   * NOT YET SETTLED FROM A CAPTURE, and the design assumes it will be wrong before it is
+   * right. What is verified is the SENTENCE, from a reader who read it on the page; what is
+   * NOT is the element that carries it, so this is matched by walking text rather than by a
+   * selector, and a miss costs the notice and nothing else — the post renders exactly as it
+   * does today. verify:live's DELETED POSTS section is what settles it.
+   *
+   * The author fallback is deliberately NOT used as the signal, though it looks like one:
+   * a post whose AUTHOR deleted their account also reads `[deleted]` while the post itself
+   * is perfectly readable. Treating those as removed would put a tombstone over live
+   * content, which is the worse error of the two. */
+  POST_REMOVED_TEXT: /th(?:is|e) (?:post|submission|comment) was (?:deleted|removed)/i,
+
   /* The element Reddit hydrates a post's action bar into — the place the vote buttons
      appear, late (ARCHITECTURE §1.3), and the one named in the miss report so a reader
      can say whether the bar was there at all when a delegated click found nothing. */

@@ -298,6 +298,12 @@ SHD.listing = (() => {
              has no image. Shown regardless of the thumbnail setting, because it labels
              the post rather than standing in for the picture. */
           m.nsfw ? h('span.nsfw-stamp', { text: 'nsfw' }) : null,
+          /* Old reddit's own convention for a post that is no longer there, and the same
+             reasoning as the nsfw stamp beside it: a one-word label on the title is what
+             tells a reader the row is a dead end before they spend a click on it. The
+             comments page shows Reddit's full sentence; a listing row has no space for
+             one and does not need it. */
+          m.removedNotice ? h('span.shd-removed-stamp', { text: 'removed', title: m.removedNotice }) : null,
           m.domain ? h('span.domain', null, ['(', h('a', { href: m.isSelf ? `/r/${m.subreddit}/` : `//${domain(m.domain)}`, text: domain(m.domain) }), ')']) : null
         ]),
         tagline(m),

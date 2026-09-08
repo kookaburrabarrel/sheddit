@@ -391,6 +391,7 @@ function postHtml(p) {
       subreddit-prefixed-name="r/${p.sub}"
       ${p.nsfw === true ? 'nsfw=""' : p.nsfw === 'false' ? 'nsfw="false"' : ''}>
       ${avatar}${flair}${imgs}
+      ${p.removed ? `<div class="removal-outer"><span>Moderation</span><div class="removal-mid"><p>${esc(p.removed)}</p></div><a href="/help/removals">Learn more</a></div>` : ''}
       ${p.videoJson ? `<shreddit-player id="${p.id}-aspect-ratio" packaged-media-json="${esc(JSON.stringify(p.videoJson))}"></shreddit-player>` : ''}
       <!-- Reddit's own rendered copy, in the light DOM. Present because suppression has to
            keep it out of the ACCESSIBILITY TREE, not merely out of sight: the visually-hidden
@@ -437,7 +438,8 @@ function listingPage(opts = {}) {
     ${SR_OUTLET}
     <div><div id="subgrid-container"><div><main id="main-content">
       <shreddit-feed>
-        ${POSTS.map(postHtml).join('')}
+        ${POSTS.map((p, i) => postHtml(
+          opts.removed && i === 0 ? { ...p, removed: opts.removed } : p)).join('')}
         <shreddit-ad-post><div>sponsored, contains no shreddit-post</div></shreddit-ad-post><hr>
         <faceplate-partial loading="programmatic" src="/feed/next"></faceplate-partial>
       </shreddit-feed>
@@ -897,6 +899,17 @@ function commentsPage(opts = {}) {
     : opts.galleryPost ? POSTS.find(p => p.id === 't3_gallery1')
     : opts.nsfwPost ? POSTS.find(p => p.id === 't3_nsfw1')
     : POSTS[2];
+  /* A post Reddit has taken down. The notice is NESTED three deep and the sentence is in
+     every ancestor's textContent — including <shreddit-post> itself — so a first-match
+     walk returns a container and renders the whole post as the notice. That is the trap
+     (log 67's, one element over), and a flat fixture cannot tell the two lookups apart.
+     The wrapper carries SIBLING content beside the notice for the same reason: with the
+     sentence as its only text, outermost and innermost return identical strings and the
+     mutation row survives — measured, it did, until this line existed. */
+  const removedPost = opts.removed
+    ? { ...post, removed: typeof opts.removed === 'string' ? opts.removed
+        : 'Sorry, this post was deleted by the person who originally posted it.' }
+    : post;
   const deliver = opts.deliver ?? COMMENT_DEPTHS.length;
   let delivered = COMMENT_DEPTHS.slice(0, deliver).map(commentHtml).join('');
   let partial = (deliver < COMMENT_DEPTHS.length || opts.pager) && !opts.branchPager
@@ -926,7 +939,7 @@ function commentsPage(opts = {}) {
   <shreddit-app>
     ${headerHtml(opts)}
     <div><div id="subgrid-container"><div><main id="main-content">
-      ${postHtml(post)}
+      ${postHtml(removedPost)}
       <shreddit-comment-tree post-id="t3_link1" totalcomments="${COMMENT_DEPTHS.length}">
         <section>
           ${delivered}${partial}

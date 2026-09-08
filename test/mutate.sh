@@ -2002,6 +2002,33 @@ mutate "a working page stops saying which build it is" extension \
 # reordering, not behaviour a reader can observe today; a row for it would survive and read
 # as a hole. This was measured, not assumed: the row existed, ran, and scored 0 failures.
 
+# ------------------------------------------------- a post Reddit has taken down ---
+# Reported: a deleted thread rendered as an ordinary post — [deleted] author, a body, and
+# nothing saying it was gone. Removal is not an attribute, so the sentence Reddit renders
+# is the contract; without the lookup the model has nothing to report.
+mutate "a removed post goes back to rendering as an ordinary one" run \
+  src/core/model.js '    const removedNotice = removalOf(el);' '    const removedNotice = null;'
+
+# INNERMOST wins. Every ancestor contains the sentence — including <shreddit-post> — so a
+# first-match walk returns a container and the whole post is rendered as the notice. Log
+# 67's trap, one element over, and the nested fixture is what makes it visible.
+mutate "the removal lookup takes the outermost match instead of the innermost" run \
+  src/core/model.js '      const inner = hits.find(n => !hits.some(o => o !== n && n.contains(o))) || hits[hits.length - 1];' \
+                    '      const inner = hits[0];'
+
+# The comments page shows Reddit's sentence; the row also carries a class so the whole
+# thing can be styled as a dead end rather than only the paragraph.
+mutate "the comments page stops showing the removal notice" run \
+  src/modules/comments.js '    if (m.removedNotice) {
+      row.classList.add(' '    if (false) {
+      row.classList.add('
+
+# A listing row has no room for a sentence and gets the stamp instead — the one-word
+# label that says the row is a dead end before a reader spends a click on it.
+mutate "a removed post in a listing loses its stamp" run \
+  src/modules/listing.js "          m.removedNotice ? h('span.shd-removed-stamp', { text: 'removed', title: m.removedNotice }) : null," \
+                         '          null,'
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it

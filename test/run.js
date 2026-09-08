@@ -726,6 +726,40 @@ async function boot(html, url, setup) {
     check('a post with no text gets no selftext box', !linkDoc.querySelector('.shd-selftext'));
   }
 
+  /* Reported: a deleted thread rendered as an ordinary post — a `[deleted]` author, a body,
+     and nothing saying it was gone, while Reddit's own page says so plainly. Removal is not
+     an attribute (the one idea's third consequence, after selftext and images), so the
+     sentence Reddit renders is the contract. */
+  console.log('\n\x1b[1mA POST REDDIT HAS TAKEN DOWN\x1b[0m');
+  {
+    const NOTICE = 'Sorry, this post was deleted by the person who originally posted it.';
+    const { doc } = await boot(commentsPage({ removed: NOTICE }),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    const notice = doc.querySelector('#shd-root .shd-selfpost .shd-removed-notice');
+    check('a removed post says so, in Reddit\'s own words', !!notice);
+    check('...the notice is the SENTENCE, not the container that holds it',
+      notice?.textContent === NOTICE, JSON.stringify(notice?.textContent?.slice(0, 120)));
+    check('...and the row is marked, so the whole thing can be styled as a dead end',
+      !!doc.querySelector('#shd-root .shd-selfpost .thing.shd-removed'));
+
+    /* The counterweight, and the reason the author fallback is NOT the signal: a post
+       whose AUTHOR deleted their account reads `[deleted]` while the post itself is
+       perfectly readable. A tombstone over live content is the worse of the two errors. */
+    const { doc: live } = await boot(commentsPage(),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    check('a live post gets no notice', !live.querySelector('.shd-removed-notice'));
+    check('...and no stamp on its listing rows', !live.querySelector('.shd-removed-stamp'));
+
+    /* A listing row has no room for a sentence; it gets old reddit's one-word stamp,
+       beside the nsfw one and for the same reason — it tells a reader the row is a dead
+       end before they spend a click on it. */
+    const { doc: feed } = await boot(listingPage({ removed: NOTICE }), 'https://www.reddit.com/');
+    const stamp = feed.querySelector('#shd-root .thing.link .shd-removed-stamp');
+    check('a removed post in a listing carries a stamp on its title',
+      !!stamp && stamp.textContent === 'removed');
+    check('...with Reddit\'s sentence kept as the tooltip', stamp?.getAttribute('title') === NOTICE);
+  }
+
   /* Reported: an image post's comments page rendered a title, a 70px thumbnail and nothing
      else, and clicking the thumbnail left the layout for Reddit's own /media viewer. Two
      halves of one gap — the picture is not an attribute, so nothing read it. This is the

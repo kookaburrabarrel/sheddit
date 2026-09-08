@@ -12,7 +12,7 @@ summary over this table when they disagree, and update the table when they do.)
 | # | Command | Needs | Assertions |
 |---|---|---|---|
 | 1 | `node test/css-lint.js` | nothing | 39 |
-| 2 | `node test/run.js` | jsdom | 837 |
+| 2 | `node test/run.js` | jsdom | 844 |
 | 3 | `node test/geometry.js` | Chromium | 219 |
 | 4 | `node test/extension.js` | Chromium | 167 |
 | 5 | `node test/extension-firefox.js` | Firefox + geckodriver | 50 |
