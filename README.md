@@ -51,6 +51,27 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 ---
 
+<br>
+
+> ## ⚠️ Logged-in browsing is a work in progress
+>
+> **Sheddit is built for reading Reddit logged out, and that is the only case it
+> officially supports.** Everything the extension is *for* — no profile, no ranked feed,
+> nothing following you between pages — is about browsing without a session.
+>
+> Since 0.34.0 there is an account layer for readers who are already signed in: vote
+> arrows, a reply box, submit links. **It is unfinished, it is being actively worked on,
+> and it should be treated as experimental.** It works by clicking Reddit's own controls
+> on the page, and Reddit moves those controls without warning — so expect parts of it to
+> break, expect the occasional jump out to Reddit's own interface, and do not rely on it
+> for anything you would mind losing. Reports from signed-in use are welcome and are how
+> it gets finished.
+>
+> **It is off with one checkbox** on the options page, and turning it off changes nothing
+> else. Logged out, none of it runs at all.
+
+---
+
 ## What's new
 
 Full detail in the [changelog](CHANGELOG.md). The three most recent builds:
@@ -103,11 +124,15 @@ submit, and the sidebar grows old reddit's *submit a new link / text post* butto
 open Reddit's composer. Every one of those is a click on a control Reddit put on the page
 for the same purpose — Sheddit still makes no request of its own, holds no token, and
 reads no cookie. It is on by default, does nothing at all for a logged-out reader, and
-turns off with one checkbox on the options page. It has been driven end to end against
-modelled pages and not yet against a signed-in reddit.com; the arrows and the reply box
-fall back to Reddit's own controls when something does not line up, and a
+turns off with one checkbox on the options page.
+
+**Treat it as experimental** — see the note at the top of this page. It has been driven
+end to end against modelled pages and, since 0.34.0, against a real signed-in session,
+which is what turned up the rough edges being worked on now. The arrows and the reply box
+fall back to Reddit's own controls when something does not line up, so the worst case is a
+jump out to Reddit's own interface rather than a lost action, and a
 [report](https://github.com/kookaburrabarrel/sheddit/issues/new/choose) of what happened is
-what settles it.
+what settles the rest.
 
 ## Why
 
@@ -246,7 +271,7 @@ build step. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | **Sorting that asks "of what span"** | `top` and `controversial` carry old Reddit's *links from* window — past hour through all time |
 | **Five themes, no reload** | Switched from a button in the header; the choice follows you to every other tab |
 | **Adult thumbnails, your call** | Flagged posts show old Reddit's placeholder tile by default; an *nsfw thumbnails* button in the header reveals them, and remembers |
-| **Your account, if you have one** | Already logged in to Reddit? The vote arrows register, `reply` opens an old-reddit reply box, and the sidebar gets *submit a new link / text post* — each a click forwarded to Reddit's own control on the page. Off with one checkbox; nothing changes for a logged-out reader |
+| **Your account, if you have one** *(experimental)* | Already logged in to Reddit? The vote arrows register, `reply` opens an old-reddit reply box, and the sidebar gets *submit a new link / text post* — each a click forwarded to Reddit's own control on the page. Off with one checkbox; nothing changes for a logged-out reader |
 | **Old Reddit links that still work** | `old.reddit.com` answers every page with a login wall now; Sheddit catches those links and opens the same page on `www.reddit.com`, in the same layout, behind a notice saying so |
 | **Tells you when it breaks** | If Reddit ships markup Sheddit can't read, you get a screen saying so, with a button to hand the page back |
 | **Nothing leaves your browser** | No API calls and no telemetry; your settings live in your browser's own storage and go nowhere else |
