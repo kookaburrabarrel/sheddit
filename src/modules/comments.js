@@ -337,6 +337,26 @@ SHD.comments = (() => {
     h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
 
   /**
+   * One frame reads as a picture; several read as a gallery, and a gallery scrolls
+   * sideways rather than stacking down the page.
+   *
+   * Decided from the box's CONTENTS rather than from the model, and called after every
+   * append, because a gallery does not always arrive complete — a frame that hydrates
+   * after consume (bug 91) takes a box from one picture to two, and that is exactly the
+   * moment it stops being a picture. Reading `m.type` instead would have marked a
+   * single-frame gallery as a strip and left a late-grown one stacked.
+   *
+   * The strip scrolls INSIDE its own box. That is not a detail: the geometry suite asserts
+   * the page itself never scrolls sideways at any width, and a row of full-width pictures
+   * is the easiest way there is to break it.
+   */
+  function syncStrip(box) {
+    box.classList.toggle('shd-image-strip',
+      box.querySelectorAll('.shd-image-el').length > 1);
+    return box;
+  }
+
+  /**
    * Put an adult post's picture behind a blur and one control, exactly as videoPlayer does
    * for a player — 0.30.0, and the reasoning is the same in both places.
    *
@@ -376,6 +396,7 @@ SHD.comments = (() => {
            as it was rather than an empty box with a control that did nothing (bug 62). */
         if (!urls.length) return box.remove();
         box.replaceChildren(...imageFrames(urls));
+        syncStrip(box);
       }
     });
     box.appendChild(show);
@@ -399,7 +420,7 @@ SHD.comments = (() => {
     const box = h('div.shd-image');
     if (adultGate(m)) return gateImages(box, m, () => liveFrames(m, urls));
     box.append(...imageFrames(urls));
-    return box;
+    return syncStrip(box);
   }
 
   /** The frames this post can show right now, preferring a re-read over the consume-time snapshot. */
@@ -752,9 +773,14 @@ SHD.comments = (() => {
       for (const u of urls) {
         if (!have.has(u)) box.appendChild(h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
       }
+      /* A late frame is what turns a lone picture into a gallery — see syncStrip. */
+      syncStrip(box);
     });
     obs.observe(m.source, {
-      childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'srcset']
+      childList: true, subtree: true, attributes: true,
+      /* The lazy attribute joins the watch list because it is now a source of frames: a
+         frame whose url lands there late is as real as one whose src does. */
+      attributeFilter: ['src', 'srcset', C.GALLERY_LAZY_SRC]
     });
     const stop = setTimeout(() => obs.disconnect(), LATE_HYDRATE_MS);
   }

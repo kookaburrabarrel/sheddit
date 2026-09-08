@@ -933,6 +933,69 @@ const overlaps = (a, b) =>
     }));
     check('...and the page does not scroll sideways because of it',
       doc.scrollW <= doc.clientW + 1, JSON.stringify(doc));
+    /* A single picture is not a strip: the row of a one-image post must stay a block, or
+       every image post changes shape to fix a gallery. */
+    check('...and a lone picture is not turned into a scrolling strip',
+      !(await page.$('.shd-selfpost .shd-image-strip')));
+
+    /* A GALLERY SCROLLS INSIDE ITS OWN BOX, and this is the only suite that can tell.
+       jsdom reports every width as 0, so "the strip scrolls" and "the page scrolls" are
+       indistinguishable there — and they are the entire difference between a gallery and
+       a broken page. */
+    {
+      const { page: gp } = await open(browser, origin, PATHS.galleryComments,
+        '#shd-root .shd-selfpost', undefined, { images: true });
+      await gp.evaluate(() => Promise.all(
+        [...document.images].map(i => i.complete ? null : new Promise(r => {
+          i.addEventListener('load', r); i.addEventListener('error', r);
+        }))));
+      const g = await gp.evaluate(() => {
+        const strip = document.querySelector('.shd-selfpost .shd-image-strip');
+        const els = [...document.querySelectorAll('.shd-selfpost .shd-image-el')];
+        const r = strip && strip.getBoundingClientRect();
+        return {
+          strip: !!strip,
+          frames: els.length,
+          scrolls: strip ? strip.scrollWidth > strip.clientWidth + 1 : false,
+          sameRow: els.length > 1 &&
+            Math.abs(els[0].getBoundingClientRect().top - els[1].getBoundingClientRect().top) <= 1,
+          boxRight: r ? r.right : 0,
+          docScrollW: document.documentElement.scrollWidth,
+          docClientW: document.documentElement.clientWidth
+        };
+      });
+      check('a gallery renders every frame it resolved', g.frames === 3, `${g.frames} frames`);
+      check('...laid out as one sideways row, not a stack',
+        g.strip && g.sameRow, JSON.stringify(g));
+      /* `scrollWidth > clientWidth` is TRUE of a box with visible overflow too, so it
+         cannot tell a scroll container from one that simply spills — the row for this
+         survived on that assertion alone. Driving scrollLeft can: only a real scroll
+         container keeps a value written to it. */
+      const canScroll = await gp.evaluate(() => {
+        const strip = document.querySelector('.shd-selfpost .shd-image-strip');
+        if (!strip) return null;
+        strip.scrollLeft = 9999;
+        const moved = strip.scrollLeft;
+        strip.scrollLeft = 0;
+        return moved;
+      });
+      check('...whose overflow scrolls inside the strip',
+        g.scrolls && canScroll > 0, `scrollLeft reached ${canScroll}; ${JSON.stringify(g)}`);
+      /* THE ONE THAT MATTERS: a row of pictures is the easiest way to push the whole
+         document sideways, and that is what the strip must not do at any width. */
+      check('...while the page itself still does not scroll sideways',
+        g.docScrollW <= g.docClientW + 1, JSON.stringify(g));
+      await gp.setViewport({ width: 360, height: 900 });
+      await gp.evaluate(() => new Promise(r => requestAnimationFrame(() => r())));
+      const narrowG = await gp.evaluate(() => ({
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth,
+        strips: !!document.querySelector('.shd-selfpost .shd-image-strip')
+      }));
+      check('...and still does not at 360px, where a strip would show first',
+        narrowG.strips && narrowG.scrollW <= narrowG.clientW + 1, JSON.stringify(narrowG));
+      await gp.close();
+    }
 
     // Narrow: the cap is a ceiling, not a width. A phone-width window must shrink it
     // rather than keep 640px and overflow.

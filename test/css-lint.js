@@ -202,6 +202,21 @@ const noWrap = flexBlocks
 check('every display:flex declares flex-wrap', noWrap.length === 0,
   `missing on: ${noWrap.join(' | ')} — a flex row defaults to nowrap and overflows a narrow viewport`);
 
+/* DECLARING nowrap SATISFIES THE RULE ABOVE WHILE DOING THE THING IT EXISTS TO PREVENT.
+ * A row that refuses to wrap overflows a narrow viewport exactly as an undeclared one
+ * does, so the check would have become a formality the moment anyone wrote it out.
+ *
+ * There is one legitimate reason to refuse: the row scrolls inside its own box instead,
+ * which is what a gallery strip does. So nowrap is allowed only WITH an overflow-x that
+ * scrolls — the pairing is the safety, not either half — and a row that opts out of
+ * wrapping without opting into scrolling still fails, which is bug 31's protection intact. */
+const nowrapNoScroll = flexBlocks
+  .filter(([, , decls]) => /flex-wrap\s*:\s*nowrap/.test(decls) &&
+                           !/overflow-x\s*:\s*(auto|scroll)/.test(decls))
+  .map(([, sel]) => sel.trim().split('\n').pop().trim());
+check('...and a row that refuses to wrap scrolls instead', nowrapNoScroll.length === 0,
+  `nowrap with no overflow-x on: ${nowrapNoScroll.join(' | ')}`);
+
 /**
  * THEMES.
  *

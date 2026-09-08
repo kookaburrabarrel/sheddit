@@ -2071,6 +2071,37 @@ mutate "the Firefox build ships Chrome's worker key, which Gecko ignores" run \
   package-extension.js '    out.background = { scripts: [out.background.service_worker], persistent: false };' \
                        '    out.background = { ...out.background };'
 
+# --------------------------------------------------- a gallery's unshown frames ---
+# Reported from live use: a six-frame gallery rendered image 1 of 6. Reddit gives frame 1
+# a real src and parks the rest in data-lazy-src, filling src in only when its carousel
+# advances — which never happens under this layout, because the carousel is an inert 0x0
+# host. Reading only src finds one picture and waits for the others for ever. The URLs are
+# in the DOM at first paint; this line is the whole difference.
+mutate "a gallery reads only the frames Reddit has already shown" run \
+  src/core/model.js '    const lazy = img.getAttribute(C.GALLERY_LAZY_SRC);
+    if (lazy) out.push({ url: lazy, w: 0 });' '    ;'
+
+# The lazy url states a URL, not a size, so it must never outbid a real responsive set —
+# a frame with both would drop from its best resolution to whatever Reddit lazy-listed.
+mutate "the lazy gallery url outranks a real responsive set" run \
+  src/core/model.js '    const lazy = img.getAttribute(C.GALLERY_LAZY_SRC);
+    if (lazy) out.push({ url: lazy, w: 0 });' \
+                    '    const lazy = img.getAttribute(C.GALLERY_LAZY_SRC);
+    if (lazy) out.push({ url: lazy, w: 99999 });'
+
+# The strip: a gallery reads sideways, a lone picture stays a block. Both halves matter, so
+# the row runs against geometry — jsdom reports every width as 0, which cannot tell a strip
+# that scrolls inside its box from one that pushes the whole document sideways.
+mutate "a gallery stacks its frames down the page again" geometry \
+  src/modules/comments.js "    box.classList.toggle('shd-image-strip'," \
+                          "    box.classList.toggle('shd-image-strip', false \&\&"
+
+# Refusing to wrap is only safe because the box scrolls; without the overflow the strip is
+# as wide as its pictures and takes the page with it — bug 31, by way of a gallery.
+mutate "the strip stops scrolling and pushes the page instead" geometry \
+  src/styles/old-reddit.css '  overflow-x: auto;
+  overscroll-behavior-x: contain;' '  overscroll-behavior-x: contain;'
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it

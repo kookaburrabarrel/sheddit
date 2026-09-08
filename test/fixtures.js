@@ -33,21 +33,31 @@ const POSTS = [
     contentHref: 'https://www.reddit.com/gallery/gallery1',
     score: '12247', comments: '1270', domain: 'reddit.com',
     author: 'Wonderfulhumanss', sub: 'interesting',
-    /* Two real gallery frames with responsive sets, beside the community-icon and flair
-       decoys bug 1 is about. Each frame lists its LARGEST midway (640/1280/960) so a
-       first-or-last resolver picks visibly wrong, and the two frames must BOTH survive —
-       a gallery reduced to one picture is the failure the comments-page stack asserts
-       against. */
+    /* Gallery frames beside the community-icon and flair decoys bug 1 is about. Frame 1
+       lists its LARGEST midway (640/1280/960) so a first-or-last resolver picks visibly
+       wrong.
+
+       FRAMES 2 AND 3 ARE THE LIVE DELIVERY, and the reason the shipped resolver found
+       only one picture: Reddit hands a gallery's first frame a real `src` and parks every
+       later frame's URL in `data-lazy-src` with the `src` EMPTY, filling it in only when
+       its carousel advances — which never happens under this layout, because the carousel
+       is an inert 0x0 host. A fixture whose every frame carries a real src cannot tell a
+       resolver that reads the lazy attribute from one that does not; this one had three
+       frames all fully populated, and passed while live galleries rendered image 1 of 6. */
     imgs: ['styles.redditmedia.com/t5_2qib0/styles/communityIcon_x.png',
            'emoji.redditmedia.com/abc_t5_3nqvj/snoo_sim.png',
+           /* Frame 1 keeps its lazy attribute alongside a real set, which is what a
+              hydrated frame looks like — Reddit does not strip it once the src lands. So
+              this frame is the one that can tell an unranked lazy candidate from one that
+              outbids the set: the lazy url here is deliberately the SMALL variant, and if
+              it ever wins, frame 1 silently drops from 1280 to 640. */
            { src: 'preview.redd.it/bubble-boy-photo.jpg',
+             lazy: 'https://preview.redd.it/bubble-1-640.jpg',
              srcset: 'https://preview.redd.it/bubble-1-640.jpg 640w, ' +
                      'https://preview.redd.it/bubble-1-1280.jpg 1280w, ' +
                      'https://preview.redd.it/bubble-1-960.jpg 960w' },
-           { src: 'preview.redd.it/bubble-boy-photo-2.jpg',
-             srcset: 'https://preview.redd.it/bubble-2-640.jpg 640w, ' +
-                     'https://preview.redd.it/bubble-2-1280.jpg 1280w, ' +
-                     'https://preview.redd.it/bubble-2-960.jpg 960w' }]
+           { lazy: 'https://preview.redd.it/bubble-2-1280.jpg' },
+           { lazy: 'https://preview.redd.it/bubble-3-1280.jpg' }]
   },
   {
     id: 't3_text1', type: 'text', title: 'Got Laid Off, Took My 2-Year-Old Son to Return My Laptop',
@@ -369,7 +379,13 @@ function postHtml(p) {
      to read either. */
   const imgs = p.imgs.map(u => typeof u === 'string'
     ? `<img src="https://${u}" alt="">`
-    : `<img src="https://${u.src}" srcset="${esc(u.srcset)}" alt="">`).join('');
+    /* An unshown gallery frame: EMPTY src, URL in data-lazy-src, exactly as Reddit ships
+       one it has not scrolled to. `src=""` rather than a missing attribute, because that
+       is what was measured and because the two behave differently in a resolver. */
+    : !u.src
+      ? `<img src="" loading="lazy" data-lazy-src="${esc(u.lazy)}" alt="">`
+      : `<img src="https://${u.src}" srcset="${esc(u.srcset)}"${
+          u.lazy ? ` data-lazy-src="${esc(u.lazy)}"` : ''} alt="">`).join('');
   const avatar = p.avatarImg
     ? `<a href="/user/${p.author}"><img src="https://${p.avatarImg}" alt=""></a>` : '';
   const flair = `<shreddit-post-flair><img src="https://emoji.redditmedia.com/flair_${p.id}.png" alt=""></shreddit-post-flair>`;

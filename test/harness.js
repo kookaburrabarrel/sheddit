@@ -205,9 +205,14 @@ function serveFixtures() {
     // ...and an ADULT image submission, for the same reason: the blur and its button are a
     // box over a box, which is layout.
     const wantsNsfwImage = /\/image1nsfw\//.test(pathname);
+    /* A GALLERY, for the browser suites only: a strip of pictures that scrolls inside its
+       own box is a layout question by definition — whether it scrolls THERE or pushes the
+       whole document sideways is the entire difference, and jsdom does no layout. */
+    const wantsGallery = /\/gallery1\//.test(pathname);
     let body = /\/comments\//.test(pathname)
       // A thread that ships a slice and lazy-loads the rest, which is what a real one does.
       ? commentsPage(wantsBranches ? { deliver: COMMENT_SLICE, branchPager: true }
+        : wantsGallery ? { galleryPost: true }
         : wantsImage ? { imagePost: true }
           : wantsNsfwVideo ? { deadLinkPost: true }
             : wantsNsfwImage ? { imagePost: true }
@@ -539,6 +544,7 @@ const PATHS = {
   subreddit: '/r/programming/',
   comments: '/r/programming/comments/link1/nasa/',
   imageComments: '/r/aww/comments/image1/a_very_good_dog/',   // an image submission
+  galleryComments: '/r/interesting/comments/gallery1/bubble_boy/',  // a multi-frame gallery
   nsfwVideoComments: '/r/funny/comments/dead1/expired/',      // an ADULT video submission
   nsfwImageComments: '/r/aww/comments/image1nsfw/a_very_good_dog/',  // an ADULT image submission
   broken: '/r/broken/',         // posts missing a required attribute -> real render failure
