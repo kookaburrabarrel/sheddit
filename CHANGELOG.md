@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.36.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.37.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,51 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.37.0
+
+### Added — the update check runs once when your browser starts, and you can switch it off
+
+A hand-installed extension never updates itself, and this one chases Reddit's markup — so
+"Sheddit stopped rendering comments" and "you are several builds back" are frequently the
+same report. Since 0.29.0 the header has carried an **updates** control that answers that
+question, and it only ever answered when pressed. The reader who most needs it is by
+definition the one who set this up months ago and has not thought about it since, which is
+exactly the reader who never presses it.
+
+So the check now also runs once at browser start, in a background worker that does nothing
+else. Three properties keep it honest, and each is asserted rather than intended.
+
+**It is a switch.** `auto: on/off` sits directly under the control it feeds, in Sheddit's
+own header, and the same setting is on the options page. Off means no request leaves at
+startup at all; the button still answers on a click exactly as before. On by default.
+Storage that will not answer counts as off, deliberately: a browser that cannot report the
+setting cannot report that it was left on, and the safe direction for a request a reader is
+entitled to refuse is not to send it.
+
+**It is rate-limited**, because "at browser start" is not a rate. A machine restarted six
+times in an afternoon sends one request, not six — the floor is read from the stored
+answer's own timestamp, so the frequency is bounded by the clock rather than by how someone
+uses their computer.
+
+**It asks GitHub, and there is still no server of this project's own.** The request is the
+one the button already made: the same static version file, no cookies, no referrer, nothing
+about the reader. What is honest to say, and what PRIVACY.md now says, is that GitHub see
+what any host sees when a browser asks them for a file — an IP address and a timestamp.
+That was true of the button too; the difference is only that it can now happen without a
+press, which is what the switch is for.
+
+The worker writes its answer into the same stored record the header already reads at boot,
+so the result surfaces on the next Reddit page through code that already existed. It does
+not render, notify, badge, or open anything — a worker that could put something on screen
+would be a second UI path with nothing behind it.
+
+Firefox takes an event page rather than a service worker, and Chrome's key is silently
+ignored there — so the derived manifest converts it, which is the packaging half of the
+same class of failure as the realm-crossing bug: right on one browser, quietly absent on
+the other. The two files that must agree on the version URL and the storage key are
+separate scripts with no shared scope, so those literals are written twice and asserted
+equal, the way the pagination bridge's protocol literals already are.
 
 ## 0.36.0
 
