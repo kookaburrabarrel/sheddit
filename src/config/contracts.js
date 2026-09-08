@@ -172,6 +172,27 @@ SHD.C = {
   THUMB_HOSTS: /^((preview|i|external-preview)\.redd\.it|[a-z]\.thumbs\.redditmedia\.com)$/,
   THUMB_EXCLUDE: 'shreddit-post-flair, faceplate-hovercard, shreddit-join-button, a[href^="/user/"]',
 
+  /* Where a gallery keeps the frames it has not shown yet.
+   *
+   * MEASURED LIVE on a six-frame gallery: frame 1 carries a real `src`; frames 2..N are
+   * `loading="lazy"` with an EMPTY `src` and their URL parked in `data-lazy-src`. Reddit
+   * fills the real `src` in when its <gallery-carousel> ADVANCES — and under this layout
+   * the carousel never advances, because it is a 0x0 inert host whose own utility classes
+   * match no loaded stylesheet and whose Prev/Next buttons are `visibility: hidden`.
+   *
+   * So this is the same shape as the feed's programmatic partial and the comment action
+   * row: Reddit's lazy machinery is driven by interaction with a native tree we hide, so
+   * waiting for it to deliver is waiting for something that cannot happen. The frames are
+   * NOT missing, and never were — every URL is in the DOM at first paint, one attribute
+   * away from the one being read. Reading it is the whole fix; nothing has to be driven,
+   * clicked or waited for.
+   *
+   * A candidate from here scores no width (the attribute states a URL, not a size), so it
+   * can never outrank a real srcset entry — it only fills a slot that would otherwise be
+   * empty. That is the direction that matters: a wrong guess here costs nothing, and the
+   * absence of it costs every frame after the first. */
+  GALLERY_LAZY_SRC: 'data-lazy-src',
+
   /* Observed post-type values: text, link, image, gallery, video, multi_media, crosspost
      (crosspost added 2026-08-14 by npm run verify:live; falls through the same non-text
      path as link/image/etc. in model.js. The fallback is covered rather than accidental:

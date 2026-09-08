@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.37.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.38.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,49 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.38.0
+
+### Fixed — a gallery post showed only its first picture
+
+Reported from live use with the diagnosis attached, and the diagnosis is the reason this
+was one line rather than a feature: a six-frame gallery rendered frame 1 and stopped, while
+every one of the six URLs sat in the page the whole time.
+
+Reddit gives a gallery's first frame a real `src` and parks each later frame's URL in a
+separate attribute, leaving the `src` empty until its own carousel advances to that frame.
+Under this layout the carousel never advances — it is replaced, so it sits inert at zero
+size with its controls hidden — and the resolver, which read `srcset` and `src`, therefore
+found exactly one picture and then waited for frames that could not arrive.
+
+That is the same shape as the feed's pagination and the comment action row: Reddit's lazy
+machinery is driven by interaction with a native tree this extension hides, so waiting on
+it is waiting for something that cannot happen. The answer is the same too — read what is
+already there rather than trying to drive it. The frames were never missing.
+
+The lazy URL is read as an unranked candidate, so it can only fill a frame that would
+otherwise be empty and can never outbid a real responsive set — a frame Reddit has already
+shown keeps its best resolution rather than dropping to whatever was lazy-listed.
+
+The fixture is what let this ship: it gave every frame a real `src`, which cannot tell a
+resolver that reads the lazy attribute from one that does not. Its later frames now carry
+no `src` at all, and its first frame carries both — the shape a hydrated frame actually
+has, and the only one that can catch a candidate wrongly outranking the set.
+
+### Changed — a gallery's frames read sideways
+
+Stacking six pictures down the page buries the comments under the post. The frames sit in
+one row now and scroll inside their own box, which is the shape a gallery has everywhere
+else. A single picture is untouched: one frame is a picture, several are a gallery, and the
+decision is made from what the box actually holds rather than from the post's type — a
+frame that arrives late turns a lone picture into a gallery, and that is exactly the moment
+it should stop being stacked.
+
+The overflow belongs to the strip and to nothing above it. A row of pictures is the easiest
+way there is to make the whole document scroll sideways, so the geometry suite asserts both
+halves at two widths: the strip scrolls, and the page does not. Refusing to wrap is what
+makes a strip a strip, and it is only safe because that scrolling exists — css-lint now
+requires the pairing, so a row cannot opt out of wrapping without opting into scrolling.
 
 ## 0.37.0
 

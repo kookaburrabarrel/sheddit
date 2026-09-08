@@ -1,6 +1,6 @@
 {
-  "version": "0.37.0",
+  "version": "0.38.0",
   "released": "2026-09-08",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.37.0 checks for a new version once when your browser starts, so a hand-installed copy stops going stale unnoticed — one request to GitHub, at most once a day, and an auto: on/off switch under the updates button turns it off."
+  "notes": "0.38.0 fixes a gallery post showing only its first picture — Reddit parks the other frames in an attribute it fills in only when its own carousel advances, which never happens here — and lays the frames out as one sideways-scrolling row."
 }

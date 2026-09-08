@@ -368,6 +368,11 @@ SHD.model = (() => {
     }
     const plain = img.currentSrc || img.src;
     if (plain) out.push({ url: plain, w: 0 });
+    /* The frames a gallery has not shown yet. `src` is empty on those until Reddit's
+       carousel advances, and it never advances under our layout — see C.GALLERY_LAZY_SRC.
+       Last, and unranked, so it fills an empty slot without ever outbidding a real set. */
+    const lazy = img.getAttribute(C.GALLERY_LAZY_SRC);
+    if (lazy) out.push({ url: lazy, w: 0 });
     return out;
   }
 

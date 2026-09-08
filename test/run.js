@@ -1071,8 +1071,17 @@ async function boot(html, url, setup) {
     const { doc } = await boot(commentsPage({ galleryPost: true }),
       'https://www.reddit.com/r/interesting/comments/gallery1/bubble_boy/');
     const imgs = [...doc.querySelectorAll('#shd-root .shd-selfpost .shd-image img')];
-    check('a gallery shows every frame, not just the largest one', imgs.length === 2,
+    check('a gallery shows every frame, not just the largest one', imgs.length === 3,
       `${imgs.length} imgs`);
+    /* THE ONE THIS SHIPPED WRONG. Reddit gives a gallery's first frame a real `src` and
+       parks every later frame's URL in `data-lazy-src`, filling the real src in only when
+       its carousel advances — which cannot happen under this layout, because the carousel
+       is an inert 0x0 host. Reading only src therefore found exactly one picture on a live
+       six-frame gallery and waited for the rest for ever. Frames 2 and 3 of this fixture
+       carry no src at all, so they resolve only if the lazy attribute is read. */
+    check('...including the frames Reddit has not shown yet, which carry no src at all',
+      imgs.slice(1).every(i => /bubble-[23]-1280\.jpg$/.test(i.getAttribute('src') || '')),
+      imgs.map(i => i.getAttribute('src')).join(', '));
     /* Each frame's set lists 640/1280/960 — the largest midway, so first-or-last picks
        visibly wrong, per frame. */
     check('...each at its own best resolution',
@@ -1094,16 +1103,16 @@ async function boot(html, url, setup) {
     const lazyFrame = doc.createElement('img');
     srcPost.appendChild(lazyFrame);                     // srcless: nothing to show yet
     await hold(50);
-    check('a srcless frame adds nothing', doc.querySelectorAll(
-      '#shd-root .shd-selfpost .shd-image img').length === 2);
+    check('a frame with neither a src nor a lazy url adds nothing', doc.querySelectorAll(
+      '#shd-root .shd-selfpost .shd-image img').length === 3);
     lazyFrame.src = 'https://preview.redd.it/bubble-late-960.jpg';
     const grew = await waitFor(() => doc.querySelectorAll(
-      '#shd-root .shd-selfpost .shd-image img').length === 3, { timeout: 3000 });
+      '#shd-root .shd-selfpost .shd-image img').length === 4, { timeout: 3000 });
     check('a frame that hydrates after consume is appended to the stack', grew,
       `${doc.querySelectorAll('#shd-root .shd-selfpost .shd-image img').length} imgs`);
     check('...without duplicating the frames already shown',
       new Set([...doc.querySelectorAll('#shd-root .shd-selfpost .shd-image img')]
-        .map(i => i.getAttribute('src'))).size === 3);
+        .map(i => i.getAttribute('src'))).size === 4);
   }
 
   {
@@ -1136,7 +1145,7 @@ async function boot(html, url, setup) {
     const shown = [...doc.querySelectorAll('.shd-selfpost .shd-image-el')]
       .map(i => i.getAttribute('src'));
     check('...the reveal opens everything the post has by then, late frame included',
-      shown.length === 3 && shown.some(u => /bubble-late-960/.test(u)), shown.join(', '));
+      shown.length === 4 && shown.some(u => /bubble-late-960/.test(u)), shown.join(', '));
   }
 
   /* Bug 90 (QA F1, HIGH — deep branches were unreachable): one click on "20 more
