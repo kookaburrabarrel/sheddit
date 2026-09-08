@@ -182,6 +182,8 @@ SHD.model = (() => {
     const bodyNode = [...el.querySelectorAll(C.POST_BODY)]
       .find(n => n.closest(C.POST) === el) || null;
 
+    const removedNotice = removalOf(el);
+
     /* A video post's outbound link must be WATCHABLE. content-href is a bare v.redd.it
        URL, and Reddit 302s a logged-out session from there straight back to the comments
        page — which we render, whose title links back to v.redd.it: a closed loop with the
@@ -267,6 +269,7 @@ SHD.model = (() => {
       nsfw: nsfwOf(el),
       thumbnail: thumbnailFor(el, type),
       bodyNode,
+      removedNotice,
       // Kept so delegated clicks can find the native controls later.
       source: el
     };
@@ -301,6 +304,38 @@ SHD.model = (() => {
       const s = v.trim().toLowerCase();
       return s !== 'false' && s !== '0';
     });
+  }
+
+  /**
+   * Reddit's own "this post was deleted / removed" line, or null.
+   *
+   * Matched by walking TEXT rather than by a selector, because the sentence is what was
+   * captured and the element carrying it was not (C.POST_REMOVED_TEXT). Three rules, each
+   * of which the obvious version gets wrong:
+   *
+   *  - INNERMOST wins. Every ancestor of the notice contains its text, so a first-match
+   *    walk returns the post element itself and we would render the whole page as the
+   *    notice. Bug 67's lesson — the profile body took a layout wrapper for the same
+   *    reason — applied before the mistake rather than after.
+   *  - SCOPED to this post. A crosspost embeds another post's markup, and a removed inner
+   *    post must not tombstone the live outer one.
+   *  - The MATCH is trusted, the length is not. A node whose text runs long is a container
+   *    that happens to hold the sentence plus other content; the notice itself is one
+   *    sentence, so anything past a sane ceiling is rejected rather than rendered.
+   *
+   * Returns the trimmed text, never the node: we show Reddit's own words rather than
+   * cloning its markup, so nothing of Reddit's styling comes with it (open question 7).
+   */
+  function removalOf(el) {
+    try {
+      const hits = [...el.querySelectorAll('*')].filter(n =>
+        n.closest(C.POST) === el &&
+        C.POST_REMOVED_TEXT.test(n.textContent || ''));
+      if (!hits.length) return null;
+      const inner = hits.find(n => !hits.some(o => o !== n && n.contains(o))) || hits[hits.length - 1];
+      const text = (inner.textContent || '').replace(/\s+/g, ' ').trim();
+      return text && text.length <= 200 ? text : null;
+    } catch { return null; }
   }
 
   function thumbnailFor(el, type) {

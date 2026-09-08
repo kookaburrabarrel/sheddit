@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.35.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.36.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,37 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.36.0
+
+### Fixed — a deleted thread looked exactly like a live one
+
+Reported from live use: a post Reddit had taken down rendered as an ordinary one — a
+`[deleted]` author, a body, and nothing anywhere saying it was gone. Modern Reddit says so
+plainly on the same page. A reader in this layout had no way to tell a dead thread from a
+live one, which is the kind of omission that wastes a click and then some reading.
+
+The cause is this extension's one idea meeting its third consequence. Post data is read
+from attributes on `shreddit-post`, and **removal is not an attribute** — nothing on the
+element flags it. Reddit states it in rendered copy instead, so the copy is the contract,
+matched the way the *N more replies* control and the age-gate buttons are matched: by
+text, because no stable attribute has been captured. The phrase is the reported sentence
+widened only to its known sibling, since Reddit uses the same shape for a moderator or
+filter removal as for a poster's own deletion.
+
+The comments page shows Reddit's own sentence rather than copy of ours, because the
+sentence is the thing that distinguishes the cases — deleted by the poster, removed by a
+moderator, removed by a filter — and inventing one would flatten all three into a guess.
+It is added beside the post's text, not in place of it: a removed post often keeps its body
+on screen, and dropping content we were handed would be its own quiet omission. Listing
+rows get a one-word `removed` stamp beside the title, where old reddit put the `nsfw` one
+and for the same reason — it says the row is a dead end before a click is spent on it.
+
+Deliberately **not** keyed on the author reading `[deleted]`, though that looks like the
+obvious signal: a post whose author deleted their *account* reads the same way while the
+post itself is perfectly readable. A tombstone over live content is the worse of the two
+errors, so the sentence is the only trigger, and a miss leaves the post rendering exactly
+as it did before.
 
 ## 0.35.0
 

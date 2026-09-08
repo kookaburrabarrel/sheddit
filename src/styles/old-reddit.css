@@ -475,6 +475,42 @@ html.shd-active body {
   content: 'nsfw';
 }
 
+/* A post Reddit has taken down.
+ *
+ * Deliberately NOT --shd-nsfw's red, though it sits in the same place and has the same
+ * shape: red is a warning about what a post CONTAINS, and this says the post is not there
+ * any more. Reusing it would make a removed post read as adult. Muted instead, which is
+ * also the hierarchy — this is a state, not a claim about content.
+ *
+ * Existing tokens only. A new one would have to be added to the base palette and all four
+ * themes or a theme inherits classic's colour on a dark background, which is the drift
+ * css-lint's derived REQUIRED_TOKENS list exists to catch (log 43). */
+.shd-removed-stamp {
+  color: var(--shd-meta);
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+  padding: 0 3px;
+  margin-left: 5px;
+  white-space: nowrap;
+}
+
+/* Reddit's own sentence, on the comments page. Its own block rather than styled body
+   text: it is not the post's content, and a reader skimming for "is this thread alive"
+   should find it without reading. */
+.shd-removed-notice {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  color: var(--shd-meta);
+  background: var(--shd-thumb-bg);
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+  font-size: 12px;
+  font-style: italic;
+}
+
 /* The stamp beside the title. Old reddit put it right after the link. */
 .nsfw-stamp {
   color: var(--shd-nsfw);

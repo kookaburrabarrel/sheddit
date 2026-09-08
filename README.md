@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
 
-[![version 0.35.0](https://img.shields.io/badge/version-0.35.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.36.0](https://img.shields.io/badge/version-0.36.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.35.0 is out — everyone is welcome to try it
+### Beta 0.36.0 is out — everyone is welcome to try it
 
 Works in Chrome and Firefox, [installed by hand](#install) in about a minute — **Chrome is
 the better-tested of the two**, so start there if you have the choice.
@@ -76,6 +76,12 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 Full detail in the [changelog](CHANGELOG.md). The three most recent builds:
 
+**0.36.0 — you can tell a dead thread now**
+- **Fixed:** backing up out of a thread could load the wrong content into the page.
+- **Fixed:** a deleted or removed post rendered as an ordinary one — a `[deleted]` author,
+  a body, and nothing saying it was gone. It now carries Reddit's own sentence on the
+  comments page, and a `removed` stamp on listing rows.
+
 **0.35.0 — the wait, explained**
 - **Fixed:** a slow-loading page sat black for several seconds with nothing to say whether
   anything was coming. It says `loading…` now, once the wait is long enough to need it —
@@ -94,13 +100,6 @@ Full detail in the [changelog](CHANGELOG.md). The three most recent builds:
   thread's URL in place after loading it, and Sheddit read that as leaving the page.
 - **Fixed:** that card's diagnostics block is open by default and names the first error, so
   a bug report carries the one line that explains it.
-
-**0.33.0 — old links that used to dead-end**
-- **Added:** `old.reddit.com` answers every page with a login wall now, so a link there is
-  opened on `www.reddit.com` instead — the same page, the same layout — behind a short
-  notice saying so. Off with one checkbox.
-- **Fixed:** the release script rebuilt the Firefox download and never committed it, so
-  that link had been serving an older build than the Chrome one beside it.
 
 ---
 
@@ -202,7 +201,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.35.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.36.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

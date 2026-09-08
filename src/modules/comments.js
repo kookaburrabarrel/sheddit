@@ -798,6 +798,19 @@ SHD.comments = (() => {
         h('div.usertext-body.shd-selftext', null,
           SHD.dom.inlineGifs(m.bodyNode.cloneNode(true))));
     }
+    /* A post Reddit has taken down said so nowhere in our layout: reported as a deleted
+       thread rendering as an ordinary one, with a `[deleted]` author and a body, and no
+       way to tell a dead thread from a live one. Reddit's own sentence is shown, because
+       it is the thing that distinguishes the cases — deleted by the poster, removed by a
+       moderator, removed by a filter — and inventing our own copy would flatten all three
+       into a guess. Appended AFTER the body rather than instead of it: a removed post
+       often keeps its text on screen, and dropping content we were given would be its own
+       silent omission. */
+    if (m.removedNotice) {
+      row.classList.add('shd-removed');
+      row.querySelector('.entry').appendChild(
+        h('div.shd-removed-notice', { role: 'note', text: m.removedNotice }));
+    }
     r.prepend(h('div.shd-selfpost', null, row));
     ensureCommentHead(r, m);
     return true;

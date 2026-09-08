@@ -433,6 +433,69 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
       `absent-means-safe is no longer the discriminator`);
   }
 
+  /* ---------------- removed posts: the sentence IS the contract ---------------- */
+  console.log('\n\x1b[1mLIVE CONTRACTS — REMOVED POSTS\x1b[0m');
+  /* C.POST_REMOVED_TEXT is the second contract shipped on a report's WORDS rather than a
+     capture: a reader quoted Reddit's sentence off the page, and the element carrying it
+     was never recorded. So this section does two different jobs. On an ordinary listing it
+     is a NEGATIVE control — a false positive here would put a tombstone over live posts,
+     which is the worse of the two errors — and on a page with a removed post it reports the
+     element that actually carries the sentence, which is what turns the text test into a
+     selector. Point it at one with --sub=<a subreddit that has removed posts>, or at a
+     known-deleted thread with --path=. */
+  const removed = await page.evaluate((C) => {
+    const re = new RegExp(C.POST_REMOVED_TEXT.source, C.POST_REMOVED_TEXT.flags);
+    const posts = [...document.querySelectorAll(C.POST)];
+    const hits = [];
+    for (const p of posts) {
+      const inner = [...p.querySelectorAll('*')]
+        .filter(n => n.closest(C.POST) === p && re.test(n.textContent || ''));
+      if (!inner.length) continue;
+      const el = inner.find(n => !inner.some(o => o !== n && n.contains(o))) || inner[0];
+      hits.push({
+        id: p.getAttribute(C.POST_ATTR.id),
+        author: p.getAttribute(C.POST_ATTR.author),
+        tag: el.tagName.toLowerCase(),
+        attrs: [...el.attributes].map(a => a.name),
+        depth: inner.length,
+        text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160)
+      });
+    }
+    // How many posts read [deleted] by author alone — the signal we deliberately do NOT use.
+    const authorless = posts.filter(p => !p.getAttribute(C.POST_ATTR.author)).length;
+    return { count: posts.length, hits, authorless };
+  }, C);
+
+  console.log(`  \x1b[2m${removed.hits.length}/${removed.count} posts carry a removal ` +
+    `sentence; ${removed.authorless} have no author attribute\x1b[0m`);
+  for (const h of removed.hits)
+    console.log(`  \x1b[2m${h.id}: <${h.tag} ${h.attrs.join(' ')}> (${h.depth} nested ` +
+      `matches) "${h.text}"\x1b[0m`);
+
+  if (removed.hits.length === 0) {
+    console.log('  \x1b[33mINCONCLUSIVE: no post here carries the sentence. That is what a ' +
+      'page with nothing removed looks like AND what a wrong phrase looks like — this run ' +
+      'cannot tell them apart. Rerun against a thread you know is deleted before ' +
+      'concluding the contract is broken.\x1b[0m');
+  } else {
+    check('the removal notice is a leaf, not a container that swallows the post',
+      removed.hits.every(h => h.text.length <= 200),
+      JSON.stringify(removed.hits.map(h => h.text.length)));
+    const named = removed.hits.filter(h => h.attrs.some(a => /testid|slot|class/i.test(a)));
+    if (named.length) {
+      console.log('  \x1b[2mcandidate selectors for a future capture: ' +
+        JSON.stringify([...new Set(named.map(h => `${h.tag}[${h.attrs.join('][')}]`))]) +
+        '\x1b[0m');
+    }
+  }
+  /* The negative control, and the one that matters most: author `[deleted]` is NOT the
+     signal, because an account deletion leaves the post perfectly readable. If these two
+     counts track each other on a page with no removals, the phrase is matching something
+     it should not. */
+  check('a missing author does not by itself read as a removed post',
+    removed.hits.length <= removed.authorless || removed.hits.length === 0,
+    `${removed.hits.length} sentences vs ${removed.authorless} authorless posts`);
+
   /* ---------------- video posts: the packaged-media contract ---------------- */
   console.log('\n\x1b[1mLIVE CONTRACTS — VIDEO POSTS\x1b[0m');
   /* C.POST_VIDEO_JSON is the one contract shipped on a report's word rather than a
