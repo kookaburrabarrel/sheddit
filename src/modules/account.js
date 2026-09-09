@@ -491,16 +491,54 @@ SHD.account = (() => {
     ]);
   }
 
-  /** The header's one word about it, so a reader can tell the layer is on without voting to find out. */
-  function headerStatus() {
+  /**
+   * The account corner — old reddit's `#header-bottom-right`, at the far right of the
+   * header, and the answer to "does this thing know I am logged in?".
+   *
+   * It replaced a bare "logged in" label sitting mid-header beside the theme buttons.
+   * That label was true and nearly invisible: it read as a caption on the theme bar rather
+   * than as the account area, so the honest reader's conclusion was that the extension had
+   * no idea who they were. Old reddit put this in one place for a decade — the top right —
+   * and putting it back there is most of the fix.
+   *
+   * Three things, in old reddit's order:
+   *   - the avatar Reddit already drew (no request of ours that the browser has not made),
+   *   - the reader's name, linking to their profile — which Sheddit renders itself,
+   *   - `preferences`, linking to Reddit's own account settings, which Sheddit hands back
+   *     untouched (route.js → OTHER), so the door works today rather than eventually.
+   *
+   * WHEN THE NAME CANNOT BE READ the corner still appears and still says the session is
+   * live — "logged in", not a link — because the question it answers is whether Sheddit
+   * sees the account at all, and that answer does not depend on a contract that may have
+   * moved. C.SESSION.username is unverified live; this is what a miss costs.
+   *
+   * Absent entirely for a logged-out reader, and for a reader who turned the layer off:
+   * the corner states what the extension will DO on this page, and in both of those cases
+   * the answer is nothing.
+   */
+  function headerAccount() {
     if (!active()) return null;
-    return h('span.shd-account-status', {
-      text: 'logged in',
-      title: 'Sheddit sees a logged-in Reddit session: vote arrows and reply boxes go through Reddit\'s own controls. Turn this off on the options page.'
-    });
+    const name = SHD.session.username();
+    const avatar = SHD.session.avatar();
+    return h('span.shd-account', null, [
+      avatar ? h('img.shd-account-avatar', { src: avatar, alt: '', loading: 'lazy' }) : null,
+      name
+        ? h('a.shd-account-user', { href: `/user/${name}/`, text: `u/${name}` })
+        : h('span.shd-account-user.shd-account-unnamed', {
+            text: 'logged in',
+            title: 'Sheddit can see that you are logged in to Reddit, but could not read ' +
+                   'your username from the page. Voting and replying are unaffected.'
+          }),
+      h('span.shd-account-sep', { 'aria-hidden': 'true', text: '|' }),
+      h('a.shd-account-prefs', {
+        href: C.ACCOUNT.settings,
+        text: 'preferences',
+        title: 'Your Reddit account settings — Reddit\'s own page, which Sheddit leaves alone.'
+      })
+    ]);
   }
 
   function reset() { missWarned = false; }
 
-  return { midcol, vote, reply, replyForm, commentBox, compose, submitBox, headerStatus, reset, timings };
+  return { midcol, vote, reply, replyForm, commentBox, compose, submitBox, headerAccount, reset, timings };
 })();

@@ -620,8 +620,46 @@ SHD.C = {
   SESSION: {
     loggedIn: 'shreddit-app[user-logged-in="true"], #expand-user-drawer-button, ' +
               'reddit-header-large [id*="user-drawer" i]',
-    loggedOut: 'reddit-header-large a[href*="/login"], faceplate-tracker[noun="login"]'
+    loggedOut: 'reddit-header-large a[href*="/login"], faceplate-tracker[noun="login"]',
+    /**
+     * The reader's OWN name, for the header's account corner — an anchor onto their
+     * profile in Reddit's own header. CANDIDATES, unverified: the signed-in probe dumped
+     * `shreddit-app`'s attributes and there is no username among them (`loid` is a
+     * tracking id, not a name), so the header's own link is the place to look. Every
+     * clause is scoped to the header or the drawer, because `a[href^="/user/"]` matched
+     * document-wide would pick the author of the first post on the page and greet the
+     * reader by a stranger's name — the worst failure available to this feature, and the
+     * reason the scoping is not a nicety.
+     *
+     * `*=` rather than `^=` because Reddit has shipped both a bare path and a full
+     * `https://www.reddit.com/user/x/` in its own markup, and `^="/user/"` matches only
+     * the first — the scoping above is what makes the looser operator safe, not the
+     * anchor. session.js then reads the NAME OUT OF THE HREF, resolving it against the
+     * page and demanding the whole PATH match `/user/<name>/`, so a link to a comment or
+     * a profile tab cannot be mistaken for an identity; it takes the first candidate that
+     * parses, so a `/user/me/` alias sitting beside the real link is stepped over rather
+     * than mistaken for a name. A miss costs the name and nothing else: the corner says
+     * "logged in" instead, and the preferences link beside it is unaffected.
+     */
+    username: 'reddit-header-large a[href*="/user/"], ' +
+              '#expand-user-drawer-button a[href*="/user/"], ' +
+              'user-drawer-app a[href*="/user/"], ' +
+              'faceplate-tracker[source="account_manager"] a[href*="/user/"]',
+    /* The avatar Reddit already drew in its own header. Rendering our own <img> from that
+       URL costs no request the browser has not already made — it is the thumbnail
+       arrangement exactly (model.js), one cached file. Optional in the strictest sense:
+       no avatar, no <img>, and the corner still names the reader. */
+    avatar: '#expand-user-drawer-button img, #expand-user-drawer-button faceplate-img, ' +
+            'reddit-header-large img[alt*="avatar" i]'
   },
+
+  /**
+   * Where a logged-in reader manages their account. Reddit's own route, which Sheddit
+   * never renders — `route.js` classifies it OTHER and the gate never suppresses it, so
+   * the link lands on the page Reddit built for the job, exactly as the submit doors do.
+   * A trailing slash because every other path this file hands out carries one.
+   */
+  ACCOUNT: { settings: '/settings/' },
 
   /**
    * Reddit's own comment composer, which account.js DRIVES rather than replaces: the

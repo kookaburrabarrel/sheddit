@@ -26,11 +26,12 @@ SHD.chrome = (() => {
           sub ? h('li.selected', null, h('a', { href: `/r/${sub}/`, text: `r/${sub}` })) : null,
           user ? h('li.selected', null, h('a', { href: `/user/${user}/`, text: `u/${user}` })) : null
         ]),
-        /* Old reddit's header ended in the account corner. Ours says one word there when
-           the account layer is on, so a reader knows the arrows are live without voting
-           to find out; null for everyone else. */
-        SHD.account.headerStatus(),
-        themeBar()
+        /* LAST, so it lands at the far right — old reddit's `#header-bottom-right`, where
+           an account area has been for a decade. The theme bar carries margin-left:auto,
+           so it and everything after it form the right-hand cluster; the corner is the
+           end of it. Null for a logged-out reader, which is how the header says so. */
+        themeBar(),
+        SHD.account.headerAccount()
       ])
     );
   }

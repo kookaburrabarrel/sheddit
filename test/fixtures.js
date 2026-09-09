@@ -439,13 +439,22 @@ function postHtml(p) {
  *              Both at once is the contradiction the veto exists for.
  */
 function headerHtml(opts = {}) {
+  /* The profile link the account corner reads the reader's name out of, and the avatar
+     beside it — both inside the header, which is where C.SESSION scopes the lookup. A
+     `/user/` anchor elsewhere on the page belongs to a POST'S AUTHOR, and greeting the
+     reader by a stranger's name is the worst thing this feature can do; the scoping is
+     what prevents it, and a test drives exactly that. `noUsername` drops the link so the
+     unnamed fallback has a page to run on. */
+  const name = opts.username || 'tester';
   return `<reddit-header-large>` +
-    (opts.loggedIn ? `<span><button id="expand-user-drawer-button" aria-label="Expand user menu"><img alt="User Avatar" src="https://styles.redditmedia.com/avatar.png"></button></span>` : '') +
+    (opts.loggedIn ? `<span>` +
+      (opts.noUsername ? '' : `<a href="/user/${name}/">${name}</a>`) +
+      `<button id="expand-user-drawer-button" aria-label="Expand user menu"><img alt="User Avatar" src="https://styles.redditmedia.com/avatar.png"></button></span>` : '') +
     (opts.loginLink ? `<faceplate-tracker noun="login"><a href="https://www.reddit.com/login/">Log In</a></faceplate-tracker>` : '') +
     `</reddit-header-large>`;
 }
 
-/** @param {{pager?: boolean, loggedIn?: boolean, loginLink?: boolean}} opts  pager: give faceplate-partial a working loadContent() */
+/** @param {{pager?: boolean, loggedIn?: boolean, loginLink?: boolean, noUsername?: boolean}} opts  pager: give faceplate-partial a working loadContent() */
 function listingPage(opts = {}) {
   const pager = opts.pager ? `<script>${PAGER_SCRIPT}</script>` : '';
   return `<!DOCTYPE html><html><head><title>reddit</title>${REDDIT_PAGE_CSS}</head><body>${pager}

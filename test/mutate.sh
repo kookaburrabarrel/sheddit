@@ -1921,10 +1921,40 @@ mutate "the submit doors open for a logged-out reader" run \
   src/modules/account.js '  function submitBox(sub) {
     if (!active()) return null;' '  function submitBox(sub) {'
 
-mutate "the header stops saying the layer is on" run \
-  src/modules/account.js '  function headerStatus() {
-    if (!active()) return null;' '  function headerStatus() {
-    return null;'
+mutate "the account corner shows for a logged-out reader" run \
+  src/modules/account.js '  function headerAccount() {
+    if (!active()) return null;' '  function headerAccount() {'
+
+# The corner is the answer to "does this thing know I am logged in", and the name is the
+# half that can go missing. Dropping the fallback takes the answer with it.
+#
+# Written WITHOUT a shell metacharacter, deliberately. The first cut of this row injected
+# `null && h(...)`, and bash left the escaped ampersands in — so the mutation wrote invalid
+# JavaScript, the bundle would not parse, run.js died before printing a single result, and
+# `grep -c FAIL` counted zero. It reported SURVIVED for a mutation the suite catches three
+# times over. That is this file's own thesis (a suite that DIES and a suite with nothing to
+# report look identical to grep) landing on one of its rows; keep replacements plain.
+mutate "a missed username costs the whole corner, not just the name" run \
+  src/modules/account.js '    const name = SHD.session.username();' \
+                         '    const name = SHD.session.username(); if (!name) return null;'
+
+# THE WORST FAILURE AVAILABLE TO THIS FEATURE: an unscoped lookup finds a POST AUTHOR and
+# greets the reader by a stranger's name. Caught on the page whose header carries no name.
+mutate "the username is read from anywhere on the page, not the header" run \
+  src/config/contracts.js "    username: 'reddit-header-large a[href*=\"/user/\"], '" \
+                          "    username: 'a[href*=\"/user/\"], '"
+
+# A profile TAB names a page, not a person: /user/x/comments/ must not become an identity.
+mutate "a profile tab is taken for the reader's name" run \
+  src/core/session.js 'const PROFILE_PATH = /^\/user\/([^/?#]+)\/?$/;' \
+                      'const PROFILE_PATH = /^\/user\/([^/?#]+)/;'
+
+# Old reddit put the account area at the top right for a decade; mid-header it reads as a
+# caption on the theme bar, which is the report this feature answers.
+mutate "the account corner is no longer last in the header" run \
+  src/modules/chrome.js '        themeBar(),
+        SHD.account.headerAccount()' '        SHD.account.headerAccount(),
+        themeBar()' 
 
 # The action bar's tag was a literal in the miss report (copied from listing.js, where it
 # had sat since the first version). Every Reddit name lives in contracts.js — the one rule

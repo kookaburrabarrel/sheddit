@@ -354,6 +354,13 @@ Every miss returns the step it missed and has one floor: the box stays with the 
 status names the step, and Reddit's own composer is revealed in place (passthrough, §5
 tier 3) so the reader finishes there. The reply is never discarded on a failure.
 
+**The account corner** (0.35.0) is the layer's only unprompted mark on the page: old
+reddit's `#header-bottom-right`, rendered last in `#shd-header` so it lands at the far
+right. `session.js` reads the reader's name and avatar out of Reddit's own header —
+scoped there, because a `/user/` link anywhere else on the page belongs to a post's author
+and naming the reader after one is the worst failure this layer can produce. Both reads are
+optional: the corner stands, and says the session is live, without either.
+
 **Post** is a link. Old reddit's *Submit a new link / text post* sidebar doors onto
 `C.SUBMIT`'s route, which `route.js` classifies `OTHER` and the gate never suppresses — the
 composer is a whole page with its own rules and one of the routes CONTRIBUTING says to leave

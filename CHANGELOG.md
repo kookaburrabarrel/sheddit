@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.40.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.41.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -13,6 +13,66 @@ Entries lead with what changed for a *user* where there is such a thing, and not
 underlying cause where that is the more useful fact. Several entries describe bugs that
 existed from the first commit and were only found once a test could see them — those are
 marked **never worked**, because "fixed" would imply it once did.
+
+---
+
+## 0.41.0
+
+### Added — an account corner, at the far right of the header
+
+Reported as *"the plug-in has no way to tell you if you're logged in or not"*, and the
+report was right about the effect while the extension was, technically, already saying so.
+0.34.0 put the word **logged in** in the middle of the header, next to the theme buttons,
+in the theme label's grey. Read it in place and it is a caption on the theme bar. The one
+piece of furniture every Reddit user has looked at for a decade — the account area at the
+top right — was not there, so the honest conclusion was that Sheddit had no idea who you
+were.
+
+It is there now, and it carries what old reddit's `#header-bottom-right` carried:
+
+- **your avatar**, the one Reddit already drew in its own header. Our `<img>` points at the
+  same URL the browser has already fetched, which is the arrangement thumbnails have always
+  had — no request of Sheddit's own, then or now.
+- **your username**, linking to your profile — a page Sheddit renders itself.
+- **preferences**, linking to Reddit's own account settings. That route is one Sheddit
+  hands back untouched (`route.js` → `OTHER`), which is why the door works today rather
+  than eventually: Reddit's settings page is the right page, and reimplementing it is the
+  work CONTRIBUTING says not to do.
+
+**It appears only when the layer is on**, which is to say: you are logged in to Reddit
+*and* you have not turned *Use my Reddit account* off. For a logged-out reader the header
+is unchanged, and a test asserts it — the absence is how the header says *no session here*.
+
+**When the name cannot be read, the corner still stands** and still says the session is
+live, as plain text rather than a dead blue link. That is not a nicety: the contract that
+finds your name (`C.SESSION.username`) is a candidate, unverified against a signed-in
+reddit.com, because the signed-in probe dumped `shreddit-app`'s attributes and there is no
+username among them — `loid` is a tracking id, not a name. So the name is read out of the
+profile link in Reddit's own header, and a miss costs the name and nothing else.
+
+**The failure this feature had to be incapable of** is greeting you by a stranger's name.
+Every post on the page links to its author's profile, so a `/user/` lookup that was not
+scoped to the header would find one of those and put it in the corner as if it were you.
+Every clause is header-scoped, the name is read out of the href and the whole path has to
+match `/user/<name>/` — a profile tab names a page, not a person — and the lookup walks
+*every* candidate rather than validating only the first, so Reddit's own `/user/me/` alias
+sitting in front of the real link costs nothing. Four of the five new mutation rows exist
+for that one sentence, and `verify:live` now asserts the resolved name is never an author
+on the page it read.
+
+Next, and deliberately not now: a dropdown on the corner (messages, saved, logout) is what
+old reddit grew into, and every item in it is an auth-gated action that has to be delegated
+to a control Reddit rendered — the account layer's whole discipline. One at a time.
+
+### Fixed — a mutation row that reported SURVIVED because the suite never ran
+
+Not shipped code; a hole in the thing that proves the tests have teeth, and worth recording
+because it is this file's own thesis turned on one of its rows. The new row for the missing
+username injected `null && h(...)`, and bash left the escaped ampersands in — so the
+mutation wrote invalid JavaScript, the bundle would not parse, `test/run.js` died before
+printing a single result, and `grep -c FAIL` counted zero. It reported SURVIVED for a
+mutation the suite catches four times over. Rewritten without a shell metacharacter, and
+the row now carries the story so the next person writing one does not spend the afternoon.
 
 ---
 
