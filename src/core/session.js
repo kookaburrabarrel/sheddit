@@ -32,6 +32,7 @@ globalThis.SHD = globalThis.SHD || {};
 SHD.session = (() => {
   const NEGATIVE_TTL_MS = 1000;
   let cached = null;      // { loggedIn, matched, vetoed, at }
+  let identity = null;    // { name, avatar } — read once per page, on demand
 
   /** Which clauses of a selector list match the document right now. Diagnostics-grade. */
   function matching(list) {
@@ -65,11 +66,97 @@ SHD.session = (() => {
    */
   function active() { return !!SHD.settings?.account && loggedIn(); }
 
+  /* ------------------------------------------------------------------ *
+   * Who the reader is — for the header's account corner (0.35.0)
+   * ------------------------------------------------------------------ */
+
+  /**
+   * First match for a contract selector, light DOM first and open shadow roots after.
+   *
+   * The order is a cost decision, not a correctness one. A light-DOM `querySelector` over
+   * the document is one cheap pass; `deepQuery` from the document root walks every open
+   * shadow root on the page, and a Reddit page has dozens. So we ask the cheap way first
+   * and only descend within the HEADER — the only element these selectors are scoped to
+   * anyway — when the light DOM has nothing.
+   */
+  const clauses = (list) => String(list || '').split(',').map(x => x.trim()).filter(Boolean);
+
+  function findInHeader(list) {
+    for (const sel of clauses(list)) {
+      try {
+        const light = document.querySelector(sel);
+        if (light) return light;
+      } catch { /* a malformed clause must not take the rest with it */ }
+    }
+    const header = document.querySelector(SHD.C.HEADER);
+    if (!header || !SHD.dom?.deepQuery) return null;
+    for (const sel of clauses(list)) {
+      try {
+        const deep = SHD.dom.deepQuery(header, sel);
+        if (deep) return deep;
+      } catch { /* same */ }
+    }
+    return null;
+  }
+
+  /** Every light-DOM match for a contract list, in document order, deduplicated. */
+  function allInHeader(list) {
+    const out = new Set();
+    for (const sel of clauses(list)) {
+      try { document.querySelectorAll(sel).forEach(el => out.add(el)); }
+      catch { /* a malformed clause must not take the rest with it */ }
+    }
+    return [...out];
+  }
+
+  /* A profile link and NOTHING ELSE. `/user/spez/` yes; `/user/spez/comments/…`, a
+     submitted tab, or Reddit's own `/user/me/` alias, no — the first would name the reader
+     after a page rather than a person, and the last is not a name at all. */
+  const PROFILE_PATH = /^\/user\/([^/?#]+)\/?$/;
+  const NOT_A_NAME = /^(me|profile)$/i;
+
+  /** Read the identity once per page: the reader's name, and the avatar Reddit drew. */
+  function readIdentity() {
+    const out = { name: null, avatar: null };
+    const S = SHD.C?.SESSION;
+    if (!S || !loggedIn()) return out;
+
+    /* EVERY candidate, not merely the first. Reddit's header can carry more than one
+       `/user/` link — its own `/user/me/` alias beside the real profile, a profile tab —
+       and a first-match-then-validate read would find one of those, fail the path test and
+       report no name at all while the real link sat two nodes away. Each href is resolved
+       against the page (so `https://www.reddit.com/user/x/` and `/user/x/` are one name)
+       and matched on the PATH; the first that parses as a bare profile wins. */
+    for (const link of allInHeader(S.username)) {
+      const href = link.getAttribute('href') || '';
+      if (!href) continue;
+      let path = href;
+      try { path = new URL(href, location.href).pathname; } catch { /* keep the raw value */ }
+      const m = PROFILE_PATH.exec(path);
+      if (m && !NOT_A_NAME.test(m[1])) { out.name = decodeURIComponent(m[1]); break; }
+    }
+
+    const img = findInHeader(S.avatar);
+    const src = img && (img.getAttribute('src') || '');
+    // http(s) only: a data: or blob: avatar is not worth the surprise, and a relative one
+    // is not an avatar.
+    if (/^https?:\/\//i.test(src)) out.avatar = src;
+    return out;
+  }
+
+  const ident = () => (identity || (identity = readIdentity()));
+
+  /** The reader's own name, or null when the page does not say (see C.SESSION.username). */
+  function username() { return ident().name; }
+
+  /** The avatar URL Reddit's own header uses, or null. */
+  function avatar() { return ident().avatar; }
+
   /** Route change: re-read next time. Cheap, and a stale answer is worse than a re-query. */
-  function reset() { cached = null; }
+  function reset() { cached = null; identity = null; }
 
   /** The last reading, with the clauses that produced it — for verify:live and bug reports. */
-  function report() { return cached || signals(); }
+  function report() { return { ...(cached || signals()), ...ident() }; }
 
-  return { loggedIn, active, reset, report, signals };
+  return { loggedIn, active, username, avatar, reset, report, signals };
 })();

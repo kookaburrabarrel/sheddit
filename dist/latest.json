@@ -1,6 +1,6 @@
 {
-  "version": "0.40.0",
+  "version": "0.41.0",
   "released": "2026-09-09",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.40.0 makes a gallery a slideshow: one frame on screen with a control under it, so the box stays the size of one picture however many frames the post has and only the frame you are looking at is downloaded."
+  "notes": "0.41.0 puts an account corner back at the far right of the header, where old reddit kept it: your avatar, your username linking to your profile, and a preferences link onto Reddit's own account settings. It is how Sheddit says out loud that it can see your session."
 }

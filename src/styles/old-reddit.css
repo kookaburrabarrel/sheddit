@@ -969,12 +969,30 @@ html.shd-active body {
 }
 .shd-submit .morelink:hover { background: var(--shd-hover-bg); }
 
-/* The header's one word about the session, in the tab strip's grey, before the theme bar. */
-.shd-account-status {
-  color: var(--shd-meta);
+/* The account corner, at the far right of the header — old reddit's #header-bottom-right.
+   That element carried a panel of its own (measured: rgb(239,247,255), radius 7px 0 0);
+   ours does not, because old reddit's header was 64px of grey-and-blue furniture and this
+   one is a single pale strip — a second box inside it reads as chrome on chrome. The
+   colours are the header's own, so every theme gets it right for free. */
+.shd-account {
+  display: flex;
+  flex-wrap: wrap;               /* the header wraps at 360px; this cluster wraps with it */
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
-  margin-left: 12px;
   white-space: nowrap;
+}
+.shd-account a { color: var(--shd-accent); text-decoration: none; }
+.shd-account a:hover { text-decoration: underline; }
+/* Not a link, and it must not look like one: this is the fallback the corner shows when
+   the username cannot be read, and a dead blue word invites a click that goes nowhere. */
+.shd-account-unnamed,
+.shd-account-sep { color: var(--shd-meta); }
+.shd-account-avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .usertext-body {

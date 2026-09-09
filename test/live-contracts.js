@@ -736,7 +736,17 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
       voteState: up ? { up: up.getAttribute(C.NATIVE.voteState), down: down?.getAttribute(C.NATIVE.voteState),
                         upAttrs: [...up.attributes].map(a => a.name) } : null,
       composers: list(C.COMPOSER.host),
-      appAttrs: [...(document.querySelector(C.APP)?.attributes || [])].map(a => a.name)
+      appAttrs: [...(document.querySelector(C.APP)?.attributes || [])].map(a => a.name),
+      /* The account corner's two reads (0.35.0). `name`/`avatar` are what session.js
+         actually resolved; `headerUserLinks` is every /user/ href inside Reddit's header,
+         which is the evidence C.SESSION.username is corrected from when it resolves
+         nothing — a name is in there somewhere on a signed-in page. */
+      name: SHD.session.username(),
+      avatarUrl: SHD.session.avatar(),
+      usernameClauses: list(C.SESSION.username),
+      avatarClauses: list(C.SESSION.avatar),
+      headerUserLinks: [...(document.querySelector(C.HEADER)?.querySelectorAll('a[href*="/user/"]') || [])]
+        .slice(0, 8).map(a => a.getAttribute('href'))
     };
   }, C);
   console.log(`  \x1b[2msession reads as: ${session.loggedIn ? 'LOGGED IN' : 'logged out'}\x1b[0m`);
@@ -762,6 +772,30 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
       (exposes ? '' : ' — the arrows will run on their local toggle; pick the state attribute from that list'));
   }
   console.log(`  \x1b[2mcomposer hosts on the listing: ${JSON.stringify(session.composers)}\x1b[0m`);
+
+  /* The account corner. Both reads are optional by construction — the corner stands
+     without either — so these are notes, except for the one rule that must not bend: a
+     name, if there is one, is the READER'S. Greeting them by a post author's name is the
+     failure this feature has to be incapable of, so the row asserts the resolved name is
+     not one the page's own posts carry. */
+  console.log(`  \x1b[2maccount corner: name=${JSON.stringify(session.name)} ` +
+              `avatar=${session.avatarUrl ? 'yes' : 'no'}\x1b[0m`);
+  console.log(`  \x1b[2m  username clauses ${JSON.stringify(session.usernameClauses)}\x1b[0m`);
+  console.log(`  \x1b[2m  avatar clauses   ${JSON.stringify(session.avatarClauses)}\x1b[0m`);
+  console.log(`  \x1b[2m  /user/ hrefs in Reddit's header: ${JSON.stringify(session.headerUserLinks)}\x1b[0m`);
+  if (session.loggedIn && !session.name) {
+    console.log('  \x1b[33mNOTE\x1b[0m signed in, but no username resolved — the corner says ' +
+      '"logged in" instead of naming you. The header hrefs above are where the name is; ' +
+      'add the clause that reaches it to C.SESSION.username.');
+  }
+  {
+    const authors = await page.evaluate((C) => [...document.querySelectorAll(C.POST)]
+      .map(p => p.getAttribute(C.POST_ATTR.author)).filter(Boolean), C);
+    check('the name in the account corner is never a post author from the page',
+      !session.name || !authors.includes(session.name),
+      `resolved ${JSON.stringify(session.name)}, which is an author on this page — ` +
+      `C.SESSION.username is matching outside the header`);
+  }
 
   /* ---------------- comments ---------------- */
   // The BUSIEST post on the listing, not the first one. Comment continuation is only

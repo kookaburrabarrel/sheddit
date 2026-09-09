@@ -5804,7 +5804,7 @@ async function boot(html, url, setup) {
       const { doc, window, logs } = await boot(listingPage(), 'https://www.reddit.com/r/programming/', noAuto);
       check('an empty header reads as logged out', window.SHD.session.loggedIn() === false);
       check('...so the account layer is inactive', window.SHD.session.active() === false);
-      check('the header carries no session word', !doc.querySelector('.shd-account-status'));
+      check('the header carries no account corner', !doc.querySelector('.shd-account'));
       check('the sidebar offers no submit doors', !doc.querySelector('.shd-submit'));
       click(window, voteCol(doc, 't3_link1').querySelector('.arrow.up'));
       await hold(50);
@@ -5844,7 +5844,7 @@ async function boot(html, url, setup) {
       check('the page is read as logged in', window.SHD.session.loggedIn() === true);
       check('...but with the setting off the layer is inactive', window.SHD.session.active() === false);
       check('nothing of the layer is rendered: no status, no submit, no comment box',
-        !doc.querySelector('.shd-account-status') && !doc.querySelector('.shd-submit') &&
+        !doc.querySelector('.shd-account') && !doc.querySelector('.shd-submit') &&
         !doc.querySelector('.shd-commentbox'));
       click(window, doc.querySelector('#shd-root .thing[data-fullname="t1_c0"] a.reply'));
       check('reply is the passthrough handoff with the layer off',
@@ -5860,14 +5860,100 @@ async function boot(html, url, setup) {
     check('...and the layer is active by default', window.SHD.session.active() === true);
     check('the report names the clause that matched',
       r.matched.some(s => /expand-user-drawer-button/.test(s)) && r.vetoed.length === 0, JSON.stringify(r));
-    check('the header says so, in one word', doc.querySelector('#shd-header .shd-account-status')?.textContent === 'logged in');
-    check('...before the theme bar, where old reddit kept the account corner',
-      (() => { const s = doc.querySelector('#shd-header .shd-account-status'); return !!s && s.nextElementSibling?.classList.contains('shd-themebar'); })());
+    check('the header carries an account corner', !!doc.querySelector('#shd-header .shd-account'));
+    check('...LAST in the header, which is the far right — old reddit\'s #header-bottom-right',
+      doc.querySelector('#shd-header').lastElementChild?.classList.contains('shd-account'));
+    check('...after the theme bar, not buried beside it',
+      doc.querySelector('#shd-header .shd-account')?.previousElementSibling?.classList.contains('shd-themebar'));
     check('a reset re-reads rather than remembering', (() => {
       window.SHD.session.reset();
       doc.querySelector('#expand-user-drawer-button').remove();
       return window.SHD.session.loggedIn() === false;
     })());
+  }
+
+  console.log('\n\x1b[1mTHE ACCOUNT CORNER\x1b[0m');
+  {
+    /* Reported 2026-09-09: "the plug in has no way to tell you if you're logged in or
+       not". It did say — a "logged in" caption beside the theme buttons — and that IS the
+       finding: mid-header, in the theme bar's grey, it read as a label on the theme bar
+       rather than as the account area. Old reddit put the account at the top right for a
+       decade, so the corner is there now, carrying what old reddit carried. */
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    const corner = doc.querySelector('#shd-header .shd-account');
+    const user = corner?.querySelector('a.shd-account-user');
+    const prefs = corner?.querySelector('a.shd-account-prefs');
+    check('the corner names the reader, linked to the profile Sheddit renders itself',
+      user?.textContent === 'u/tester' && user.getAttribute('href') === '/user/tester/',
+      user?.getAttribute('href'));
+    check('...carries the avatar Reddit already drew, costing no request of ours',
+      corner?.querySelector('img.shd-account-avatar')?.getAttribute('src') ===
+        'https://styles.redditmedia.com/avatar.png');
+    check('...and a preferences link onto Reddit\'s own account settings',
+      prefs?.textContent === 'preferences' && prefs.getAttribute('href') === '/settings/',
+      prefs?.getAttribute('href'));
+    check('...which classifies as a route Sheddit hands back untouched, so the door works today',
+      window.SHD.route.classify('/settings/') === 'OTHER' &&
+      window.SHD.route.classify(new URL(prefs.getAttribute('href'), 'https://www.reddit.com').pathname) === 'OTHER');
+    check('...and the profile link classifies as one Sheddit renders itself',
+      window.SHD.route.classify('/user/tester/') === 'PROFILE');
+
+    /* THE WORST THING THIS FEATURE COULD DO. Every post row on the page links to its
+       author's profile, and a `/user/` lookup not scoped to the header would find one of
+       those first — the corner would greet the reader by a stranger's name. The fixture's
+       authors include `kleudorian`; the header says `tester`. */
+    check('the name comes from the HEADER, never from a post author on the page',
+      doc.querySelectorAll('#shd-root a.author[href^="/user/"]').length > 0 &&
+      !/kleudorian/.test(corner?.textContent || ''),
+      corner?.textContent);
+  }
+  {
+    // The contract that names the reader is unverified live, so a miss has to be a shape
+    // rather than a crash: the corner still stands, still says the session is live, and
+    // still offers the settings door — it just cannot say who you are.
+    const { doc } = await boot(listingPage({ loggedIn: true, noUsername: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    const corner = doc.querySelector('#shd-header .shd-account');
+    check('with no readable username the corner still stands, preferences included',
+      !!corner && corner.querySelector('a.shd-account-prefs')?.getAttribute('href') === '/settings/');
+    check('...saying the session is live, as plain text rather than a dead link',
+      corner?.querySelector('.shd-account-unnamed')?.textContent === 'logged in' &&
+      !corner.querySelector('a.shd-account-user'));
+  }
+  {
+    // A profile TAB names a page, not a person, and Reddit's own /user/me/ is not a name
+    // at all. Both must fall through to the unnamed corner rather than produce a wrong one.
+    for (const [href, why] of [['/user/tester/comments/', 'a profile tab'],
+                               ['/user/me/', 'Reddit\'s own /user/me/ alias']]) {
+      const page = listingPage({ loggedIn: true }).replace('href="/user/tester/"', `href="${href}"`);
+      const { doc } = await boot(page, 'https://www.reddit.com/r/programming/', noAuto);
+      check(`${why} is not read as the reader's name`,
+        !doc.querySelector('#shd-header a.shd-account-user') &&
+        !!doc.querySelector('#shd-header .shd-account-unnamed'),
+        doc.querySelector('#shd-header .shd-account')?.textContent);
+    }
+  }
+  {
+    // A full URL and a bare path are one name: Reddit has shipped both shapes in its own
+    // header, and the corner must not care which it got.
+    const page = listingPage({ loggedIn: true })
+      .replace('href="/user/tester/"', 'href="https://www.reddit.com/user/tester/"');
+    const { doc } = await boot(page, 'https://www.reddit.com/r/programming/', noAuto);
+    check('an absolute profile URL in the header names the reader just the same',
+      doc.querySelector('#shd-header a.shd-account-user')?.textContent === 'u/tester');
+  }
+  {
+    /* Reddit's own /user/me/ alias sitting BEFORE the real profile link. A read that took
+       the first `/user/` anchor and then validated it would find `me`, reject it, and
+       report no name — with the reader's actual name two nodes away. Every candidate is
+       tried, in document order, and the first that parses wins. */
+    const page = listingPage({ loggedIn: true })
+      .replace('<a href="/user/tester/">', '<a href="/user/me/">me</a><a href="/user/tester/">');
+    const { doc } = await boot(page, 'https://www.reddit.com/r/programming/', noAuto);
+    check('an alias in front of the real profile link does not cost the name',
+      doc.querySelector('#shd-header a.shd-account-user')?.textContent === 'u/tester',
+      doc.querySelector('#shd-header .shd-account')?.textContent);
   }
 
   console.log('\n\x1b[1mVOTING ON A LOGGED-IN SESSION\x1b[0m');
