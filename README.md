@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
 
-[![version 0.39.0](https://img.shields.io/badge/version-0.39.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.40.0](https://img.shields.io/badge/version-0.40.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.39.0 is out — everyone is welcome to try it
+### Beta 0.40.0 is out — everyone is welcome to try it
 
 Works in Chrome and Firefox, [installed by hand](#install) in about a minute — **Chrome is
 the better-tested of the two**, so start there if you have the choice.
@@ -76,6 +76,12 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 Full detail in the [changelog](CHANGELOG.md). The three most recent builds:
 
+**0.40.0 — galleries read one picture at a time**
+- **Changed:** a gallery is a slideshow — one frame on screen with a `‹ 2 of 6 ›` control
+  under it, in place of the sideways-scrolling row. The box stays the size of one picture
+  however many frames the post has, so a long gallery no longer pushes the comments off the
+  bottom of the page, and only the frame you are looking at is downloaded.
+
 **0.39.0 — pictures at the size they were uploaded**
 - **Fixed:** a post's picture rendered at 640px when a full-size copy was sitting in the
   same page. Reddit offers the original alongside smaller resizes, and only the resizes
@@ -87,11 +93,6 @@ Full detail in the [changelog](CHANGELOG.md). The three most recent builds:
   Sheddit replaces that carousel. Every frame is read straight from the page now.
 - **Changed:** a gallery's frames sit in one sideways-scrolling row instead of stacking
   down the page.
-
-**0.37.0 — it notices a new version for you**
-- **Added:** Sheddit asks GitHub for the current version once when your browser starts, so
-  a hand-installed copy stops quietly going stale. One request, at most once a day, nothing
-  about you — and **auto: on/off** under the updates button turns it off entirely.
 
 ---
 
@@ -193,7 +194,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.39.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.40.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

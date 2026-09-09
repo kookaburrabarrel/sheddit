@@ -933,67 +933,82 @@ const overlaps = (a, b) =>
     }));
     check('...and the page does not scroll sideways because of it',
       doc.scrollW <= doc.clientW + 1, JSON.stringify(doc));
-    /* A single picture is not a strip: the row of a one-image post must stay a block, or
-       every image post changes shape to fix a gallery. */
-    check('...and a lone picture is not turned into a scrolling strip',
-      !(await page.$('.shd-selfpost .shd-image-strip')));
+    /* A single picture is not a slideshow: the box of a one-image post must stay a plain
+       picture, or every image post changes shape to fix a gallery. */
+    check('...and a lone picture is not turned into a slideshow',
+      !(await page.$('.shd-selfpost .shd-gallery')));
 
-    /* A GALLERY SCROLLS INSIDE ITS OWN BOX, and this is the only suite that can tell.
-       jsdom reports every width as 0, so "the strip scrolls" and "the page scrolls" are
-       indistinguishable there — and they are the entire difference between a gallery and
-       a broken page. */
+    /* A GALLERY DRAWS ONE FRAME AT A TIME, and only a real engine can say whether that is
+       true. jsdom checks the `hidden` ATTRIBUTE and does no layout, so a deck that is
+       hidden in name and painted in fact reads identically there — which is precisely how
+       the expando shipped broken (bug 84): an author `display` declaration beats the UA
+       sheet's `[hidden] { display: none }`, and `.shd-image-el` declares `display: block`.
+       These assertions measure boxes. */
     {
       const { page: gp } = await open(browser, origin, PATHS.galleryComments,
         '#shd-root .shd-selfpost', undefined, { images: true });
-      await gp.evaluate(() => Promise.all(
-        [...document.images].map(i => i.complete ? null : new Promise(r => {
-          i.addEventListener('load', r); i.addEventListener('error', r);
-        }))));
-      const g = await gp.evaluate(() => {
-        const strip = document.querySelector('.shd-selfpost .shd-image-strip');
+      /* Only the frames that GENERATE A BOX are waited on, and this is the slideshow's
+         doing rather than a convenience: a hidden frame is `loading="lazy"` inside a
+         `display: none` element, so the engine never fetches it and it neither loads nor
+         errors — awaiting the whole deck hangs for ever rather than failing. It also
+         means a frame has to be settled again after it is stepped to. */
+      const settleImages = () => gp.evaluate(() => Promise.all(
+        [...document.images].filter(i => i.getClientRects().length)
+          .map(i => i.complete ? null : new Promise(r => {
+            i.addEventListener('load', r); i.addEventListener('error', r);
+          }))));
+      await settleImages();
+      const read = () => gp.evaluate(() => {
+        const box = document.querySelector('.shd-selfpost .shd-gallery');
         const els = [...document.querySelectorAll('.shd-selfpost .shd-image-el')];
-        const r = strip && strip.getBoundingClientRect();
+        const nav = document.querySelector('.shd-selfpost .shd-gallery-nav');
+        const b = box && box.getBoundingClientRect();
+        const n = nav && nav.getBoundingClientRect();
+        const boxes = els.map(e => e.getBoundingClientRect());
         return {
-          strip: !!strip,
+          gallery: !!box,
           frames: els.length,
-          scrolls: strip ? strip.scrollWidth > strip.clientWidth + 1 : false,
-          sameRow: els.length > 1 &&
-            Math.abs(els[0].getBoundingClientRect().top - els[1].getBoundingClientRect().top) <= 1,
-          boxRight: r ? r.right : 0,
+          painted: boxes.map((r, i) => r.height > 0 ? i : -1).filter(i => i >= 0),
+          frameH: Math.max(...boxes.map(r => r.height)),
+          boxH: b ? b.height : 0,
+          navInside: !!(b && n && n.top >= b.top - 1 && n.bottom <= b.bottom + 1 &&
+                        n.left >= b.left - 1 && n.right <= b.right + 1),
+          navBelow: !!(n && Math.max(...boxes.map(r => r.bottom)) <= n.top + 1),
           docScrollW: document.documentElement.scrollWidth,
           docClientW: document.documentElement.clientWidth
         };
       });
+      const g = await read();
       check('a gallery renders every frame it resolved', g.frames === 3, `${g.frames} frames`);
-      check('...laid out as one sideways row, not a stack',
-        g.strip && g.sameRow, JSON.stringify(g));
-      /* `scrollWidth > clientWidth` is TRUE of a box with visible overflow too, so it
-         cannot tell a scroll container from one that simply spills — the row for this
-         survived on that assertion alone. Driving scrollLeft can: only a real scroll
-         container keeps a value written to it. */
-      const canScroll = await gp.evaluate(() => {
-        const strip = document.querySelector('.shd-selfpost .shd-image-strip');
-        if (!strip) return null;
-        strip.scrollLeft = 9999;
-        const moved = strip.scrollLeft;
-        strip.scrollLeft = 0;
-        return moved;
-      });
-      check('...whose overflow scrolls inside the strip',
-        g.scrolls && canScroll > 0, `scrollLeft reached ${canScroll}; ${JSON.stringify(g)}`);
-      /* THE ONE THAT MATTERS: a row of pictures is the easiest way to push the whole
-         document sideways, and that is what the strip must not do at any width. */
-      check('...while the page itself still does not scroll sideways',
+      check('...and paints exactly one of them',
+        g.gallery && g.painted.length === 1 && g.painted[0] === 0, JSON.stringify(g));
+      /* THE POINT OF THE SHAPE. Every fixture frame is the same generated PNG, so a deck
+         that painted all three would be three times as tall — and a twenty-frame post
+         would push the thread off the bottom of the document. The box must be one picture
+         plus its control, whatever the deck holds. */
+      check('...so the box is one picture tall whatever the deck holds',
+        g.boxH > 0 && g.frameH > 0 && g.boxH < g.frameH * 2, JSON.stringify(g));
+      check('...with its control inside the box, under the picture',
+        g.navInside && g.navBelow, JSON.stringify(g));
+
+      /* Stepping has to change what is on screen, not just which element carries the
+         attribute — the half jsdom cannot see. */
+      await gp.click('.shd-selfpost .shd-gallery-nav .shd-gallery-step:last-of-type');
+      await settleImages();
+      const after = await read();
+      check('...and the control swaps which frame is painted',
+        after.painted.length === 1 && after.painted[0] === 1, JSON.stringify(after));
+
+      /* A picture is the easiest thing in this layout to push the document sideways with,
+         and the narrow viewport is where it would show first. */
+      check('...while the page itself does not scroll sideways',
         g.docScrollW <= g.docClientW + 1, JSON.stringify(g));
       await gp.setViewport({ width: 360, height: 900 });
       await gp.evaluate(() => new Promise(r => requestAnimationFrame(() => r())));
-      const narrowG = await gp.evaluate(() => ({
-        scrollW: document.documentElement.scrollWidth,
-        clientW: document.documentElement.clientWidth,
-        strips: !!document.querySelector('.shd-selfpost .shd-image-strip')
-      }));
-      check('...and still does not at 360px, where a strip would show first',
-        narrowG.strips && narrowG.scrollW <= narrowG.clientW + 1, JSON.stringify(narrowG));
+      const narrowG = await read();
+      check('...and still does not at 360px, with one frame still painted',
+        narrowG.gallery && narrowG.painted.length === 1 &&
+        narrowG.docScrollW <= narrowG.docClientW + 1, JSON.stringify(narrowG));
       await gp.close();
     }
 

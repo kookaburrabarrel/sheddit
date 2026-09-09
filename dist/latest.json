@@ -1,6 +1,6 @@
 {
-  "version": "0.39.0",
+  "version": "0.40.0",
   "released": "2026-09-09",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.39.0 shows a post picture at the resolution it was uploaded at: Reddit offers the original beside a set of smaller resizes, and only the resizes state a width, so the full-size copy was being passed over for a 640px one."
+  "notes": "0.40.0 makes a gallery a slideshow: one frame on screen with a control under it, so the box stays the size of one picture however many frames the post has and only the frame you are looking at is downloaded."
 }
