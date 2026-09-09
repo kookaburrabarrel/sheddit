@@ -332,27 +332,78 @@ SHD.comments = (() => {
      i.redd.it AND preview.redd.it both 307 a navigation into Reddit's /media viewer
      (model.viewerBound documents the probe). The <img> fetch itself is fine — the redirect
      discriminates on the Accept header — so the picture renders here and a link under it
-     could only bounce the reader out of the layout. */
+     could only bounce the reader out of the layout.
+
+     `loading="lazy"` pays for itself twice over under the slideshow: a hidden frame is
+     inside a `display: none` element, so the engine never fetches it at all, and a
+     twenty-frame gallery therefore costs one picture rather than twenty until the reader
+     asks for the rest. The visible cost is a frame that arrives a moment after it is
+     stepped to, which is the same trade the adult blur makes deliberately. */
   const imageFrames = (urls) => urls.map(u =>
     h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
 
   /**
-   * One frame reads as a picture; several read as a gallery, and a gallery scrolls
-   * sideways rather than stacking down the page.
+   * Move a gallery `delta` frames along and re-label it.
+   *
+   * The deck is read out of the DOM on every call rather than closed over, because the
+   * deck GROWS: the controls are built once, and a frame that hydrates ten seconds later
+   * (bug 91) has to be reachable from the buttons already on the page. A closure over the
+   * frames present when the controls were built would step through a stale deck.
+   *
+   * It wraps at both ends on purpose. A disabled arrow at frame 1 is a control that
+   * ignores a click (bug 62) wearing a lighter colour, and a six-frame gallery is read in
+   * a loop far more often than it is read once.
+   */
+  function stepFrame(box, delta) {
+    const frames = [...box.querySelectorAll('.shd-image-el')];
+    if (!frames.length) return;
+    const from = Math.min(Number(box.dataset.shdFrame) || 0, frames.length - 1);
+    const at = (from + delta + frames.length) % frames.length;
+    box.dataset.shdFrame = String(at);
+    frames.forEach((f, i) => { f.hidden = i !== at; });
+    const count = box.querySelector('.shd-gallery-count');
+    if (count) count.textContent = `${at + 1} of ${frames.length}`;
+  }
+
+  /**
+   * One frame reads as a picture; several read as a gallery, and a gallery is a SLIDESHOW —
+   * one frame drawn, the rest held in the DOM behind `hidden`, a control underneath.
    *
    * Decided from the box's CONTENTS rather than from the model, and called after every
    * append, because a gallery does not always arrive complete — a frame that hydrates
    * after consume (bug 91) takes a box from one picture to two, and that is exactly the
-   * moment it stops being a picture. Reading `m.type` instead would have marked a
-   * single-frame gallery as a strip and left a late-grown one stacked.
+   * moment it stops being a picture. Reading `m.type` instead would have put controls on a
+   * single-frame gallery and left a late-grown one as a bare picture.
    *
-   * The strip scrolls INSIDE its own box. That is not a detail: the geometry suite asserts
-   * the page itself never scrolls sideways at any width, and a row of full-width pictures
-   * is the easiest way there is to break it.
+   * Growing the deck must not move the reader. A late frame lands at the END and the
+   * `stepFrame(box, 0)` below re-labels without changing the index, so a gallery being read
+   * at frame 2 when frame 6 arrives is still showing frame 2 afterwards.
    */
-  function syncStrip(box) {
-    box.classList.toggle('shd-image-strip',
-      box.querySelectorAll('.shd-image-el').length > 1);
+  function syncGallery(box) {
+    const frames = [...box.querySelectorAll('.shd-image-el')];
+    if (frames.length < 2) {
+      box.querySelector('.shd-gallery-nav')?.remove();
+      box.classList.remove('shd-gallery');
+      delete box.dataset.shdFrame;
+      for (const f of frames) f.hidden = false;
+      return box;
+    }
+    box.classList.add('shd-gallery');
+    const nav = box.querySelector('.shd-gallery-nav') || h('div.shd-gallery-nav', null, [
+      h('button.shd-gallery-step', {
+        type: 'button', text: '‹', title: 'previous frame',
+        onclick: () => stepFrame(box, -1)
+      }),
+      h('span.shd-gallery-count'),
+      h('button.shd-gallery-step', {
+        type: 'button', text: '›', title: 'next frame',
+        onclick: () => stepFrame(box, 1)
+      })
+    ]);
+    /* Re-appended rather than appended once: a late frame lands after it, and the control
+       has to stay underneath the picture it drives. */
+    box.appendChild(nav);
+    stepFrame(box, 0);
     return box;
   }
 
@@ -396,7 +447,7 @@ SHD.comments = (() => {
            as it was rather than an empty box with a control that did nothing (bug 62). */
         if (!urls.length) return box.remove();
         box.replaceChildren(...imageFrames(urls));
-        syncStrip(box);
+        syncGallery(box);
       }
     });
     box.appendChild(show);
@@ -409,18 +460,18 @@ SHD.comments = (() => {
    */
   function postImage(m) {
     if (!SHD.settings.inlineImages) return null;
-    /* A gallery renders every frame it is carrying, stacked — the frames are peers, and
-       showing only the largest would silently drop the rest. An image post is the
-       single-picture case of the same box. Both fall through to null when nothing
-       resolved, so a page whose full-size files live elsewhere costs the picture and
-       never the post. */
+    /* A gallery carries every frame it resolved — the frames are peers, and showing only
+       the largest would silently drop the rest; syncGallery is what decides they are a
+       slideshow rather than a picture. An image post is the single-picture case of the
+       same box. Both fall through to null when nothing resolved, so a page whose full-size
+       files live elsewhere costs the picture and never the post. */
     const urls = m.type === 'image' && m.image ? [m.image]
       : m.type === 'gallery' ? m.images : [];
     if (!urls.length) return null;
     const box = h('div.shd-image');
     if (adultGate(m)) return gateImages(box, m, () => liveFrames(m, urls));
     box.append(...imageFrames(urls));
-    return syncStrip(box);
+    return syncGallery(box);
   }
 
   /** The frames this post can show right now, preferring a re-read over the consume-time snapshot. */
@@ -773,8 +824,8 @@ SHD.comments = (() => {
       for (const u of urls) {
         if (!have.has(u)) box.appendChild(h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
       }
-      /* A late frame is what turns a lone picture into a gallery — see syncStrip. */
-      syncStrip(box);
+      /* A late frame is what turns a lone picture into a gallery — see syncGallery. */
+      syncGallery(box);
     });
     obs.observe(m.source, {
       childList: true, subtree: true, attributes: true,

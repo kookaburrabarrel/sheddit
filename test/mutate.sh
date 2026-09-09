@@ -2089,18 +2089,41 @@ mutate "the lazy gallery url outranks a real responsive set" run \
                     '    const lazy = img.getAttribute(C.GALLERY_LAZY_SRC);
     if (lazy) out.push({ url: lazy, w: 99999 });'
 
-# The strip: a gallery reads sideways, a lone picture stays a block. Both halves matter, so
-# the row runs against geometry — jsdom reports every width as 0, which cannot tell a strip
-# that scrolls inside its box from one that pushes the whole document sideways.
+# The slideshow, and its counterweight. Both halves are the same guard read in opposite
+# directions — several frames become one-at-a-time, one frame stays a picture — so they get
+# a row each: either alone leaves the other looking covered. The stacking half runs against
+# geometry, because painting is the part jsdom structurally cannot see.
 mutate "a gallery stacks its frames down the page again" geometry \
-  src/modules/comments.js "    box.classList.toggle('shd-image-strip'," \
-                          "    box.classList.toggle('shd-image-strip', false \&\&"
+  src/modules/comments.js "    if (frames.length < 2) {" \
+                          "    if (frames.length < 99) {"
 
-# Refusing to wrap is only safe because the box scrolls; without the overflow the strip is
-# as wide as its pictures and takes the page with it — bug 31, by way of a gallery.
-mutate "the strip stops scrolling and pushes the page instead" geometry \
-  src/styles/old-reddit.css '  overflow-x: auto;
-  overscroll-behavior-x: contain;' '  overscroll-behavior-x: contain;'
+mutate "a lone picture is dressed up as a slideshow" run \
+  src/modules/comments.js "    if (frames.length < 2) {" \
+                          "    if (false) {"
+
+# Hiding the rest of the deck is what makes it a slideshow rather than a stack, and an
+# author display declaration beats the UA's [hidden]{display:none} — bug 84, one element
+# over. Two rows, matching the expando's: the static guard and the measured consequence.
+mutate "the gallery frame's [hidden] counterpart vanishes (static)" css-lint \
+  src/styles/old-reddit.css ".shd-selfpost .shd-image-el[hidden] { display: none; }" ""
+
+mutate "the gallery frame's [hidden] counterpart vanishes (layout)" geometry \
+  src/styles/old-reddit.css ".shd-selfpost .shd-image-el[hidden] { display: none; }" ""
+
+# A deck that dead-ends on an arrow is a control that ignores a click (bug 62) wearing a
+# lighter colour. Clamping instead of wrapping is the plausible wrong version.
+mutate "the deck dead-ends at its arrows instead of wrapping" run \
+  src/modules/comments.js "    const at = (from + delta + frames.length) % frames.length;" \
+                          "    const at = Math.max(0, Math.min(frames.length - 1, from + delta));"
+
+# A frame that hydrates after consume (bug 91) lands at the end of the deck, and the resync
+# must relabel WITHOUT moving the reader — a gallery being read at frame 2 when frame 6
+# arrives has to still be showing frame 2.
+mutate "a late frame sends the reader back to the first slide" run \
+  src/modules/comments.js "    box.appendChild(nav);
+    stepFrame(box, 0);" "    box.appendChild(nav);
+    box.dataset.shdFrame = '0';
+    stepFrame(box, 0);"
 
 # ------------------------------------------- the original beats every resize ---
 # Reported from live use: a post rendered at 640px with a full-size copy in the same

@@ -1099,6 +1099,36 @@ async function boot(html, url, setup) {
     check('frames carry no viewer-bound link wrappers',
       imgs.every(i => !i.closest('a')));
 
+    /* A GALLERY IS A SLIDESHOW. The whole deck is in the DOM — the assertions above count
+       it — and exactly one frame of it is drawn. The alternative shapes both cost the page:
+       stacking twenty frames down a comments page buries the thread under them, and a
+       sideways strip moves the overflow into a box that has to scroll. */
+    const box = () => doc.querySelector('#shd-root .shd-selfpost .shd-image');
+    const frames = () => [...box().querySelectorAll('.shd-image-el')];
+    const drawn = () => frames().filter(f => !f.hidden);
+    const nav = () => box().querySelector('.shd-gallery-nav');
+    const label = () => box().querySelector('.shd-gallery-count')?.textContent;
+    const stepBy = (which) => nav().querySelectorAll('.shd-gallery-step')[which]
+      .dispatchEvent(new doc.defaultView.MouseEvent('click', { bubbles: true }));
+
+    check('a gallery draws one frame of its deck at a time',
+      box()?.classList.contains('shd-gallery') && drawn().length === 1 &&
+      drawn()[0] === frames()[0], `${drawn().length} of ${frames().length} drawn`);
+    check('...with a control under it saying where in the deck the reader is',
+      !!nav() && nav() === box().lastElementChild && label() === '1 of 3', label());
+    stepBy(1);
+    check('...which steps to the next frame and relabels',
+      drawn().length === 1 && drawn()[0] === frames()[1] && label() === '2 of 3', label());
+    /* Wrapping, not disabling. An arrow that goes grey at the end is a control that
+       ignores a click (bug 62) wearing a lighter colour, and a gallery is read round in a
+       loop far more often than it is read once. */
+    stepBy(0); stepBy(0);
+    check('...and the deck wraps at both ends rather than dead-ending on an arrow',
+      drawn()[0] === frames()[2] && label() === '3 of 3', label());
+    stepBy(1);
+    check('...back round to the first', drawn()[0] === frames()[0] && label() === '1 of 3',
+      label());
+
     /* Bug 91 (QA F3, measured on two live galleries): the carousel's lazy frames are
        SRCLESS at consume time and hydrate afterwards — so live galleries rendered one
        frame while the page carried two, and nothing ever looked again. The live shape,
@@ -1109,14 +1139,39 @@ async function boot(html, url, setup) {
     await hold(50);
     check('a frame with neither a src nor a lazy url adds nothing', doc.querySelectorAll(
       '#shd-root .shd-selfpost .shd-image img').length === 3);
+    stepBy(1);                                          // the reader is mid-deck when it lands
     lazyFrame.src = 'https://preview.redd.it/bubble-late-960.jpg';
     const grew = await waitFor(() => doc.querySelectorAll(
       '#shd-root .shd-selfpost .shd-image img').length === 4, { timeout: 3000 });
-    check('a frame that hydrates after consume is appended to the stack', grew,
+    check('a frame that hydrates after consume is appended to the deck', grew,
       `${doc.querySelectorAll('#shd-root .shd-selfpost .shd-image img').length} imgs`);
     check('...without duplicating the frames already shown',
       new Set([...doc.querySelectorAll('#shd-root .shd-selfpost .shd-image img')]
         .map(i => i.getAttribute('src'))).size === 4);
+    /* A late frame must not move the reader. It lands at the END of the deck and the
+       resync re-labels without changing the index — a gallery being read at frame 2 when
+       frame 6 arrives is still showing frame 2 afterwards. */
+    check('...leaving the reader on the frame they were looking at, with a new total',
+      drawn().length === 1 && drawn()[0] === frames()[1] && label() === '2 of 4', label());
+    check('...and one control, still the last thing in the box',
+      box().querySelectorAll('.shd-gallery-nav').length === 1 &&
+      nav() === box().lastElementChild);
+  }
+
+  {
+    /* THE COUNTERWEIGHT: a lone picture is not a slideshow. Deciding this from the box's
+       CONTENTS rather than from the post type is what keeps both halves true — a
+       single-frame gallery is a picture, and a picture that grows a second frame becomes a
+       slideshow at that moment (the late-frame case above). */
+    const { doc } = await boot(commentsPage({ imagePost: true }),
+      'https://www.reddit.com/r/aww/comments/image1/a_very_good_dog/');
+    const box = doc.querySelector('#shd-root .shd-selfpost .shd-image');
+    check('a one-picture post gets no slideshow and no controls',
+      !!box && !box.classList.contains('shd-gallery') &&
+      !box.querySelector('.shd-gallery-nav'), box?.outerHTML?.slice(0, 160));
+    check('...and its picture is drawn, not hidden behind a deck of one',
+      box.querySelectorAll('.shd-image-el').length === 1 &&
+      !box.querySelector('.shd-image-el').hidden);
   }
 
   {

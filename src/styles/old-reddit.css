@@ -653,39 +653,53 @@ html.shd-active body {
   max-width: 100%;
   height: auto;
 }
+/* The counterpart the line above forces. A gallery holds its whole deck in the DOM and
+   shows one frame by hiding the rest, and ANY author display declaration beats the UA
+   sheet's `[hidden] { display: none }` — so without this line every frame paints at once
+   and the slideshow is a stack. Bug 84, one element over; css-lint requires the pairing
+   statically for exactly this reason. */
+.shd-selfpost .shd-image-el[hidden] { display: none; }
 
-/* A GALLERY SCROLLS SIDEWAYS. One picture stacks; several are a strip.
+/* A GALLERY IS A SLIDESHOW: one frame drawn, the deck behind it, a control underneath.
  *
- * The overflow is on THIS box and nowhere else. A row of pictures is the easiest way there
- * is to make the whole page scroll horizontally, which geometry asserts against at every
- * width — so the container scrolls and the document does not. `min-width: 0` is what makes
- * that true rather than merely intended: a flex item's default `min-width: auto` refuses to
- * shrink below its content, so without it the strip is as wide as its pictures and pushes
- * the page instead of scrolling inside itself.
+ * The two alternatives each cost something a gallery cannot afford. Stacking every frame
+ * down the page buries the thread under an unbounded run of pictures — a twenty-frame post
+ * pushes the comments off the bottom of the document. A sideways strip keeps the page short
+ * but moves the overflow into a box that then has to scroll, and a row of full-width
+ * pictures is the easiest way there is to make the whole DOCUMENT scroll sideways instead,
+ * which geometry asserts against at every width. One frame at a time has neither problem:
+ * the box is the size of one picture whatever the deck holds, and nothing overflows
+ * anything.
  *
- * A capped height rather than a capped width, because the frames of one gallery are rarely
- * the same shape: sizing on height gives a row with one baseline and lets each picture keep
- * its own aspect, where a width cap would stack a portrait frame far taller than its
- * neighbours and break the line. */
-.shd-selfpost .shd-image-strip {
-  display: flex;
-  /* The one row in this stylesheet that must NOT wrap: wrapping a gallery turns a strip
-     into a grid that grows down the page, which is the layout this replaces. Refusing to
-     wrap is only safe because the line below scrolls — css-lint enforces exactly that
-     pairing, so this cannot be copied somewhere it would reintroduce bug 31. */
-  flex-wrap: nowrap;
-  gap: 8px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;   /* a strip at its end must not turn into a page swipe */
-  scroll-snap-type: x mandatory;
-  padding-bottom: 6px;
-  min-width: 0;
+ * A capped HEIGHT rather than a capped width, and capped against the viewport rather than
+ * the column: a frame the reader has to scroll to see the bottom of is not a slide, and the
+ * frames of one gallery are rarely the same shape, so a portrait frame capped only on width
+ * would be several times the height of the landscape one beside it and the box would jump
+ * as the reader stepped through. */
+.shd-selfpost .shd-gallery .shd-image-el {
+  max-height: 70vh;
 }
-.shd-selfpost .shd-image-strip .shd-image-el {
-  flex: 0 0 auto;
-  max-width: none;                  /* the block rule above caps at 100%, which is the strip */
-  max-height: 420px;
-  scroll-snap-align: start;
+.shd-selfpost .shd-gallery-nav {
+  display: flex;
+  flex-wrap: wrap;         /* bug 31: every flex row in this stylesheet wraps */
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+}
+.shd-selfpost .shd-gallery-step {
+  font: inherit;
+  line-height: 1;
+  color: var(--shd-text);
+  background: var(--shd-bg);
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+  padding: 2px 9px 4px;
+  cursor: pointer;
+}
+.shd-selfpost .shd-gallery-step:hover { background: var(--shd-hover-bg); }
+.shd-selfpost .shd-gallery-count {
+  color: var(--shd-meta);
+  font-size: x-small;
 }
 
 /* Old reddit's expando control and the box it opens, on a listing row.

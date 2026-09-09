@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.39.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.40.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,40 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.40.0
+
+### Changed — a gallery is a slideshow, not a row
+
+A gallery post now shows one frame at a time, with a `‹ 2 of 6 ›` control underneath it,
+replacing the sideways-scrolling row from 0.38.0.
+
+The shape matters more than it looks. Every frame Reddit resolved is in the page either
+way — that is what 0.38.0 fixed — and the only question is how many of them are on screen
+at once. Stacking them all buries the thread: a twenty-frame post pushes the comments off
+the bottom of the document, on a page whose job is the comments. A sideways row keeps the
+page short but moves the overflow into a box that then has to scroll, and a row of
+full-width pictures is the easiest way there is to make the whole document scroll sideways
+instead. One frame at a time has neither problem: the box is the size of one picture
+whatever the deck holds, and nothing overflows anything.
+
+Two consequences worth stating. The control wraps at both ends rather than greying out at
+the first and last frame — an arrow that ignores a click is a control that does not work,
+and a gallery is read round in a loop more often than it is read once. And because the
+frames waiting their turn are genuinely hidden rather than merely off to the side, the
+browser does not fetch them: a twenty-frame gallery costs one picture until the reader asks
+for the second, where the row downloaded whatever it drew.
+
+A frame that hydrates after the post was consumed still joins the deck, and joins it
+without moving the reader: it lands at the end, the label gains a frame, and a gallery
+being read at frame 2 when frame 6 arrives is still showing frame 2 afterwards.
+
+Under all of it is one line of CSS that would otherwise fail silently in every browser and
+pass in every jsdom test: the frames are hidden with the `hidden` attribute, and any author
+`display` declaration beats the built-in `[hidden] { display: none }` — which the picture
+element has. Without the counterpart rule the whole deck paints at once and the slideshow
+is the stack it replaced. The stylesheet lint requires the pairing statically and the
+layout suite measures the consequence, because the two are different claims.
 
 ## 0.39.0
 
