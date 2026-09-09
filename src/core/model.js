@@ -358,21 +358,31 @@ SHD.model = (() => {
    * the width outright; anything else — a bare URL, an `x` descriptor — scores zero, so a
    * set whose sizes cannot be read never outranks one whose sizes can.
    */
+  /** Is this URL the file as uploaded, rather than a generated resize of it? */
+  const isOriginal = (u) =>
+    C.ORIGINAL_HOST.test((String(u || '')).split('/')[2] || '');
+
+  /** Better picture wins: the original outranks every resize, then the widest stated width. */
+  function betterPicture(c, bestW, bestOrig) {
+    if (c.orig !== bestOrig) return c.orig;
+    return c.w > bestW;
+  }
+
   function imageCandidates(img) {
     const out = [];
     for (const part of (img.getAttribute('srcset') || '').split(',')) {
       const bits = part.trim().split(/\s+/);
       if (!bits[0]) continue;
       const w = /^(\d+)w$/.exec(bits[1] || '');
-      out.push({ url: bits[0], w: w ? parseInt(w[1], 10) : 0 });
+      out.push({ url: bits[0], w: w ? parseInt(w[1], 10) : 0, orig: isOriginal(bits[0]) });
     }
     const plain = img.currentSrc || img.src;
-    if (plain) out.push({ url: plain, w: 0 });
+    if (plain) out.push({ url: plain, w: 0, orig: isOriginal(plain) });
     /* The frames a gallery has not shown yet. `src` is empty on those until Reddit's
        carousel advances, and it never advances under our layout — see C.GALLERY_LAZY_SRC.
        Last, and unranked, so it fills an empty slot without ever outbidding a real set. */
     const lazy = img.getAttribute(C.GALLERY_LAZY_SRC);
-    if (lazy) out.push({ url: lazy, w: 0 });
+    if (lazy) out.push({ url: lazy, w: 0, orig: isOriginal(lazy) });
     return out;
   }
 
@@ -388,14 +398,14 @@ SHD.model = (() => {
    * Null is the ordinary answer on a listing row, where the only image IS the thumbnail.
    */
   function imageOf(el) {
-    let best = null, bestW = -1;
+    let best = null, bestW = -1, bestOrig = false;
     for (const img of el.querySelectorAll('img')) {
       if (img.closest(C.POST) !== el) continue;
       if (img.closest(C.THUMB_EXCLUDE)) continue;
       for (const c of imageCandidates(img)) {
         const host = (c.url || '').split('/')[2] || '';
         if (!C.THUMB_HOSTS.test(host)) continue;
-        if (c.w > bestW) { bestW = c.w; best = c.url; }
+        if (betterPicture(c, bestW, bestOrig)) { bestW = c.w; bestOrig = c.orig; best = c.url; }
       }
     }
     return best;
@@ -414,11 +424,11 @@ SHD.model = (() => {
     for (const img of el.querySelectorAll('img')) {
       if (img.closest(C.POST) !== el) continue;
       if (img.closest(C.THUMB_EXCLUDE)) continue;
-      let best = null, bestW = -1;
+      let best = null, bestW = -1, bestOrig = false;
       for (const c of imageCandidates(img)) {
         const host = (c.url || '').split('/')[2] || '';
         if (!C.THUMB_HOSTS.test(host)) continue;
-        if (c.w > bestW) { bestW = c.w; best = c.url; }
+        if (betterPicture(c, bestW, bestOrig)) { bestW = c.w; bestOrig = c.orig; best = c.url; }
       }
       if (best && !out.includes(best)) out.push(best);
     }

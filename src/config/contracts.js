@@ -193,6 +193,22 @@ SHD.C = {
    * absence of it costs every frame after the first. */
   GALLERY_LAZY_SRC: 'data-lazy-src',
 
+  /* The host that serves the file as UPLOADED, against the one that serves resizes of it.
+   *
+   * `i.redd.it/<id>.jpg` is the original; `preview.redd.it` serves generated variants of
+   * the same picture at stated widths. Reported from live use: a post rendered at 640px
+   * when a full-size copy was sitting in the same element. The cause is a ranking rule
+   * that is right for its own question and blind to this one — the widest `w` descriptor
+   * wins, and the original carries NO descriptor at all, because there is nothing for
+   * Reddit to state a width against. So it scores zero and every resize outbids it.
+   *
+   * An original cannot be smaller than a resize of itself, which is what makes this a
+   * rank and not a guess: preferring it needs no measurement, and there is no case where
+   * a 640px variant is the better picture. It is used only where the FULL-SIZE picture is
+   * wanted — the comments page and the listing expando. Thumbnails resolve separately and
+   * are untouched, or every 70px tile in a feed would download a full upload. */
+  ORIGINAL_HOST: /^i\.redd\.it$/,
+
   /* Observed post-type values: text, link, image, gallery, video, multi_media, crosspost
      (crosspost added 2026-08-14 by npm run verify:live; falls through the same non-text
      path as link/image/etc. in model.js. The fallback is covered rather than accidental:

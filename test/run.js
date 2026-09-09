@@ -1030,10 +1030,14 @@ async function boot(html, url, setup) {
     check('an image post shows its picture on the comments page', !!pic);
     check('...inside the row\'s entry, where old reddit hangs the expando',
       !!doc.querySelector('.shd-selfpost .entry .shd-image'));
-    /* The set lists 320, then 1080, then 640. Taking the first or the last picks wrong;
-       only reading the `w` descriptors gets the biggest. */
-    check('...at the largest resolution the set offers, not the first or the last',
-      /gooddog-1080\.jpg$/.test(pic?.getAttribute('src') || ''), pic?.getAttribute('src'));
+    /* THE ORIGINAL BEATS EVERY RESIZE. Reported from live use: a post rendered at 640px
+       with a full-size copy in the same element. `i.redd.it` serves the file as uploaded
+       and `preview.redd.it` serves generated variants of it — and the original carries no
+       `w` descriptor, because there is nothing for Reddit to state a width against, so a
+       widest-descriptor rule scored it zero and every resize outbid it. An original cannot
+       be smaller than a resize of itself, so this needs no measurement to settle. */
+    check('...at the original resolution, not the widest resize offered beside it',
+      /i\.redd\.it\/gooddog\.jpg$/.test(pic?.getAttribute('src') || ''), pic?.getAttribute('src'));
 
     /* The title routes to the COMMENTS PAGE, not to the image URL. Measured 2026-08-24:
        i.redd.it and preview.redd.it both 307 a logged-out navigation into Reddit's /media
@@ -1245,7 +1249,7 @@ async function boot(html, url, setup) {
       .dispatchEvent(new doc.defaultView.MouseEvent('click', { bubbles: true }));
     check('...until the click, which fetches it and nothing before',
       doc.querySelector('.shd-selfpost .shd-image-el')?.getAttribute('src')
-        === 'https://preview.redd.it/gooddog-1080.jpg',
+        === 'https://i.redd.it/gooddog.jpg',
       doc.querySelector('.shd-selfpost .shd-image-el')?.getAttribute('src'));
   }
 
@@ -1283,7 +1287,7 @@ async function boot(html, url, setup) {
     btn.dispatchEvent(new window.Event('click', { bubbles: true }));
     check('clicking it reveals the box', !box.hasAttribute('hidden'));
     check('...and attaches the picture at full resolution',
-      /gooddog-1080\.jpg$/.test(box.querySelector('img')?.getAttribute('src') || ''),
+      /i\.redd\.it\/gooddog\.jpg$/.test(box.querySelector('img')?.getAttribute('src') || ''),
       box.querySelector('img')?.getAttribute('src'));
     check('...and the control says it is open',
       btn.classList.contains('expanded') && btn.getAttribute('aria-expanded') === 'true');

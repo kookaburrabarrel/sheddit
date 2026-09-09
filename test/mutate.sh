@@ -2102,6 +2102,21 @@ mutate "the strip stops scrolling and pushes the page instead" geometry \
   src/styles/old-reddit.css '  overflow-x: auto;
   overscroll-behavior-x: contain;' '  overscroll-behavior-x: contain;'
 
+# ------------------------------------------- the original beats every resize ---
+# Reported from live use: a post rendered at 640px with a full-size copy in the same
+# element. i.redd.it serves the file as uploaded; preview.redd.it serves variants of it —
+# and the original states no width, so a widest-descriptor rule scored it zero and every
+# resize outbid it.
+mutate "a resize outbids the original picture again" run \
+  src/core/model.js '    if (c.orig !== bestOrig) return c.orig;' '    ;'
+
+# The other half: preferring the original must not swallow the width tiebreak, or a post
+# with no original at all — every gallery frame — has nothing left to rank by.
+mutate "preferring the original throws away the width ranking under it" run \
+  src/core/model.js '    return c.w > bestW;
+  }' '    return c.orig;
+  }'
+
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an oversight:
 # measure()'s per-frame cache is what stopped inRange() and diag() forcing three synchronous
 # layouts per pump, and it is a COST change with no behavioural consequence — reverting it
