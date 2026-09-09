@@ -1,6 +1,6 @@
 {
-  "version": "0.41.0",
+  "version": "0.42.0",
   "released": "2026-09-09",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.41.0 puts an account corner back at the far right of the header, where old reddit kept it: your avatar, your username linking to your profile, and a preferences link onto Reddit's own account settings. It is how Sheddit says out loud that it can see your session."
+  "notes": "0.42.0 makes the account corner clickable: your avatar and name open a menu of Reddit's own account pages — profile, saved, messages, preferences — ending in a log out that presses Reddit's own control rather than building a request. Logged out, the corner says so and links to Reddit's login page."
 }

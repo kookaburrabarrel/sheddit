@@ -347,6 +347,19 @@ SHD.C = {
        for MIRRORING only, never for deciding whether to vote: a button that lacks it
        leaves our arrows on their own local toggle. */
     voteState: 'aria-pressed',
+    /**
+     * Reddit's own LOG OUT item, inside the user drawer. CANDIDATES.
+     *
+     * `logoutText` is the fallback, and it is deliberately ANCHORED (`^log out$`) where
+     * MORE_REPLIES_TEXT is not: the reply expander's label carries a count and can only be
+     * matched loosely, while a loose logout match would end the reader's session on a
+     * control that merely mentions the word — a "log out of all devices" row in settings,
+     * a post titled "how to log out". Ending a session by accident is not a layout bug you
+     * shrug at, so this one matcher is strict, scoped to the drawer, and account.js clicks
+     * nothing when more than the exact phrase matches.
+     */
+    logout: 'a[href*="/logout" i], button[data-testid*="logout" i], [role="menuitem"][href*="logout" i]',
+    logoutText: /^log\s*out$/i,
     /* The per-comment "Reply" control, for opening Reddit's own composer on a logged-in
        session (account.js). CANDIDATE still: the 2026-09-05 signed-in probe read the
        first comment before its action row had hydrated — the only buttons under it were
@@ -644,6 +657,8 @@ SHD.C = {
     username: 'reddit-header-large a[href*="/user/"], ' +
               '#expand-user-drawer-button a[href*="/user/"], ' +
               'user-drawer-app a[href*="/user/"], ' +
+              '[id*="user-drawer" i] a[href*="/user/"], ' +
+              'faceplate-tracker[noun*="user_drawer" i] a[href*="/user/"], ' +
               'faceplate-tracker[source="account_manager"] a[href*="/user/"]',
     /* The avatar Reddit already drew in its own header. Rendering our own <img> from that
        URL costs no request the browser has not already made — it is the thumbnail
@@ -659,7 +674,36 @@ SHD.C = {
    * the link lands on the page Reddit built for the job, exactly as the submit doors do.
    * A trailing slash because every other path this file hands out carries one.
    */
-  ACCOUNT: { settings: '/settings/' },
+  ACCOUNT: {
+    settings: '/settings/',
+    inbox: '/message/inbox/',
+    /* Appended to the reader's own profile: /user/<name>/saved/. Reddit's, not ours. */
+    savedTab: 'saved',
+    /* Reddit's login page, for the corner's logged-out state. A LINK, and only ever
+       reached by a deliberate click on it — this is not the extension asking anyone to
+       log in. See the scope note in CONTRIBUTING, which this reversed by owner decision
+       on 2026-09-09: the objection was always to Reddit's unremovable interstitial, not
+       to a reader who keeps an account being told where the door is. */
+    login: '/login/'
+  },
+
+  /**
+   * Reddit's own user drawer — the panel its avatar button opens, and the only place a
+   * logged-in session's LOG OUT control has ever been seen. The account layer opens it
+   * the way a reader would (a click on Reddit's own toggle) and clicks Reddit's own item
+   * inside it; Reddit's code then ends the session, exactly as it would have.
+   *
+   * `toggle` is the avatar button, which C.SESSION.loggedIn also matches — the same
+   * element answering two questions, deliberately, rather than two selectors that can
+   * drift apart. `host` is where the opened drawer's content lands: listed separately
+   * because a portaled panel is a sibling of the header rather than a descendant (the
+   * upsell dialog taught that — see NATIVE_UPSELL), so a search scoped to the header
+   * alone would miss it.
+   */
+  USER_DRAWER: {
+    toggle: '#expand-user-drawer-button, reddit-header-large [id*="user-drawer" i] button',
+    host: '[id*="user-drawer" i], user-drawer-app, faceplate-tracker[noun*="user_drawer" i]'
+  },
 
   /**
    * Reddit's own comment composer, which account.js DRIVES rather than replaces: the

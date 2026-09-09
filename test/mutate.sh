@@ -1921,9 +1921,33 @@ mutate "the submit doors open for a logged-out reader" run \
   src/modules/account.js '  function submitBox(sub) {
     if (!active()) return null;' '  function submitBox(sub) {'
 
-mutate "the account corner shows for a logged-out reader" run \
-  src/modules/account.js '  function headerAccount() {
-    if (!active()) return null;' '  function headerAccount() {'
+mutate "the account setting no longer hides the corner" run \
+  src/modules/account.js '    if (!SHD.settings?.account) return null;' '    if (false) return null;'
+
+# The corner's whole job is answering "am I logged in", and half the answer is the negative
+# one. Owner decision 2026-09-09; before it, a logged-out reader saw nothing at all.
+mutate "the logged-out corner loses its login link" run \
+  src/modules/account.js '  function signedOutCorner() {' '  function signedOutCorner() {
+    if (true) return null;'
+
+# ENDING A SESSION ON A GUESS. Unanchored, the matcher also takes "Log out of all devices"
+# — so it either clicks the wrong control or, with the rule below intact, clicks nothing.
+mutate "the log-out matcher stops being anchored to the exact phrase" run \
+  src/config/contracts.js 'logoutText: /^log\s*out$/i,' 'logoutText: /log\s*out/i,'
+
+# The age gate's rule, on the one control where being wrong cannot be undone by a reload.
+mutate "log out clicks the first candidate instead of refusing an ambiguous drawer" run \
+  src/modules/account.js 'return unique.length === 1 ? unique[0] : null;' 'return unique[0] || null;'
+
+# Every delegated action here MEASURES its outcome. Assuming the click worked reports a
+# logout that did not happen and reloads the page out from under the reader.
+mutate "log out assumes the click worked instead of checking the session ended" run \
+  src/modules/account.js '      if (gone) { nav.reload(); return true; }' '      nav.reload(); return true;'
+
+# Reddit's header hydrates late; caching the FIRST answer means a name that arrives a
+# moment later never appears at all.
+mutate "a missing username is cached, so a late name never arrives" run \
+  src/core/session.js '    if (identity && identity.name) return identity;' '    if (identity) return identity;'
 
 # The corner is the answer to "does this thing know I am logged in", and the name is the
 # half that can go missing. Dropping the fallback takes the answer with it.

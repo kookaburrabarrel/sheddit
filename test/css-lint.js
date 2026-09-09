@@ -77,7 +77,7 @@ check('no unmapped floats (add new floats to FLOAT_CONTAINERS)',
    expando shipped exactly this: [-] silently did nothing (reported from a real machine).
    Every selector listed is one the source toggles via `hidden`; whenever it declares
    display at all, it must re-assert display:none for its [hidden] state. */
-const HIDDEN_TOGGLED = ['.expando', '.shd-selfpost .shd-image-el'];
+const HIDDEN_TOGGLED = ['.expando', '.shd-selfpost .shd-image-el', '.shd-account-menu'];
 for (const sel of HIDDEN_TOGGLED) {
   if (!has(sel, 'display')) continue;
   check(`${sel} is hidden-toggled, so its display rule needs a [hidden] counterpart`,

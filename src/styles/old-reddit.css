@@ -973,26 +973,100 @@ html.shd-active body {
    That element carried a panel of its own (measured: rgb(239,247,255), radius 7px 0 0);
    ours does not, because old reddit's header was 64px of grey-and-blue furniture and this
    one is a single pale strip — a second box inside it reads as chrome on chrome. The
-   colours are the header's own, so every theme gets it right for free. */
+   colours are the header's own, so every theme gets it right for free.
+
+   `position: relative` is load-bearing, not tidiness: the menu below hangs off it, and a
+   static parent would anchor that menu to the page instead of to the corner. */
 .shd-account {
+  position: relative;
   display: flex;
   flex-wrap: wrap;               /* the header wraps at 360px; this cluster wraps with it */
   align-items: center;
   gap: 4px;
   font-size: 11px;
   white-space: nowrap;
+  z-index: 20;                   /* the open menu paints over #shd-root, which follows it */
 }
 .shd-account a { color: var(--shd-accent); text-decoration: none; }
 .shd-account a:hover { text-decoration: underline; }
-/* Not a link, and it must not look like one: this is the fallback the corner shows when
-   the username cannot be read, and a dead blue word invites a click that goes nowhere. */
-.shd-account-unnamed,
-.shd-account-sep { color: var(--shd-meta); }
+
+/* The toggle: a button that has to read as the header's own text, not as a form control.
+   The avatar and the name are INSIDE it — that is the fix for a corner whose only
+   clickable part was `preferences`. */
+.shd-account-toggle {
+  display: flex;
+  /* wrap, not nowrap. A long username on a 360px header has to go somewhere, and the two
+     honest options are wrapping and scrolling inside the control — css-lint enforces that
+     pair deliberately (bug 31). A scrollbar on the account button is absurd; a name that
+     drops under its avatar is not. */
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  color: var(--shd-accent);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--shd-radius);
+  padding: 1px 4px;
+  cursor: pointer;
+}
+.shd-account-toggle:hover { background: var(--shd-hover-bg); }
+.shd-account-toggle[aria-expanded="true"] { border-color: var(--shd-header-border); }
+.shd-account-caret { font-size: 9px; }
+/* Not a name, and it must not look like one: this is what the corner says when the
+   username cannot be read. */
+.shd-account-unnamed { color: var(--shd-meta); }
 .shd-account-avatar {
   width: 16px;
   height: 16px;
   border-radius: 50%;
   object-fit: cover;
+}
+
+/* The menu. Anchored to the corner's right edge so it opens INWARD from the far right and
+   cannot push the page wide — the whole point of putting it there. */
+.shd-account-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  min-width: 140px;
+  list-style: none;
+  text-align: left;
+  background: var(--shd-bg);
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+  box-shadow: var(--shd-shadow);
+}
+/* The UA's [hidden]{display:none} loses to the rule above the moment it declares display,
+   and this menu is toggled with the hidden attribute — the expando shipped exactly that
+   bug, invisibly to jsdom. css-lint asserts this pairing. */
+.shd-account-menu[hidden] { display: none; }
+.shd-account-item { margin: 0; }
+.shd-account-item > a,
+.shd-account-item > button {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  font: inherit;
+  color: var(--shd-accent);
+  background: none;
+  border: 0;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.shd-account-item > a:hover,
+.shd-account-item > button:hover { background: var(--shd-hover-bg); text-decoration: none; }
+.shd-account-item > button:disabled { color: var(--shd-meta); cursor: default; }
+.shd-account-menu .shd-account-status:empty { display: none; }
+.shd-account-menu .shd-account-status {
+  display: block;
+  padding: 3px 10px;
+  color: var(--shd-meta);
+  white-space: normal;
+  max-width: 200px;
 }
 
 .usertext-body {

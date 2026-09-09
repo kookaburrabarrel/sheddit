@@ -746,7 +746,15 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
       usernameClauses: list(C.SESSION.username),
       avatarClauses: list(C.SESSION.avatar),
       headerUserLinks: [...(document.querySelector(C.HEADER)?.querySelectorAll('a[href*="/user/"]') || [])]
-        .slice(0, 8).map(a => a.getAttribute('href'))
+        .slice(0, 8).map(a => a.getAttribute('href')),
+      /* The log-out control, READ AND NEVER CLICKED — a probe that logs you out is not a
+         probe, and it would end the session the rest of the run depends on. Reports
+         whether the drawer's toggle is where the contract says, and whether anything
+         matching the control is reachable BEFORE the drawer is opened (usually not: it is
+         mounted on click, which is why account.js opens it first). */
+      drawerToggle: !!document.querySelector(C.USER_DRAWER.toggle),
+      drawerHosts: list(C.USER_DRAWER.host),
+      logoutBeforeOpen: !!SHD.account.findLogoutControl()
     };
   }, C);
   console.log(`  \x1b[2msession reads as: ${session.loggedIn ? 'LOGGED IN' : 'logged out'}\x1b[0m`);
@@ -783,6 +791,12 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   console.log(`  \x1b[2m  username clauses ${JSON.stringify(session.usernameClauses)}\x1b[0m`);
   console.log(`  \x1b[2m  avatar clauses   ${JSON.stringify(session.avatarClauses)}\x1b[0m`);
   console.log(`  \x1b[2m  /user/ hrefs in Reddit's header: ${JSON.stringify(session.headerUserLinks)}\x1b[0m`);
+  console.log(`  \x1b[2m  user drawer: toggle=${session.drawerToggle} hosts=${JSON.stringify(session.drawerHosts)} ` +
+              `logout reachable before opening=${session.logoutBeforeOpen}\x1b[0m`);
+  if (session.loggedIn && !session.drawerToggle) {
+    console.log('  \x1b[33mNOTE\x1b[0m no drawer toggle found — `log out` in the account menu will ' +
+      'fall back to revealing Reddit\'s own header. C.USER_DRAWER.toggle is what to correct.');
+  }
   if (session.loggedIn && !session.name) {
     console.log('  \x1b[33mNOTE\x1b[0m signed in, but no username resolved — the corner says ' +
       '"logged in" instead of naming you. The header hrefs above are where the name is; ' +

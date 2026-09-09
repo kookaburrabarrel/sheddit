@@ -49,7 +49,8 @@ SHD.account = (() => {
              reply control is clicked.
      arriveWaitMs: how long to wait for the posted comment to appear before calling the
              submit lost and revealing the native composer. */
-  const timings = { syncMs: 1500, settleMs: 400, composeWaitMs: 4000, pollMs: 100, arriveWaitMs: 8000 };
+  const timings = { syncMs: 1500, settleMs: 400, composeWaitMs: 4000, pollMs: 100, arriveWaitMs: 8000,
+                    drawerWaitMs: 4000, logoutWaitMs: 6000 };
 
   const active = () => SHD.session.active();
 
@@ -491,54 +492,242 @@ SHD.account = (() => {
     ]);
   }
 
-  /**
-   * The account corner — old reddit's `#header-bottom-right`, at the far right of the
-   * header, and the answer to "does this thing know I am logged in?".
-   *
-   * It replaced a bare "logged in" label sitting mid-header beside the theme buttons.
-   * That label was true and nearly invisible: it read as a caption on the theme bar rather
-   * than as the account area, so the honest reader's conclusion was that the extension had
-   * no idea who they were. Old reddit put this in one place for a decade — the top right —
-   * and putting it back there is most of the fix.
-   *
-   * Three things, in old reddit's order:
-   *   - the avatar Reddit already drew (no request of ours that the browser has not made),
-   *   - the reader's name, linking to their profile — which Sheddit renders itself,
-   *   - `preferences`, linking to Reddit's own account settings, which Sheddit hands back
-   *     untouched (route.js → OTHER), so the door works today rather than eventually.
-   *
-   * WHEN THE NAME CANNOT BE READ the corner still appears and still says the session is
-   * live — "logged in", not a link — because the question it answers is whether Sheddit
-   * sees the account at all, and that answer does not depend on a contract that may have
-   * moved. C.SESSION.username is unverified live; this is what a miss costs.
-   *
-   * Absent entirely for a logged-out reader, and for a reader who turned the layer off:
-   * the corner states what the extension will DO on this page, and in both of those cases
-   * the answer is nothing.
-   */
-  function headerAccount() {
-    if (!active()) return null;
-    const name = SHD.session.username();
-    const avatar = SHD.session.avatar();
-    return h('span.shd-account', null, [
-      avatar ? h('img.shd-account-avatar', { src: avatar, alt: '', loading: 'lazy' }) : null,
-      name
-        ? h('a.shd-account-user', { href: `/user/${name}/`, text: `u/${name}` })
-        : h('span.shd-account-user.shd-account-unnamed', {
-            text: 'logged in',
-            title: 'Sheddit can see that you are logged in to Reddit, but could not read ' +
-                   'your username from the page. Voting and replying are unaffected.'
-          }),
-      h('span.shd-account-sep', { 'aria-hidden': 'true', text: '|' }),
-      h('a.shd-account-prefs', {
-        href: C.ACCOUNT.settings,
-        text: 'preferences',
-        title: 'Your Reddit account settings — Reddit\'s own page, which Sheddit leaves alone.'
-      })
-    ]);
+  /* ------------------------------------------------------------------ *
+   * The account corner
+   * ------------------------------------------------------------------ */
+
+  /* The one navigation this module performs, behind an indirection so the suite can watch
+     it happen. jsdom implements no navigation, so a real `location.reload()` in a test is
+     reported as an unimplemented feature rather than as the outcome it is — and "did the
+     reader actually get logged out" is exactly the assertion worth having. Nothing in the
+     extension replaces this. */
+  const nav = { reload: () => location.reload() };
+
+  /* The open menu, so a route change can close it — chrome.reset() removes the header, but
+     the document-level listeners below would outlive it. */
+  let openMenu = null;
+
+  function closeMenu() {
+    if (!openMenu) return;
+    const { menu, toggle, onDocClick, onKey } = openMenu;
+    openMenu = null;
+    menu.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onDocClick, true);
+    document.removeEventListener('keydown', onKey, true);
   }
 
-  function reset() { missWarned = false; }
+  const item = (child) => h('li.shd-account-item', { role: 'none' }, child);
+  const menuLink = (href, text, title) =>
+    item(h('a', { href, text, title, role: 'menuitem' }));
 
-  return { midcol, vote, reply, replyForm, commentBox, compose, submitBox, headerAccount, reset, timings };
+  /**
+   * The menu's contents, built ON OPEN rather than at render time.
+   *
+   * Deliberate: the reader's name may not have resolved when the header was drawn — the
+   * header hydrates late, and the drawer that carries the profile link later still — and
+   * the two items that need a name are worth having whenever it turns up. Everything that
+   * does not need one is always here, which is what makes `log out` reachable on a session
+   * whose username Sheddit never managed to read.
+   *
+   * The links are ordinary hrefs onto Reddit's own pages: the profile is one Sheddit
+   * renders itself, the rest are routes it hands back untouched. Nothing here is delegated
+   * except the last item.
+   */
+  function fillMenu(menu, status) {
+    const name = SHD.session.username();
+    const kids = [];
+    if (name) {
+      kids.push(menuLink(`/user/${name}/`, 'my profile'));
+      kids.push(menuLink(`/user/${name}/${C.ACCOUNT.savedTab}/`, 'saved'));
+    }
+    kids.push(menuLink(C.ACCOUNT.inbox, 'messages'));
+    kids.push(menuLink(C.ACCOUNT.settings, 'preferences'));
+    kids.push(item(h('button.shd-account-logout', {
+      type: 'button', role: 'menuitem',
+      text: 'log out',
+      title: 'Ends your Reddit session by pressing Reddit\'s own log-out control.',
+      onclick: (e) => { e.preventDefault(); logOut(e.currentTarget, status); }
+    })));
+    kids.push(item(status));
+    menu.replaceChildren(...kids);
+  }
+
+  /* ---------------- log out ---------------- */
+
+  /* Where Reddit's drawer content can be: inside the header, or portaled beside it. Both
+     are searched, because a panel that is a SIBLING of the header is what the upsell
+     taught us to expect (C.NATIVE_UPSELL). */
+  function drawerRoots() {
+    const roots = [];
+    const header = document.querySelector(C.HEADER);
+    if (header) roots.push(header);
+    document.querySelectorAll(C.USER_DRAWER.host).forEach(el => roots.push(el));
+    return roots;
+  }
+
+  /**
+   * Reddit's own log-out control, or null.
+   *
+   * The attribute clauses first. The text fallback then follows the AGE GATE's rule rather
+   * than the reply control's: it clicks only when EXACTLY ONE control in the drawer says
+   * exactly "log out". A reply button matched loosely costs a mis-click; a log-out button
+   * matched loosely ends the reader's session on something that merely mentions the words,
+   * and there is no undo for that short of signing back in.
+   */
+  function findLogoutControl() {
+    for (const root of drawerRoots()) {
+      const byAttr = SHD.dom.deepQuery(root, C.NATIVE.logout);
+      if (byAttr) return byAttr;
+    }
+    const exact = [];
+    const scan = (root, depth) => {
+      if (!root || depth > 8 || typeof root.querySelectorAll !== 'function') return;
+      for (const el of root.querySelectorAll('a, button, [role="menuitem"]')) {
+        if (C.NATIVE.logoutText.test((el.textContent || '').trim())) exact.push(el);
+      }
+      if (root.shadowRoot) scan(root.shadowRoot, depth + 1);
+      for (const el of root.querySelectorAll('*')) if (el.shadowRoot) scan(el.shadowRoot, depth + 1);
+    };
+    drawerRoots().forEach(r => scan(r, 0));
+    // Deduplicate: an element inside a drawer that is itself inside the header is reached twice.
+    const unique = [...new Set(exact)];
+    return unique.length === 1 ? unique[0] : null;
+  }
+
+  /**
+   * End the session by pressing Reddit's own control — the delegation tier, applied to the
+   * one action a reader most wants back (reported 2026-09-09).
+   *
+   * Sheddit does not build a logout request. It cannot: that is a POST carrying Reddit's
+   * own CSRF token, and forging one would be the first request this extension ever made.
+   * So it does what the reader would do — open Reddit's user drawer and click the item in
+   * it — and lets Reddit's code end the session.
+   *
+   * On success the page is RELOADED rather than re-rendered in place. Reddit usually
+   * navigates itself, in which case this never runs; when it does not, every part of the
+   * layer downstream (arrows, reply boxes, this corner) decided what to draw from a session
+   * that no longer exists, and a reload is the one cheap way to make the whole page agree.
+   * The reader has just ended their session, so a lost scroll position is the least of it.
+   *
+   * Every miss lands in the same place as the reply box's: reveal Reddit's own drawer in
+   * place, so the control is one visible click away rather than a dead end.
+   */
+  async function logOut(button, status) {
+    const say = (text) => { if (status) status.textContent = text; };
+    if (button) button.disabled = true;
+    say('logging out…');
+    try {
+      let ctl = findLogoutControl();
+      if (!ctl) {
+        const toggle = document.querySelector(C.USER_DRAWER.toggle);
+        if (toggle) {
+          toggle.click();                       // Reddit opens its own drawer
+          ctl = await waitFor(() => findLogoutControl(), timings.drawerWaitMs);
+        }
+      }
+      if (!ctl) {
+        if (button) button.disabled = false;
+        say('could not find Reddit\'s log-out control — its own menu is shown instead');
+        const panel = document.querySelector(C.USER_DRAWER.host) || document.querySelector(C.HEADER);
+        if (panel && SHD.dom.passthrough(panel)) panel.scrollIntoView?.({ block: 'center' });
+        return false;
+      }
+      ctl.click();
+      /* Measured, not assumed — the lesson every delegated action here carries. The session
+         is gone when the page stops carrying a logged-in signal; reset() first, or the
+         cached YES from a moment ago answers for it. */
+      const gone = await waitFor(() => { SHD.session.reset(); return !SHD.session.loggedIn(); },
+                                 timings.logoutWaitMs);
+      if (gone) { nav.reload(); return true; }
+      if (button) button.disabled = false;
+      say('Reddit did not end the session — its own menu is shown instead');
+      const panel = document.querySelector(C.USER_DRAWER.host) || document.querySelector(C.HEADER);
+      if (panel && SHD.dom.passthrough(panel)) panel.scrollIntoView?.({ block: 'center' });
+      return false;
+    } catch (err) {
+      if (button) button.disabled = false;
+      say('log out failed');
+      return false;
+    }
+  }
+
+  /* ---------------- the corner itself ---------------- */
+
+  /**
+   * Old reddit's `#header-bottom-right`, at the far right of the header, and the answer to
+   * "does this thing know I am logged in?".
+   *
+   * SIGNED IN it is a button — the avatar and the name are the control, not decoration,
+   * which is the correction reported on 2026-09-09: only `preferences` had been clickable,
+   * so the part of the corner that names you did nothing. It opens a menu of Reddit's own
+   * account destinations, ending in `log out`.
+   *
+   * SIGNED OUT it is one grey word, `logged out`, linking to Reddit's login page. That is
+   * an owner decision of the same date and a reversal of the old blanket rule against
+   * login affordances; the rule was written against Reddit's unremovable interstitial, and
+   * a reader who keeps an account being told where the door is, once, in the corner where
+   * a door has always been, is not that. It answers the same question in the negative,
+   * which is the whole reason the corner exists.
+   *
+   * Absent entirely when the reader turns the account layer off — the one setting that
+   * says "behave as though I had no account at all".
+   */
+  function headerAccount() {
+    if (!SHD.settings?.account) return null;
+    return SHD.session.loggedIn() ? signedInCorner() : signedOutCorner();
+  }
+
+  function signedOutCorner() {
+    return h('span.shd-account.shd-account-signedout', null,
+      h('a.shd-account-login', {
+        href: C.ACCOUNT.login,
+        text: 'logged out',
+        title: 'Sheddit sees no Reddit session on this page. Opens Reddit\'s own login page.'
+      }));
+  }
+
+  function signedInCorner() {
+    const name = SHD.session.username();
+    const avatar = SHD.session.avatar();
+    const status = h('span.shd-account-status', { role: 'status', 'aria-live': 'polite' });
+    const menu = h('ul.shd-account-menu', { role: 'menu', hidden: true });
+    const toggle = h('button.shd-account-toggle', {
+      type: 'button', 'aria-haspopup': 'true', 'aria-expanded': 'false',
+      title: name ? `Signed in as u/${name} — account menu`
+                  : 'Sheddit can see a Reddit session but could not read your username. ' +
+                    'Voting and replying are unaffected.'
+    }, [
+      avatar ? h('img.shd-account-avatar', { src: avatar, alt: '', loading: 'lazy' }) : null,
+      h('span.shd-account-name' + (name ? '' : '.shd-account-unnamed'),
+        { text: name ? `u/${name}` : 'logged in' }),
+      h('span.shd-account-caret', { 'aria-hidden': 'true', text: '\u25be' })
+    ]);
+
+    const corner = h('span.shd-account', null, [toggle, menu]);
+
+    const onDocClick = (e) => { if (!corner.contains(e.target)) closeMenu(); };
+    const onKey = (e) => { if (e.key === 'Escape') { closeMenu(); toggle.focus(); } };
+
+    toggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (openMenu && openMenu.menu === menu) { closeMenu(); return; }
+      closeMenu();
+      status.textContent = '';
+      fillMenu(menu, status);
+      menu.hidden = false;
+      toggle.setAttribute('aria-expanded', 'true');
+      openMenu = { menu, toggle, onDocClick, onKey };
+      // Capture phase, so a click Reddit's own page handles still closes our menu first.
+      document.addEventListener('click', onDocClick, true);
+      document.addEventListener('keydown', onKey, true);
+    });
+
+    return corner;
+  }
+
+  function reset() { missWarned = false; closeMenu(); }
+
+  return { midcol, vote, reply, replyForm, commentBox, compose, submitBox, headerAccount,
+           logOut, findLogoutControl, nav, reset, timings };
 })();

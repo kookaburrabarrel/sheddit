@@ -47,8 +47,8 @@
 <label><input type="checkbox" data-k="autoUpdateCheck"> Check for a new version at browser
   start <span class="hint">(one request to GitHub for a version number &mdash; also on the
   header bar)</span></label>
-<label><input type="checkbox" data-k="account"> Use my Reddit account when I am logged in
-  <span class="hint">(vote, reply, post)</span></label>
+<label><input type="checkbox" data-k="account"> Show the account corner, and use my Reddit
+  account when I am logged in <span class="hint">(vote, reply, post)</span></label>
 
 <p class="note">
   “Show adult-content pictures” covers thumbnails, the [+] expando and full-size images
@@ -76,7 +76,11 @@
 </p>
 
 <p class="note">
-  “Use my Reddit account” does nothing unless you are already logged in to Reddit in this browser.
+  The account corner sits at the far right of Sheddit’s header and says whether it can see a
+  Reddit session. Logged out it is one word, “logged out”, linking to Reddit’s login page —
+  Sheddit never asks you to log in, and nothing else on the page changes. Logged in it
+  becomes your avatar and name, opening a menu of Reddit’s own account pages and a log out
+  that presses Reddit’s own button. Turn this off and there is no corner at all.
   When you are, the vote arrows register, a “reply” opens an old-reddit reply box, and the
   sidebar gets “submit a new link / text post”. Every one of those goes through Reddit’s
   own controls on the page — Sheddit still makes no request of its own, never sees your
