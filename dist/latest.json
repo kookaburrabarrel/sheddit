@@ -1,6 +1,6 @@
 {
-  "version": "0.38.0",
-  "released": "2026-09-08",
+  "version": "0.39.0",
+  "released": "2026-09-09",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.38.0 fixes a gallery post showing only its first picture — Reddit parks the other frames in an attribute it fills in only when its own carousel advances, which never happens here — and lays the frames out as one sideways-scrolling row."
+  "notes": "0.39.0 shows a post picture at the resolution it was uploaded at: Reddit offers the original beside a set of smaller resizes, and only the resizes state a width, so the full-size copy was being passed over for a 640px one."
 }

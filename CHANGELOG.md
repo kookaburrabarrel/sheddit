@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.38.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.39.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,30 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.39.0
+
+### Fixed — a picture rendered at 640px with the full-size copy in the same element
+
+Reported alongside the gallery frames, and the same shape of cause: the data was there and
+the rule that chose between candidates could not see it.
+
+Reddit offers a post's picture twice. `i.redd.it` serves the file as uploaded;
+`preview.redd.it` serves generated variants of it, each stating its width in a `srcset`
+descriptor. Since 0.17.0 the resolver has taken the widest stated width, which is the right
+answer among resizes and the wrong one here — the original states no width at all, because
+there is nothing for Reddit to state a width against, so it scored zero and every variant
+outbid it. A post with a 4000px original and a 640px preview rendered the preview.
+
+Ranking is now the original first, then the widest stated width among what is left. An
+original cannot be smaller than a resize of itself, so this needs no measurement to settle
+and no threshold to tune. Both halves are pinned separately: a post carrying an original
+must render it, and a gallery frame carrying only resizes must still pick the widest, which
+is what stops the new preference swallowing the rule underneath it.
+
+Thumbnails are deliberately untouched. They resolve by a different path that reads the
+element's own `src`, and routing them through this ranking would make every 70px tile in a
+feed download a full-size upload.
 
 ## 0.38.0
 
