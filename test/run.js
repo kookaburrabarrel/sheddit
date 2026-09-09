@@ -2328,9 +2328,16 @@ async function boot(html, url, setup) {
     // Every tab we render must lead somewhere we still handle. `controversial` was
     // offered on the front page while classify() sent /controversial/ to OTHER, so
     // clicking our own tab dropped the user out of the extension.
+    /* The ACCOUNT CORNER is exempt, and the exemption is the point rather than a hole:
+       its links are doors to Reddit's own account pages — settings, inbox, the login page —
+       and landing on native Reddit is what they are FOR. Bug 10 was about navigation tabs
+       that silently dropped the reader out of the extension; a door labelled `preferences`
+       does not. The corner gets its own rule below, so neither claim leaks into the other. */
     const hrefs = new Set();
     for (const el of [window.SHD.chrome.tabMenu(), doc.querySelector('#shd-header')]) {
-      el?.querySelectorAll('a[href]').forEach(a => hrefs.add(a.getAttribute('href')));
+      el?.querySelectorAll('a[href]').forEach(a => {
+        if (!a.closest('.shd-account')) hrefs.add(a.getAttribute('href'));
+      });
     }
     const bad = [...hrefs].filter(h => h.startsWith('/') && R.classify(h) === R.OTHER);
     check('every href our own chrome renders is a route we handle',
@@ -5804,7 +5811,18 @@ async function boot(html, url, setup) {
       const { doc, window, logs } = await boot(listingPage(), 'https://www.reddit.com/r/programming/', noAuto);
       check('an empty header reads as logged out', window.SHD.session.loggedIn() === false);
       check('...so the account layer is inactive', window.SHD.session.active() === false);
-      check('the header carries no account corner', !doc.querySelector('.shd-account'));
+      /* CHANGED BY OWNER DECISION 2026-09-09, and the only thing the account layer now
+         draws for a logged-out reader. It answers the corner's question in the negative —
+         which is the whole reason the corner exists — and offers Reddit's login page as a
+         link, once, in the corner where a door has always been. Everything else below
+         still asserts that nothing auth-gated appears. */
+      const out = doc.querySelector('#shd-header .shd-account');
+      check('the header says logged out, in the account corner',
+        out?.classList.contains('shd-account-signedout') &&
+        out.querySelector('a.shd-account-login')?.textContent === 'logged out');
+      check('...linking to Reddit\'s own login page, and offering nothing else',
+        out?.querySelector('a.shd-account-login')?.getAttribute('href') === '/login/' &&
+        !out.querySelector('.shd-account-toggle') && !out.querySelector('.shd-account-menu'));
       check('the sidebar offers no submit doors', !doc.querySelector('.shd-submit'));
       click(window, voteCol(doc, 't3_link1').querySelector('.arrow.up'));
       await hold(50);
@@ -5843,7 +5861,7 @@ async function boot(html, url, setup) {
         loggedInSettings({ account: false }));
       check('the page is read as logged in', window.SHD.session.loggedIn() === true);
       check('...but with the setting off the layer is inactive', window.SHD.session.active() === false);
-      check('nothing of the layer is rendered: no status, no submit, no comment box',
+      check('nothing of the layer is rendered: no corner at all, no submit, no comment box',
         !doc.querySelector('.shd-account') && !doc.querySelector('.shd-submit') &&
         !doc.querySelector('.shd-commentbox'));
       click(window, doc.querySelector('#shd-root .thing[data-fullname="t1_c0"] a.reply'));
@@ -5873,87 +5891,225 @@ async function boot(html, url, setup) {
   }
 
   console.log('\n\x1b[1mTHE ACCOUNT CORNER\x1b[0m');
+
+  /** Reddit's user drawer, MODELLED: the avatar button mounts a panel carrying `Log out`. */
+  function installUserDrawer(window, doc, opts = {}) {
+    const state = { opened: 0, logouts: 0, panel: null };
+    const toggle = doc.querySelector('#expand-user-drawer-button');
+    const mount = () => {
+      if (state.panel) return;
+      const panel = doc.createElement('div');
+      panel.id = 'user-drawer-panel';
+      if (opts.profileLink) panel.innerHTML = '<a href="/user/latename/">latename</a>';
+      if (opts.logout !== false) {
+        const el = doc.createElement(opts.asAnchor ? 'a' : 'button');
+        if (opts.asAnchor) el.setAttribute('href', 'https://www.reddit.com/logout');
+        el.textContent = opts.label || 'Log Out';
+        el.addEventListener('click', () => {
+          state.logouts++;
+          /* Reddit tears its logged-in header down, so the whole drawer goes with the
+             button. Removing only the button left this panel behind — and its own id
+             matches C.SESSION.loggedIn's third clause, so the modelled session never
+             ended and the reload never came. A fixture that half-logs-out tests nothing. */
+          if (opts.endsSession === false) return;
+          doc.querySelector('#expand-user-drawer-button')?.remove();
+          state.panel?.remove();
+          state.panel = null;
+        });
+        panel.appendChild(el);
+      }
+      // A decoy that must never be clicked: it mentions the words and is not the control.
+      if (opts.decoy) {
+        const d = doc.createElement('button');
+        d.textContent = 'Log out of all devices';
+        d.addEventListener('click', () => { state.logouts += 100; });
+        panel.appendChild(d);
+      }
+      doc.querySelector('reddit-header-large').appendChild(panel);
+      state.panel = panel;
+    };
+    if (opts.alreadyOpen) mount();
+    else toggle?.addEventListener('click', () => { state.opened++; setTimeout(mount, 20); });
+    return state;
+  }
+
   {
-    /* Reported 2026-09-09: "the plug in has no way to tell you if you're logged in or
-       not". It did say — a "logged in" caption beside the theme buttons — and that IS the
-       finding: mid-header, in the theme bar's grey, it read as a label on the theme bar
-       rather than as the account area. Old reddit put the account at the top right for a
-       decade, so the corner is there now, carrying what old reddit carried. */
+    /* Reported 2026-09-09: "the LOGGED IN and user icon are not clickable, only preferences
+       is". They were not — the name and the avatar were inert text beside one link. The
+       corner is a button now, and the things regular Reddit offers are behind it. */
     const { doc, window } = await boot(listingPage({ loggedIn: true }),
       'https://www.reddit.com/r/programming/', noAuto);
     const corner = doc.querySelector('#shd-header .shd-account');
-    const user = corner?.querySelector('a.shd-account-user');
-    const prefs = corner?.querySelector('a.shd-account-prefs');
-    check('the corner names the reader, linked to the profile Sheddit renders itself',
-      user?.textContent === 'u/tester' && user.getAttribute('href') === '/user/tester/',
-      user?.getAttribute('href'));
-    check('...carries the avatar Reddit already drew, costing no request of ours',
-      corner?.querySelector('img.shd-account-avatar')?.getAttribute('src') ===
-        'https://styles.redditmedia.com/avatar.png');
-    check('...and a preferences link onto Reddit\'s own account settings',
-      prefs?.textContent === 'preferences' && prefs.getAttribute('href') === '/settings/',
-      prefs?.getAttribute('href'));
-    check('...which classifies as a route Sheddit hands back untouched, so the door works today',
-      window.SHD.route.classify('/settings/') === 'OTHER' &&
-      window.SHD.route.classify(new URL(prefs.getAttribute('href'), 'https://www.reddit.com').pathname) === 'OTHER');
-    check('...and the profile link classifies as one Sheddit renders itself',
-      window.SHD.route.classify('/user/tester/') === 'PROFILE');
+    const toggle = corner?.querySelector('button.shd-account-toggle');
+    check('the corner is a button, and the avatar and name are INSIDE it',
+      !!toggle && toggle.querySelector('img.shd-account-avatar')?.getAttribute('src') ===
+        'https://styles.redditmedia.com/avatar.png' &&
+      toggle.querySelector('.shd-account-name')?.textContent === 'u/tester');
+    check('...announcing itself as a menu, closed',
+      toggle?.getAttribute('aria-haspopup') === 'true' &&
+      toggle.getAttribute('aria-expanded') === 'false' &&
+      corner.querySelector('.shd-account-menu')?.hidden === true);
 
-    /* THE WORST THING THIS FEATURE COULD DO. Every post row on the page links to its
-       author's profile, and a `/user/` lookup not scoped to the header would find one of
-       those first — the corner would greet the reader by a stranger's name. The fixture's
-       authors include `kleudorian`; the header says `tester`. */
+    click(window, toggle);
+    const menu = corner.querySelector('.shd-account-menu');
+    const labels = [...menu.querySelectorAll('a, button')].map(el => el.textContent);
+    check('clicking it opens the menu', menu.hidden === false &&
+      toggle.getAttribute('aria-expanded') === 'true');
+    check('...offering Reddit\'s own account destinations, ending in log out',
+      JSON.stringify(labels) ===
+        JSON.stringify(['my profile', 'saved', 'messages', 'preferences', 'log out']),
+      JSON.stringify(labels));
+    const href = (t) => [...menu.querySelectorAll('a')].find(a => a.textContent === t)?.getAttribute('href');
+    check('...pointed at the right pages',
+      href('my profile') === '/user/tester/' && href('saved') === '/user/tester/saved/' &&
+      href('messages') === '/message/inbox/' && href('preferences') === '/settings/',
+      [href('my profile'), href('saved'), href('messages'), href('preferences')].join(' '));
+    check('the profile is a page Sheddit renders; the rest it hands back untouched',
+      window.SHD.route.classify('/user/tester/') === 'PROFILE' &&
+      ['/user/tester/saved/', '/message/inbox/', '/settings/']
+        .every(p => window.SHD.route.classify(p) === 'OTHER'));
+
+    click(window, toggle);
+    check('clicking again closes it', menu.hidden === true &&
+      toggle.getAttribute('aria-expanded') === 'false');
+    click(window, toggle);
+    doc.body.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    check('a click outside closes it', menu.hidden === true);
+    click(window, toggle);
+    doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    check('Escape closes it', menu.hidden === true);
+
+    /* THE WORST FAILURE AVAILABLE TO THIS FEATURE, unchanged by the menu: every post links
+       to its author's profile, and an unscoped lookup would name the reader after one. */
     check('the name comes from the HEADER, never from a post author on the page',
       doc.querySelectorAll('#shd-root a.author[href^="/user/"]').length > 0 &&
-      !/kleudorian/.test(corner?.textContent || ''),
-      corner?.textContent);
+      !/kleudorian/.test(corner?.textContent || ''), corner?.textContent);
   }
   {
     // The contract that names the reader is unverified live, so a miss has to be a shape
-    // rather than a crash: the corner still stands, still says the session is live, and
-    // still offers the settings door — it just cannot say who you are.
-    const { doc } = await boot(listingPage({ loggedIn: true, noUsername: true }),
+    // rather than a crash: the corner still opens, and log out — the item that matters —
+    // is still there, because it never needed the name.
+    const { doc, window } = await boot(listingPage({ loggedIn: true, noUsername: true }),
       'https://www.reddit.com/r/programming/', noAuto);
     const corner = doc.querySelector('#shd-header .shd-account');
-    check('with no readable username the corner still stands, preferences included',
-      !!corner && corner.querySelector('a.shd-account-prefs')?.getAttribute('href') === '/settings/');
-    check('...saying the session is live, as plain text rather than a dead link',
-      corner?.querySelector('.shd-account-unnamed')?.textContent === 'logged in' &&
-      !corner.querySelector('a.shd-account-user'));
+    const toggle = corner?.querySelector('button.shd-account-toggle');
+    check('with no readable username the corner is still a button that says so',
+      toggle?.querySelector('.shd-account-unnamed')?.textContent === 'logged in');
+    click(window, toggle);
+    const labels = [...corner.querySelectorAll('.shd-account-menu a, .shd-account-menu button')]
+      .map(el => el.textContent);
+    check('...and the menu drops only the two items that need a name',
+      JSON.stringify(labels) === JSON.stringify(['messages', 'preferences', 'log out']),
+      JSON.stringify(labels));
   }
   {
-    // A profile TAB names a page, not a person, and Reddit's own /user/me/ is not a name
-    // at all. Both must fall through to the unnamed corner rather than produce a wrong one.
-    for (const [href, why] of [['/user/tester/comments/', 'a profile tab'],
-                               ['/user/me/', 'Reddit\'s own /user/me/ alias']]) {
-      const page = listingPage({ loggedIn: true }).replace('href="/user/tester/"', `href="${href}"`);
-      const { doc } = await boot(page, 'https://www.reddit.com/r/programming/', noAuto);
-      check(`${why} is not read as the reader's name`,
-        !doc.querySelector('#shd-header a.shd-account-user') &&
-        !!doc.querySelector('#shd-header .shd-account-unnamed'),
-        doc.querySelector('#shd-header .shd-account')?.textContent);
-    }
+    /* The name can arrive AFTER the header is drawn — Reddit's header hydrates late, and
+       the drawer that carries the profile link later still. The menu is built on open for
+       exactly this, so a name that turns up in between is not lost until the next page. */
+    const { doc, window } = await boot(listingPage({ loggedIn: true, noUsername: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    const link = doc.createElement('a');
+    link.setAttribute('href', '/user/latecomer/');
+    link.textContent = 'latecomer';
+    doc.querySelector('reddit-header-large').appendChild(link);
+    const toggle = doc.querySelector('.shd-account-toggle');
+    click(window, toggle);
+    const labels = [...doc.querySelectorAll('.shd-account-menu a')].map(a => a.getAttribute('href'));
+    check('a username that hydrates late is picked up when the menu opens',
+      labels.includes('/user/latecomer/') && labels.includes('/user/latecomer/saved/'),
+      JSON.stringify(labels));
+  }
+
+  console.log('\n\x1b[1mLOGGING OUT — THROUGH REDDIT\'S OWN CONTROL\x1b[0m');
+  {
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    Object.assign(window.SHD.account.timings, { pollMs: 10, drawerWaitMs: 500, logoutWaitMs: 800 });
+    let reloaded = 0;
+    window.SHD.account.nav.reload = () => { reloaded++; };
+    const drawer = installUserDrawer(window, doc, { decoy: true });
+    click(window, doc.querySelector('.shd-account-toggle'));
+    const logout = [...doc.querySelectorAll('.shd-account-menu button')]
+      .find(b => b.textContent === 'log out');
+    check('the menu carries a log out item, and nothing is open on Reddit\'s side yet',
+      !!logout && drawer.opened === 0 && drawer.logouts === 0);
+    click(window, logout);
+    check('log out opens Reddit\'s own user drawer rather than building a request',
+      await waitFor(() => drawer.opened === 1, { timeout: 1000 }));
+    check('...and presses Reddit\'s own control — the exact one, never the decoy beside it',
+      await waitFor(() => drawer.logouts === 1, { timeout: 1500 }) && drawer.logouts === 1,
+      `logouts=${drawer.logouts}`);
+    check('...then reloads once the session is measurably gone, not on the click',
+      await waitFor(() => reloaded === 1, { timeout: 2000 }) &&
+      window.SHD.session.loggedIn() === false);
   }
   {
-    // A full URL and a bare path are one name: Reddit has shipped both shapes in its own
-    // header, and the corner must not care which it got.
-    const page = listingPage({ loggedIn: true })
-      .replace('href="/user/tester/"', 'href="https://www.reddit.com/user/tester/"');
-    const { doc } = await boot(page, 'https://www.reddit.com/r/programming/', noAuto);
-    check('an absolute profile URL in the header names the reader just the same',
-      doc.querySelector('#shd-header a.shd-account-user')?.textContent === 'u/tester');
+    // Reddit's control as an anchor onto /logout — the attribute clause, no text needed.
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    Object.assign(window.SHD.account.timings, { pollMs: 10, drawerWaitMs: 500, logoutWaitMs: 800 });
+    let reloaded = 0;
+    window.SHD.account.nav.reload = () => { reloaded++; };
+    const drawer = installUserDrawer(window, doc, { alreadyOpen: true, asAnchor: true, label: 'Sign out' });
+    click(window, doc.querySelector('.shd-account-toggle'));
+    click(window, [...doc.querySelectorAll('.shd-account-menu button')].find(b => b.textContent === 'log out'));
+    check('an already-open drawer is used as it is, without opening anything',
+      await waitFor(() => drawer.logouts === 1, { timeout: 1500 }) && drawer.opened === 0);
+    check('...and a control found by its href needs no matching text at all',
+      await waitFor(() => reloaded === 1, { timeout: 2000 }));
   }
   {
-    /* Reddit's own /user/me/ alias sitting BEFORE the real profile link. A read that took
-       the first `/user/` anchor and then validated it would find `me`, reject it, and
-       report no name — with the reader's actual name two nodes away. Every candidate is
-       tried, in document order, and the first that parses wins. */
-    const page = listingPage({ loggedIn: true })
-      .replace('<a href="/user/tester/">', '<a href="/user/me/">me</a><a href="/user/tester/">');
-    const { doc } = await boot(page, 'https://www.reddit.com/r/programming/', noAuto);
-    check('an alias in front of the real profile link does not cost the name',
-      doc.querySelector('#shd-header a.shd-account-user')?.textContent === 'u/tester',
-      doc.querySelector('#shd-header .shd-account')?.textContent);
+    /* TWO controls saying exactly "log out" is the case the age gate's rule exists for:
+       click nothing, show Reddit's own menu, let the reader decide. Ending a session on a
+       guess is not a layout bug you shrug at. */
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    Object.assign(window.SHD.account.timings, { pollMs: 10, drawerWaitMs: 300, logoutWaitMs: 300 });
+    let reloaded = 0;
+    window.SHD.account.nav.reload = () => { reloaded++; };
+    const drawer = installUserDrawer(window, doc, { alreadyOpen: true });
+    const twin = doc.createElement('button');
+    twin.textContent = 'log out';
+    doc.querySelector('#user-drawer-panel').appendChild(twin);
+    click(window, doc.querySelector('.shd-account-toggle'));
+    click(window, [...doc.querySelectorAll('.shd-account-menu button')].find(b => b.textContent === 'log out'));
+    const said = await waitFor(() => /could not find/.test(
+      doc.querySelector('.shd-account-menu .shd-account-status')?.textContent || ''), { timeout: 2000 });
+    check('two controls saying "log out" means clicking neither', drawer.logouts === 0 && reloaded === 0);
+    check('...saying so, and revealing Reddit\'s own menu in place', said === true &&
+      doc.documentElement.classList.contains('shd-passthrough-active'));
+    window.SHD.dom.passthroughClear();
+  }
+  {
+    // No control at all: the same floor, and never a silent nothing.
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    Object.assign(window.SHD.account.timings, { pollMs: 10, drawerWaitMs: 200, logoutWaitMs: 200 });
+    let reloaded = 0;
+    window.SHD.account.nav.reload = () => { reloaded++; };
+    installUserDrawer(window, doc, { alreadyOpen: true, logout: false });
+    click(window, doc.querySelector('.shd-account-toggle'));
+    click(window, [...doc.querySelectorAll('.shd-account-menu button')].find(b => b.textContent === 'log out'));
+    check('a drawer with no log-out control hands the reader Reddit\'s own menu',
+      await waitFor(() => doc.documentElement.classList.contains('shd-passthrough-active'),
+        { timeout: 2000 }) && reloaded === 0);
+    window.SHD.dom.passthroughClear();
+  }
+  {
+    // Reddit's control clicked, but the session survives: never pretend it worked.
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    Object.assign(window.SHD.account.timings, { pollMs: 10, drawerWaitMs: 300, logoutWaitMs: 300 });
+    let reloaded = 0;
+    window.SHD.account.nav.reload = () => { reloaded++; };
+    const drawer = installUserDrawer(window, doc, { alreadyOpen: true, endsSession: false });
+    click(window, doc.querySelector('.shd-account-toggle'));
+    click(window, [...doc.querySelectorAll('.shd-account-menu button')].find(b => b.textContent === 'log out'));
+    const said = await waitFor(() => /did not end the session/.test(
+      doc.querySelector('.shd-account-menu .shd-account-status')?.textContent || ''), { timeout: 2000 });
+    check('a click that does not end the session is reported, not assumed',
+      drawer.logouts === 1 && reloaded === 0 && said === true);
+    window.SHD.dom.passthroughClear();
   }
 
   console.log('\n\x1b[1mVOTING ON A LOGGED-IN SESSION\x1b[0m');

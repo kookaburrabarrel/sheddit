@@ -144,7 +144,16 @@ SHD.session = (() => {
     return out;
   }
 
-  const ident = () => (identity || (identity = readIdentity()));
+  /* A null NAME is not an answer, it is "not yet". Reddit's header hydrates late and the
+     drawer that carries the profile link may not exist when the corner is first drawn, so
+     only a COMPLETE reading is cached — the menu asks again when it opens, and picks up a
+     name that arrived in between. Reported 2026-09-09: a signed-in reader saw "logged in"
+     where their name should be. */
+  function ident() {
+    if (identity && identity.name) return identity;
+    identity = readIdentity();
+    return identity;
+  }
 
   /** The reader's own name, or null when the page does not say (see C.SESSION.username). */
   function username() { return ident().name; }

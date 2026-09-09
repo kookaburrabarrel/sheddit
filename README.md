@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
 
-[![version 0.41.0](https://img.shields.io/badge/version-0.41.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.42.0](https://img.shields.io/badge/version-0.42.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.41.0 is out — everyone is welcome to try it
+### Beta 0.42.0 is out — everyone is welcome to try it
 
 Works in Chrome and Firefox, [installed by hand](#install) in about a minute — **Chrome is
 the better-tested of the two**, so start there if you have the choice.
@@ -76,12 +76,20 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
 
+**0.42.0 — the account corner opens**
+- **Added:** the avatar and your name are a button now, opening a menu of Reddit's own
+  account pages — *my profile*, *saved*, *messages*, *preferences* — ending in **log out**.
+  Logging out presses Reddit's own control rather than building a request; if it cannot
+  find it, Reddit's menu is shown instead so the button is one visible click away.
+- **Added:** logged out, the corner says *logged out* and links to Reddit's login page. It
+  is the only login affordance in the extension, it never nags, and the whole corner
+  disappears if you turn the account setting off.
+
 **0.41.0 — the header says who you are**
-- **Added:** an account corner at the far right of the header, where old reddit kept it —
-  your avatar, your username linking to your profile, and *preferences* onto Reddit's own
-  account settings. Sheddit used to say "logged in" beside the theme buttons, which read as
-  a caption on the theme bar; this is the answer to *does it know I'm signed in?* in the
-  place people have looked for a decade. Absent entirely when you are logged out.
+- **Added:** an account corner at the far right of the header, where old reddit kept it.
+  Sheddit used to say "logged in" beside the theme buttons, which read as a caption on the
+  theme bar; this is the answer to *does it know I'm signed in?* in the place people have
+  looked for a decade.
 
 **0.40.0 — galleries read one picture at a time**
 - **Changed:** a gallery is a slideshow — one frame on screen with a `‹ 2 of 6 ›` control
@@ -201,7 +209,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.41.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.42.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.41.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.42.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -13,6 +13,63 @@ Entries lead with what changed for a *user* where there is such a thing, and not
 underlying cause where that is the more useful fact. Several entries describe bugs that
 existed from the first commit and were only found once a test could see them — those are
 marked **never worked**, because "fixed" would imply it once did.
+
+---
+
+## 0.42.0
+
+### Added — the account corner opens, and log out is in it
+
+Reported the day 0.41.0 landed: *"the LOGGED IN and user icon are not clickable, only
+preferences is"*. They were not. The corner named you and drew your avatar and neither did
+anything — the one part of it that answered a click was the smallest word in it. That is
+the same defect 0.41.0 fixed one level up (a thing that looks like an account area and
+behaves like a caption), so the corner is now what it looks like: **a button**.
+
+It opens a menu of Reddit's own account destinations — *my profile*, *saved*, *messages*,
+*preferences* — ending in **log out**. Everything but the last is an ordinary link: the
+profile is a page Sheddit renders itself, the rest are pages it hands back untouched. The
+menu is built when it opens rather than when the header is drawn, which is what lets a
+username that hydrates late still appear; the two items that need a name are simply absent
+until there is one, and `log out` never needed one.
+
+**Log out presses Reddit's own control.** Sheddit does not and cannot build a logout
+request — that is a POST carrying Reddit's own CSRF token, and forging one would be the
+first request this extension has ever made. So it does what the reader would do: open
+Reddit's user drawer, find the item in it, click it, and let Reddit end the session. Then
+it *measures* the outcome — the page has to stop carrying a logged-in signal — before
+reloading, because every delegated action in this layer measures rather than assumes, and a
+logout that quietly did not happen is the worst kind to report as done.
+
+One rule here is stricter than anywhere else in the codebase. The text matcher is anchored
+(`^log out$`) where the reply expander's deliberately is not, and when more than one control
+in the drawer says exactly that, Sheddit clicks **none** of them and shows Reddit's own menu
+instead. That is the age gate's rule, applied to the one action with no undo: a mis-clicked
+reply costs a comment, a mis-clicked session costs the session. Every miss lands in the same
+place — Reddit's drawer, revealed in place, one visible click away.
+
+### Added — logged out, the corner says so, and links to the login page
+
+The other half of the same report. The corner previously vanished when it saw no session,
+which answers *am I logged in?* only if you already know the corner exists. It now says
+**logged out**, and that word links to Reddit's login page.
+
+**This reverses a rule the project has carried since the beginning**, and the reversal is an
+owner decision rather than a drift, so it is written down in CONTRIBUTING beside what
+survives of the old rule. The objection was always to Reddit's *unremovable interstitial* —
+a wall that rises half a minute into reading with no close button — not to a reader who
+keeps an account being told where the door is, once, in the corner where a door has always
+been. Nothing nags, nothing interrupts, nothing appears unbidden mid-page, and the whole
+corner is gone if the account setting is off. That setting's label and the options page copy
+now say so, since it no longer only concerns being logged *in*.
+
+### Changed — one test guard learned the difference between a tab and a door
+
+`every href our own chrome renders is a route we handle` exists because a sort tab that
+classified as `OTHER` dropped the reader out of the extension (bug 10). The account corner's
+links are the opposite case on purpose: *preferences*, *messages* and the login page are
+Reddit's own, and landing on native Reddit is what they are for. The corner is exempt from
+that guard and has its own rule instead, so neither claim quietly weakens the other.
 
 ---
 

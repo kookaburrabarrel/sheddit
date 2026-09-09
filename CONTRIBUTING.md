@@ -150,7 +150,14 @@ boots into. Since 0.34.0 there is also an **account layer** (`src/core/session.j
 `src/modules/account.js`) for a reader who is *already* logged in: vote, reply, and the
 sidebar's doors to the composer. Three rules keep the two from bleeding into each other:
 
-- **Nothing that needs a session may render for a logged-out reader.** The layer is on only
+- **One login affordance, and only one** (owner decision, 2026-09-09): the account corner
+  says `logged out` and links to Reddit's login page. That is a reversal of the blanket
+  rule this section used to carry, and the reasoning is worth keeping: the objection was
+  always to Reddit's *unremovable interstitial* — a wall with no close button, half a
+  minute into reading — not to a reader who keeps an account being told where the door is,
+  once, in the corner where a door has always been. Anything that nags, blocks, interrupts
+  or appears unbidden mid-page is still the thing this project exists to remove.
+- **Nothing else that needs a session may render for a logged-out reader.** The layer is on only
   when `SHD.session.active()` says so, and that answer requires an *affirmative* logged-in
   signal (`C.SESSION`) — never "no login button, therefore logged in". `save` and `report`
   were removed in the logged-out era for shipping as links that navigated; if they come

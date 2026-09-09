@@ -354,12 +354,26 @@ Every miss returns the step it missed and has one floor: the box stays with the 
 status names the step, and Reddit's own composer is revealed in place (passthrough, §5
 tier 3) so the reader finishes there. The reply is never discarded on a failure.
 
-**The account corner** (0.35.0) is the layer's only unprompted mark on the page: old
-reddit's `#header-bottom-right`, rendered last in `#shd-header` so it lands at the far
-right. `session.js` reads the reader's name and avatar out of Reddit's own header —
+**The account corner** (0.41.0, opened in 0.42.0) is the layer's only unprompted mark on
+the page: old reddit's `#header-bottom-right`, rendered last in `#shd-header` so it lands at
+the far right. `session.js` reads the reader's name and avatar out of Reddit's own header —
 scoped there, because a `/user/` link anywhere else on the page belongs to a post's author
 and naming the reader after one is the worst failure this layer can produce. Both reads are
-optional: the corner stands, and says the session is live, without either.
+optional: the corner stands, and says the session is live, without either, and it caches
+only a COMPLETE reading so a name that hydrates late is picked up when the menu opens.
+
+The corner is a button onto a menu of Reddit's own account pages. Every item is tier 1 (a
+link) except **log out**, which is tier 2 and the strictest delegation in the codebase:
+Sheddit cannot build a logout request — that is a POST carrying Reddit's CSRF token — so it
+opens Reddit's user drawer (`C.USER_DRAWER`), clicks Reddit's own item, and measures the
+session's disappearance before reloading. The text matcher is ANCHORED and an ambiguous
+drawer is refused outright, which is `answerAgeGate`'s rule applied to the one action with
+no undo: a mis-clicked reply costs a comment, a mis-clicked session costs the session. Every
+miss reveals Reddit's own drawer in place, the same floor the reply box falls to.
+
+Logged out the corner is one link to Reddit's login page — the extension's only login
+affordance, added by owner decision on 2026-09-09 and recorded in CONTRIBUTING's scope
+section, which the rule it reverses used to live in.
 
 **Post** is a link. Old reddit's *Submit a new link / text post* sidebar doors onto
 `C.SUBMIT`'s route, which `route.js` classifies `OTHER` and the gate never suppresses — the
