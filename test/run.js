@@ -1951,23 +1951,72 @@ async function boot(html, url, setup) {
     check('an answered gate is not hammered on later mutations',
       gate.dataset.clicked === undefined, `clicked again: ${gate.dataset.clicked}`);
 
-    // THE TRAP from C.AGE_GATE: a decline whose text contains "18". A bare /18/ matcher
-    // clicks it and navigates the user away — the one outcome worse than doing nothing.
-    const trap = mkGate(doc, [['maybe', 'Continuar (18)'], ['under', 'No, I am under 18']]);
+    // THE TRAP from C.AGE_GATE: a decline whose text contains "18". The affirm test is
+    // the literal 18, so this is the pair that would click the DECLINE and navigate the
+    // reader away — the one outcome worse than doing nothing. The affirmative here says
+    // nothing about age, so the only 18-bearing button is the one we must not press.
+    const trap = mkGate(doc, [['ok', 'Continue'], ['under', 'No, I am under 18']]);
     doc.body.classList.add('rpl-scroll-lock');
     await hold(150);
-    check('a gate with no confident affirmative is left unclicked',
+    check('a gate whose only 18 is on the decline is left unclicked',
       trap.dataset.clicked === undefined, `clicked=${trap.dataset.clicked}`);
     check('...and falls back to suppression: still in the DOM, lock stripped',
       !!trap.isConnected && !doc.body.classList.contains('rpl-scroll-lock'));
 
-    // Two plausible affirmatives is also ambiguity — Reddit A/B-ing button copy must not
-    // turn into a coin flip.
-    const twins = mkGate(doc, [['a', 'Yes, continue'], ['b', 'Yes, I am over 18']]);
+    // Two plausible affirmatives is ambiguity — Reddit A/B-ing button copy must not turn
+    // into a coin flip. Both of these claim an age and neither declines, so there is no
+    // basis to choose and the rule is hands off.
+    const twins = mkGate(doc, [['a', 'I am 18 or older'], ['b', 'Continue — 18+']]);
     doc.body.classList.add('rpl-scroll-lock');
     await hold(150);
     check('two affirmative-looking buttons mean hands off',
       twins.dataset.clicked === undefined, `clicked=${twins.dataset.clicked}`);
+
+    /* THE PROMO THAT LOOKED LIKE A GATE. `configured-xpromo` is Reddit's CROSS-PROMOTION
+       container, not the age gate's — it dresses "Open in app" interstitials too — and
+       the affirm test used to accept a bare "yes". An app-install prompt offering
+       `Yes` / `Not now` therefore satisfied every guard: `\bno\b` does not match "Not",
+       so the decline test cleared it, leaving exactly one affirmative match and a click
+       on an app-install control.
+
+       TWO GUARDS NOW STOP IT AND THEY GET AN ASSERTION EACH, because either alone leaves
+       the other's hole open and would read as covered. */
+    const promo = mkGate(doc, [['yes', 'Yes'], ['not', 'Not now']]);
+    promo.className = 'rpl-dialog configured-xpromo';        // a promo, not the gate modal
+    doc.body.classList.add('rpl-scroll-lock');
+    await hold(150);
+    check('an "open in app" promo is not the age gate, and is not clicked',
+      promo.dataset.clicked === undefined, `clicked=${promo.dataset.clicked}`);
+
+    // ...and the text guard holds on its own, on a host that IS the modal shape.
+    const modalPromo = mkGate(doc, [['yes2', 'Yes'], ['not2', 'Not now']]);
+    doc.body.classList.add('rpl-scroll-lock');
+    await hold(150);
+    check('...nor is a modal whose affirmative never mentions an age',
+      modalPromo.dataset.clicked === undefined, `clicked=${modalPromo.dataset.clicked}`);
+
+    /* THE HOST GUARD ON ITS OWN. The case above is refused by the TEXT test whatever the
+       host class says, so it cannot tell whether the host narrowing does anything. This
+       one can: an age-worded promo that is not the blocking dialog — an inline "18+
+       content, open in app" banner is the shape — passes the text test completely and
+       must still be left alone, because pressing a banner is not answering a gate. */
+    const agePromo = mkGate(doc, [['open', 'Yes, I am over 18 — open in app'],
+                                  ['later', 'Maybe later']]);
+    agePromo.className = 'rpl-dialog configured-xpromo';      // no -modal: not the gate
+    doc.body.classList.add('rpl-scroll-lock');
+    await hold(150);
+    check('an age-worded promo that is not the blocking dialog is still left alone',
+      agePromo.dataset.clicked === undefined, `clicked=${agePromo.dataset.clicked}`);
+
+    /* THE DECLINE TEST'S OWN CASE. "No" and "under" already cover the captured copy; the
+       pair that needs `not` is a decline phrased without either, on a gate where both
+       buttons mention 18. Without it BOTH read as affirmatives, and the exactly-one rule
+       refuses a gate it should have answered. */
+    const notGate = mkGate(doc, [['ok', 'I am 18 or older'], ['no18', 'I am not 18']]);
+    doc.body.classList.add('rpl-scroll-lock');
+    await waitFor(() => notGate.dataset.clicked !== undefined, { timeout: 1000 });
+    check('a decline phrased "I am not 18" is recognised, so the gate is still answered',
+      notGate.dataset.clicked === 'ok', `clicked=${notGate.dataset.clicked}`);
   }
   {
     // The 18+ shape specifically: the gate is a modal over a POPULATED feed (verified live
@@ -5031,11 +5080,15 @@ async function boot(html, url, setup) {
        there is nothing of ours on that page — bug 52's argument arriving through a host
        we were never on. src/core/oldreddit.js is the only script that runs there.
 
-       It ships ALONE — no contracts.js, no themes, no route.js — so this section boots it
-       by itself rather than through the dev bundle. That is also the honest model of the
-       manifest entry that delivers it. */
-    const OLD_SRC = fs.readFileSync(
-      path.join(__dirname, '..', 'src', 'core', 'oldreddit.js'), 'utf8');
+       It ships with route.js AND NOTHING ELSE — no contracts.js, no themes, no pipeline —
+       so this section boots those two by themselves rather than through the dev bundle.
+       That is also the honest model of the manifest entry that delivers them, and the
+       pair is not optional: targetFor() asks classify() whether the destination is a page
+       this extension renders, and a bootOld that omitted route.js would be testing a
+       module the browser never runs alone. */
+    const OLD_SRC = ['route', 'oldreddit']
+      .map(n => fs.readFileSync(path.join(__dirname, '..', 'src', 'core', `${n}.js`), 'utf8'))
+      .join('\n;\n');
 
     /**
      * A jsdom window at `url` with the module evaluated in it.
@@ -5077,6 +5130,25 @@ async function boot(html, url, setup) {
       targetFor('https://old.reddit.com/r/x/comments/a/b/?sort=new#c1') ===
       'https://www.reddit.com/r/x/comments/a/b/?sort=new#c1',
       targetFor('https://old.reddit.com/r/x/comments/a/b/?sort=new#c1'));
+
+    /* ONLY THE PATHS THIS EXTENSION RENDERS.
+       The hop is worth making because www serves the page and Sheddit draws it in the
+       layout the link asked for. Off the routes Sheddit takes, neither half is true:
+       these pages either differ on www or do not exist there, and Sheddit hands every
+       one of them back untouched — so rewriting them broke old.reddit for the readers
+       who can still use all of it, logged-in moderators, and did it by default. */
+    for (const p of ['/prefs/', '/message/inbox/', '/r/x/about/modqueue', '/r/x/wiki/index',
+                     '/search/?q=cats', '/user/someone/comments/abc/title/']) {
+      check(`a path Sheddit does not render is left on old.reddit: ${p}`,
+        targetFor(`https://old.reddit.com${p}`) === null,
+        String(targetFor(`https://old.reddit.com${p}`)));
+    }
+    // ...and the counterweight, or an over-tight allowlist would read as a pass above.
+    for (const p of ['/', '/r/aww/', '/r/aww/top/', '/user/someone/', '/r/x/comments/a/b/']) {
+      check(`...while a path it does render still hops: ${p}`,
+        targetFor(`https://old.reddit.com${p}`) === `https://www.reddit.com${p}`,
+        String(targetFor(`https://old.reddit.com${p}`)));
+    }
 
     /* The login wall is the URL this script actually runs on. The 302 is server-side, so
        no document is ever created for the link the reader clicked — swapping only the
@@ -5278,8 +5350,31 @@ async function boot(html, url, setup) {
       check('...at document_start, with the stylesheet that paints the notice',
         entry.run_at === 'document_start' &&
         (entry.css || []).includes('src/styles/redirect.css'), JSON.stringify(entry));
-      check('...alone, so a page we are leaving does not load the whole renderer',
-        entry.js.length === 1, JSON.stringify(entry.js));
+      /* route.js rides along and nothing else does. targetFor() asks classify() whether
+         the destination is a page this extension actually renders — without it the hop
+         rewrote /prefs/, /message/inbox/, wiki and modqueue paths onto www, where they
+         differ or do not exist, and it did that by default. Reusing route.js is what
+         keeps ONE definition of "a page we render"; a second list here would drift.
+         Everything past those two would make a page we are LEAVING pay for the renderer. */
+      check('...with route.js, and nothing that renders',
+        JSON.stringify(entry.js) ===
+          JSON.stringify(['src/core/route.js', 'src/core/oldreddit.js']),
+        JSON.stringify(entry.js));
+      /* What makes that safe, asserted rather than assumed: route.js is inert until
+         start() is called, so delivering it to old.reddit costs a regex and no observers.
+         If it ever grows a load-time listener this is the row that says so. */
+      {
+        const probe = new JSDOM('<!DOCTYPE html><html><body></body></html>',
+          { url: 'https://old.reddit.com/r/x/', runScripts: 'outside-only' });
+        let registered = 0;
+        probe.window.addEventListener = () => { registered++; };
+        probe.window.eval(fs.readFileSync(
+          path.join(__dirname, '..', 'src', 'core', 'route.js'), 'utf8'));
+        check('...and route.js registers nothing until start() is called',
+          registered === 0 && typeof probe.window.SHD.route.classify === 'function',
+          `${registered} listeners at load`);
+        probe.window.close();
+      }
       check('...in the isolated world, which is where chrome.storage exists',
         (entry.world || 'ISOLATED') === 'ISOLATED', String(entry.world));
       check('...and in the top frame only, so an embedded old.reddit is left alone',
@@ -5456,11 +5551,39 @@ async function boot(html, url, setup) {
     check('a non-https url in the answer is replaced with the download page, never linked',
       hostile.__local.update.url === lit(BG_SRC, 'HOME'), hostile.__local.update.url);
 
-    /* An answer with no version is not an answer. Storing it would stamp `at`, which
-       silences the next twenty hours of checks on the strength of nothing. */
+    /* An answer with no version is not an answer, and none of it is stored as one — but
+       the ATTEMPT is stamped, and that half is load-bearing. The floor is read from this
+       record, so an attempt that leaves nothing behind is an attempt the floor cannot
+       see: with no stamp on the failure paths, a reader whose network blocks
+       raw.githubusercontent.com sends a fresh request at every browser start and every
+       extension update, without limit. */
     const junk = mkCtx({ fetch: () => Promise.resolve({ ok: true, json: async () => ({}) }) });
     await junk.SHD_BG.maybeCheck();
-    check('an answer with no version is not stored at all', junk.__local.update === undefined);
+    check('an answer with no version stores no version',
+      junk.__local.update && junk.__local.update.version === undefined,
+      JSON.stringify(junk.__local.update));
+    check('...but the attempt is stamped, so a failing endpoint cannot loop for ever',
+      typeof junk.__local.update.at === 'number' && junk.__local.update.ok === false,
+      JSON.stringify(junk.__local.update));
+
+    /* And it is stamped on the SHORT floor, not the full day: a blip must not silence the
+       check until tomorrow, which is what the original no-stamp reasoning was protecting
+       and was right to. An hour bounds the loop; twenty would over-correct. */
+    let tries = 0;
+    const failing = mkCtx({ fetch: () => { tries++; return Promise.reject(new Error('blocked')); } });
+    await failing.SHD_BG.maybeCheck();
+    check('a network failure is stamped too — the loop is bounded either way',
+      tries === 1 && failing.__local.update && failing.__local.update.ok === false,
+      JSON.stringify(failing.__local.update));
+    await failing.SHD_BG.maybeCheck();
+    check('...and the very next browser start does not send another',
+      tries === 1, `${tries} requests`);
+    // Two hours back: past the retry floor, nowhere near the twenty-hour success floor.
+    // A failure retries the same day; an answer would not.
+    failing.__local.update.at = Date.now() - 2 * 3600 * 1000;
+    await failing.SHD_BG.maybeCheck();
+    check('...but it retries within the hour-scale floor, not the twenty-hour one',
+      tries === 2, `${tries} requests`);
 
     /* Packaging. The worker is not a content script and must never be bundled into one —
        it would run in a page, where chrome.runtime.onStartup does not exist — but it does
@@ -5734,6 +5857,11 @@ async function boot(html, url, setup) {
       state.clicks.submit++;
       const text = editor.tagName === 'TEXTAREA' ? editor.value : editor.textContent;
       state.received.push(text);
+      /* THE ONE FAILURE ON THE FAR SIDE OF THE SUBMIT. Reddit took the click and then
+         nothing observable happened — no comment under the target, composer still there,
+         editor still full — which is what a slow post and a failed post look like alike.
+         compose() waits arriveWaitMs and reports step 'arrival'. */
+      if (opts.silentSubmit) return;
       setTimeout(() => {
         const parentDepth = isComment ? Number(source.getAttribute('depth')) : -1;
         const id = opts.newId || `t1_new_${isComment ? source.getAttribute('thingid') : 'top'}`;
@@ -6354,6 +6482,34 @@ async function boot(html, url, setup) {
       formOf('t1_c8')?.querySelector('.shd-reply-status')?.textContent);
     window.SHD.dom.passthroughClear();
 
+    /* --- ARRIVAL IS THE ONE STEP PAST THE SUBMIT, AND IT MUST NOT INVITE A SECOND ONE ---
+       Every other miss here happens BEFORE submit.click(), so carrying the draft into
+       Reddit's box and saying "press reply" is exactly right. `arrival` means the button
+       WAS pressed and no comment showed up inside arriveWaitMs — which is as consistent
+       with a slow post as a failed one. Doing the ordinary handoff there pre-fills
+       Reddit's composer with the same text and tells the reader to press reply, so a
+       comment that posted slowly gets posted twice on our own instruction. */
+    const c9 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c9"]'),
+      { reply: true, composer: 'textarea', silentSubmit: true });
+    click(window, row('t1_c9').querySelector('a.reply'));
+    formOf('t1_c9').querySelector('textarea').value = 'Might already be posted.';
+    formOf('t1_c9').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    const settledC9 = await waitFor(() => formOf('t1_c9')?.dataset.shdCarried, { timeout: 6000 });
+    check('a submit that never lands reports the step past the button',
+      settledC9 && formOf('t1_c9').dataset.shdStep === 'arrival',
+      formOf('t1_c9')?.dataset.shdStep);
+    check('...and the reader is told it may already have posted, not told to post again',
+      /may already have posted/.test(formOf('t1_c9').querySelector('.shd-reply-status').textContent) &&
+      !/press its own reply button/.test(formOf('t1_c9').querySelector('.shd-reply-status').textContent),
+      formOf('t1_c9').querySelector('.shd-reply-status').textContent);
+    check('...so nothing is carried into Reddit\'s box for a second press',
+      formOf('t1_c9').dataset.shdCarried === 'no', formOf('t1_c9').dataset.shdCarried);
+    check('...and Reddit\'s own submit was pressed exactly once',
+      c9.clicks.submit === 1, String(c9.clicks.submit));
+    check('...while the draft stays in our form, where re-sending is deliberate',
+      formOf('t1_c9').querySelector('textarea').value === 'Might already be posted.');
+    window.SHD.dom.passthroughClear();
+
     check('no console errors while replying',
       logs.filter(l => l.startsWith('error') || l.startsWith('jsdomError')).length === 0, logs.join(' | '));
   }
@@ -6425,6 +6581,156 @@ async function boot(html, url, setup) {
     const front = await boot(listingPage({ loggedIn: true }), 'https://www.reddit.com/', noAuto);
     check('the front page\'s door is the site-wide composer, where Reddit asks which community',
       front.doc.querySelector('.shd-submit a.shd-submit-link')?.getAttribute('href') === '/submit/?type=LINK');
+  }
+
+  /* ================================================================== *
+   * THE ADVERSARIAL-REVIEW ROUND (0.43.0)
+   *
+   * Each block below pins a fix that a full read of the tree turned up, and every one of
+   * them SURVIVED its mutation row before these were written — which is the only reason
+   * they exist as their own section rather than being folded in beside their subject. A
+   * fix nothing asserts is not protected, however obviously correct it looks.
+   * ================================================================== */
+  console.log('\n\x1b[1mADVERSARIAL ROUND — HOSTS, MARKS, ESCAPES AND CLONES\x1b[0m');
+  {
+    /* REDDIT'S OTHER SUBDOMAINS ARE OTHER APPLICATIONS. classify() reads the PATH, so `/`
+       on business.reddit.com answers LISTING and the pipeline engages — measured live on
+       a marketing site, which came back carrying html.shd-gate (visibility: hidden) and
+       our version and theme stamps, blanked until the 1500ms tick. */
+    for (const host of ['business.reddit.com', 'ads.reddit.com', 'mod.reddit.com',
+                        'chat.reddit.com', 'support.reddit.com']) {
+      const { doc } = await boot(listingPage(), `https://${host}/`);
+      check(`${host} is not ours: no blackout, no stamps`,
+        !doc.documentElement.classList.contains('shd-gate') &&
+        !doc.documentElement.hasAttribute('data-shd-version') &&
+        !doc.querySelector('#shd-root'),
+        doc.documentElement.outerHTML.slice(0, 120));
+    }
+    // The counterweight, or an over-tight host test would read as a pass above.
+    for (const host of ['www.reddit.com', 'reddit.com', 'sh.reddit.com']) {
+      const { doc } = await boot(listingPage(), `https://${host}/`);
+      check(`...while ${host} still renders`, !!doc.querySelector('#shd-root .thing.link'));
+    }
+    // And the manifest must agree, or the runtime guard is the only thing standing.
+    {
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'));
+      const shreddit = manifest.content_scripts.filter(cs =>
+        !(cs.js || []).includes('src/core/oldreddit.js'));
+      check('the manifest matches the hosts it renders, not every reddit.com subdomain',
+        shreddit.length > 0 && shreddit.every(cs =>
+          JSON.stringify(cs.matches) === JSON.stringify(
+            ['*://reddit.com/*', '*://www.reddit.com/*', '*://sh.reddit.com/*'])),
+        JSON.stringify(shreddit.map(cs => cs.matches)));
+    }
+  }
+
+  {
+    /* A ROUTE WE HAND BACK IS LEFT ALONE, and an attribute is as much a mark as an
+       element. standDown() clears ours, and the gate's `load` listener runs after it —
+       measured live on /search/, which carried data-shd-waiting="no-feed-container" on a
+       page classified OTHER. Un-blanking still happens: that is the removal of a mark. */
+    /* A page with NOTHING to render on it, which is what makes the mark reachable:
+       nothingToRender() has to answer truthily before unblank() is ever called, and a
+       listing full of posts never gets there. This is the live shape — /search/ carries
+       no shreddit-feed at all. */
+    const searchPage = `<!DOCTYPE html><html><head><title>reddit</title></head><body>
+      <shreddit-app><div id="main-content"><h1>Search results</h1></div></shreddit-app>
+      </body></html>`;
+    const { doc } = await boot(searchPage, 'https://www.reddit.com/search/?q=cats');
+    await hold(300);
+    check('an unhandled route is not marked with our diagnostics',
+      !doc.documentElement.hasAttribute('data-shd-waiting'),
+      doc.documentElement.getAttribute('data-shd-waiting'));
+    check('...but it is not left blanked either',
+      !doc.documentElement.classList.contains('shd-gate'));
+    check('...and nothing of ours is on it',
+      !doc.querySelector('#shd-root') && !doc.querySelector('#shd-header'));
+  }
+
+  {
+    /* A ROW LOOKUP IS A CSS SELECTOR, AND REDDIT PICKS THE IDS. `t3_`/`t1_` are safe
+       today, which is what makes an unescaped interpolation the kind of thing that stays
+       broken: one `"` or `\` makes the string invalid CSS, querySelector throws inside
+       flush(), and eight of those spend the whole error budget on a page that is fine. */
+    const { window, doc } = await boot(listingPage(), 'https://www.reddit.com/');
+    const { rowSel } = window.SHD.dom;
+    const hostile = 't3_a"]:root,*{x:1}//\\';
+    check('a hostile id still produces a selector the engine will parse',
+      (() => { try { doc.querySelector(rowSel(hostile)); return true; } catch { return false; } })(),
+      rowSel(hostile));
+    check('...and it stays scoped to that one id, not widened into a comma selector',
+      !/^\.thing\[data-fullname="t3_a"\]/.test(rowSel(hostile)) &&
+      rowSel(hostile).startsWith('.thing[data-fullname="') &&
+      rowSel(hostile).endsWith('"]'), rowSel(hostile));
+    check('...while an ordinary id is untouched',
+      rowSel('t3_link1') === '.thing[data-fullname="t3_link1"]', rowSel('t3_link1'));
+    // The control: the escape is only worth anything if the plain lookup still matches.
+    check('control: a real row is still found through it',
+      !!doc.querySelector(`#shd-root ${rowSel('t3_link1')}`));
+  }
+
+  {
+    /* A CLONED <script> LOSES ITS ALREADY-STARTED FLAG AND RUNS ON INSERTION, and the
+       same insertion revives iframes, objects and embeds. Reddit sanitises what it
+       renders, so this is defence in depth — but dom.js promises "no innerHTML with
+       data" as though the question were settled, and for a subtree we did not author it
+       is not. */
+    const { window, doc } = await boot(listingPage(), 'https://www.reddit.com/');
+    const body = doc.createElement('div');
+    body.innerHTML = '<p>kept</p><script>window.__shdPwned = 1;<\/script>' +
+                     '<iframe src="about:blank"></iframe><object></object><embed>' +
+                     '<a href="/r/x/">a link, kept</a>';
+    const copy = window.SHD.dom.adoptBody(body);
+    check('a cloned body brings its prose and links across',
+      copy.querySelector('p')?.textContent === 'kept' && !!copy.querySelector('a'));
+    check('...and none of its executable elements',
+      copy.querySelectorAll('script, iframe, object, embed').length === 0,
+      copy.innerHTML.slice(0, 160));
+    doc.body.appendChild(copy);
+    await hold(30);
+    check('...so inserting it runs nothing', window.__shdPwned === undefined);
+  }
+
+  {
+    /* A MALFORMED %-ESCAPE THROWS URIError, and readIdentity() runs under flush() — so
+       one bad href in Reddit's own header would spend an error-budget slot on a page
+       that is otherwise perfect. Every other parse in session.js was already guarded. */
+    const { window, doc } = await boot(listingPage({ loggedIn: true }), 'https://www.reddit.com/');
+    /* The header's OWN link is rewritten rather than a second one added beside it:
+       session.js takes the first candidate that parses, so an extra malformed link would
+       quite correctly be stepped over and the guard never reached. */
+    const bad = doc.querySelector(window.SHD.C.SESSION.username);
+    check('setup: the fixture header really does carry a username link', !!bad);
+    bad.setAttribute('href', '/user/bad%zz/');
+    window.SHD.session.reset();
+    let threw = false, name = null;
+    try { name = window.SHD.session.username(); } catch { threw = true; }
+    check('a malformed username href does not throw out of session.js', !threw);
+    check('...and the raw segment is used rather than the name being lost',
+      name === 'bad%zz', String(name));
+    /* The control: this really is the path that decodes, so the assertion above is not
+       passing because nothing was parsed at all. */
+    bad.setAttribute('href', '/user/a%20name/');
+    window.SHD.session.reset();
+    check('control: a well-formed escape is still decoded',
+      window.SHD.session.username() === 'a name', String(window.SHD.session.username()));
+  }
+
+  {
+    /* THE PACKAGER SHIPPED A DOTFILE. `.DS_Store` is created by the Finder inside src/,
+       it is gitignored so it exists on one machine and not in the repository, and it
+       went into both store zips. It also broke `--check` everywhere else: the checker
+       walks a tree without it, finds it in the zip, and calls it a removed file — so the
+       package check could only pass on the machine that created the problem. */
+    const { isPacked } = require('../package-extension.js');
+    check('a dotfile anywhere in the tree is not packed',
+      !isPacked('src/.DS_Store') && !isPacked('.DS_Store') &&
+      !isPacked('icons/.thumbs/x.png'));
+    check('...nor is documentation', !isPacked('icons/README.md'));
+    check('control: everything the browser loads still is',
+      isPacked('src/core/gate.js') && isPacked('manifest.json') &&
+      isPacked('src/styles/old-reddit.css') && isPacked('options/options.html'));
   }
 
   console.log('\n\x1b[1mTHE ACCOUNT LAYER\'S WIRING\x1b[0m');

@@ -27,18 +27,22 @@ const CSS = ['src/styles/suppress.css', 'src/styles/old-reddit.css', 'src/styles
              'src/styles/redirect.css'];
 const JS = [
   'src/config/contracts.js',
+  // route.js sits at document_start in the manifest, and ahead of BOTH the modules that
+  // consult it: gate.js's not-started branch asks classify() whether the URL is one the
+  // pipeline will take (on a streamed page that question comes before route.js would
+  // load at idle), and themes.js asks rendersHost() before stamping the theme onto a
+  // page this extension does not render. It has no dependencies of its own — a test
+  // asserts it registers nothing until start() is called.
+  'src/core/route.js',
   'src/config/themes.js',
   // In the extension this runs in the page's MAIN world (manifest "world": "MAIN"); the
   // dev harness has only one world, so it simply registers its listener alongside
   // everything else. Either way it must load before paginator.js dispatches to it.
   'src/core/bridge.js',
-  // route.js sits at document_start in the manifest (before gate.js): the gate's
-  // not-started branch asks classify() whether the URL is one the pipeline will take,
-  // and on a streamed page that question is asked before route.js would load at idle.
-  'src/core/route.js',
   'src/core/gate.js',
-  // Only ever acts on old.reddit.com, where the manifest delivers it alone at
-  // document_start; on any other host targetFor() returns null and start() does nothing.
+  // Only ever acts on old.reddit.com, where the manifest delivers it at document_start
+  // behind route.js — whose classify() is what keeps the hop to the paths this extension
+  // actually renders; on any other host targetFor() returns null and start() does nothing.
   // It is here because the drift check below is a check on the SET of files that ship,
   // and a file exempted from it is a file that can go missing unnoticed.
   'src/core/oldreddit.js',

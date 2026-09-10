@@ -85,8 +85,15 @@ const hash = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
    The rule is stated twice, once for each half of this file, because the builder hands the
    directories to `zip` and the checker walks them itself. They cannot drift silently:
    --check compares the two sets and fails on the first file only one of them has. */
-const UNPACKED = '*.md';
-const isPacked = (rel) => !rel.endsWith('.md');
+/* Dotfiles too, and `.DS_Store` is the one that actually happened: it is created by the
+   Finder inside src/, it is gitignored so it exists on one machine and not in the
+   repository, and `isPacked` let it into both store zips. It also broke `--check` on
+   every OTHER machine — the checker walks a tree that has no such file, finds it in the
+   zip, and reports it as removed — so the package check could only pass where the file
+   was. Nothing this extension loads begins with a dot. */
+const UNPACKED = ['*.md', '.*', '*/.*'];
+const isPacked = (rel) =>
+  !rel.endsWith('.md') && !rel.split('/').some(seg => seg.startsWith('.'));
 
 // Every shippable file, as repo-relative paths — the set each zip is supposed to hold.
 function walk(rel) {
@@ -147,7 +154,7 @@ function check() {
 function buildTarget({ out, transform }, { quiet = false } = {}) {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   if (fs.existsSync(out)) fs.unlinkSync(out);
-  const zipArgs = ['-r', '-X', ...(quiet ? ['-q'] : []), out, ...ENTRIES, '-x', UNPACKED];
+  const zipArgs = ['-r', '-X', ...(quiet ? ['-q'] : []), out, ...ENTRIES, '-x', ...UNPACKED];
   if (!transform) {
     execFileSync('zip', zipArgs, { cwd: ROOT, stdio: 'inherit' });
   } else {
@@ -156,7 +163,10 @@ function buildTarget({ out, transform }, { quiet = false } = {}) {
     const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'sheddit-pkg-'));
     try {
       for (const rel of ENTRIES.filter((e) => e !== 'manifest.json')) {
-        fs.cpSync(path.join(ROOT, rel), path.join(stage, rel), { recursive: true });
+        /* Same rule as isPacked(), applied to the staging copy: a dotfile that reaches
+           the stage reaches the Firefox zip regardless of what `zip -x` is told. */
+        fs.cpSync(path.join(ROOT, rel), path.join(stage, rel),
+          { recursive: true, filter: (src) => !path.basename(src).startsWith('.') });
       }
       fs.writeFileSync(path.join(stage, 'manifest.json'),
         renderManifest(transform(JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8')))));
@@ -177,5 +187,5 @@ function build() {
   }
 }
 
-module.exports = { firefoxManifest, renderManifest, buildTarget, GECKO_ID };
+module.exports = { firefoxManifest, renderManifest, buildTarget, isPacked, GECKO_ID };
 if (require.main === module) process.argv.includes('--check') ? check() : build();

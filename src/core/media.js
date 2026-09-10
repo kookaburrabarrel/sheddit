@@ -20,8 +20,9 @@
  * having fetched the file, which requires already knowing the name. The manifest is the
  * only thing that breaks that circle without guessing.
  *
- * THE ONE REQUEST. This module contains the extension's only `fetch`. It is a GET of a
- * static XML file from a CDN — no endpoint, no API, no credentials, no cookies
+ * THE REQUEST. This module holds one of the extension's three `fetch` calls — the other
+ * two are update.js and background.js, both asking GitHub for the same static version
+ * file, and PRIVACY.md lists all three. This one is a GET of a static XML file from a CDN — no endpoint, no API, no credentials, no cookies
  * (`credentials: 'omit'`), and it happens only when a reader opens a video post's comments
  * page with `inlineVideo` on. `v.redd.it` answers it with `access-control-allow-origin: *`,
  * which is why no new host permission is needed. PRIVACY.md documents it; before 0.16.0

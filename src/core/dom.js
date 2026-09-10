@@ -136,6 +136,27 @@ SHD.dom = (() => {
     return video;
   }
 
+  /**
+   * Take a copy of one of Reddit's own rendered bodies, for use inside our layout.
+   *
+   * The clone is the right call and is not in question: it keeps links, code blocks,
+   * blockquotes and spoilers intact with no markdown re-parse of our own. What it also
+   * does is carry a subtree WE DID NOT AUTHOR across into a document we control, and a
+   * cloned <script> loses its "already started" flag — so it executes on insertion.
+   * Iframes, objects and embeds come alive the same way.
+   *
+   * Reddit sanitises what it renders, so this is defence in depth rather than a live
+   * hole. It is here because the header of this file promises "no innerHTML with data"
+   * as though the question were settled, and for someone else's subtree it is not.
+   * Four tag names cost nothing and remove the whole class.
+   */
+  function adoptBody(node) {
+    if (!node) return null;
+    const copy = node.cloneNode(true);
+    copy.querySelectorAll?.('script, iframe, object, embed').forEach(n => n.remove());
+    return inlineGifs(copy);
+  }
+
   /* ------------------------------------------------------------------ *
    * Shadow-piercing lookup
    * ------------------------------------------------------------------ */
@@ -238,6 +259,25 @@ SHD.dom = (() => {
     document.documentElement.classList.remove('shd-passthrough-active');
   }
 
-  return { h, score, ago, domain, plural, inlineGifs,
+  /**
+   * The selector for a rendered row, with the id ESCAPED.
+   *
+   * Five call sites built this by interpolating a Reddit id straight into an attribute
+   * selector. Reddit's ids are `t3_…`/`t1_…` and safe today, which is exactly what makes
+   * this the kind of thing that stays broken: one `"` or `\` in an id — Reddit's choice,
+   * not ours, and it can change without notice — turns the string into invalid CSS and
+   * `querySelector` throws a SyntaxError. Inside flush() that lands in gate.reportError,
+   * and eight of them spend the whole error budget and put the failure card over a page
+   * that is fine.
+   *
+   * Escaping the two characters that can end a quoted CSS string is the whole fix, and
+   * it is preferred to CSS.escape here: that function escapes for use as an IDENTIFIER,
+   * so it also rewrites leading digits and spaces into hex escapes that are merely
+   * verbose inside quotes. Backslash and double quote are the injection surface.
+   */
+  const rowSel = (id) =>
+    `.thing[data-fullname="${String(id).replace(/["\\]/g, '\\$&')}"]`;
+
+  return { h, score, ago, domain, plural, inlineGifs, adoptBody, rowSel,
            deepQuery, shadowRoots, passthrough, passthroughClear };
 })();

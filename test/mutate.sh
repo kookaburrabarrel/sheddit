@@ -95,6 +95,7 @@ ROWS_RUN=0
 ROWS_CAUGHT=0
 ROWS_SURVIVED=0
 ROWS_MISSED=0
+ROWS_NOBROWSER=0
 
 mutate() { # mutate <name> <suite> <file old new>...
   local name="$1" suite="$2"; shift 2
@@ -104,8 +105,19 @@ mutate() { # mutate <name> <suite> <file old new>...
     printf '  %-56s ANCHOR MISS\n' "$name"; restore; return
   fi
   node build.js >/dev/null 2>&1
-  local n
-  n=$(node "test/$suite.js" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c '^  FAIL')
+  local out n
+  out=$(node "test/$suite.js" 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+  n=$(printf '%s' "$out" | grep -c '^  FAIL')
+  # A BROWSER SUITE WITH NO BROWSER IS NOT A RESULT, AND IT LOOKS LIKE ONE BOTH WAYS.
+  # Unset, SHEDDIT_REQUIRE_BROWSER makes the suite print SKIP and exit clean, so every
+  # row reads SURVIVED. Set to 1 it makes the suite print a line beginning "  FAIL" and
+  # exit 1 — so every row reads "caught (1)", a whole suite's worth of rows reporting a
+  # bug they caught without a browser ever having launched. Neither is evidence.
+  if printf '%s' "$out" | grep -qE '^  SKIP|SHEDDIT_REQUIRE_BROWSER=1 turns this skip'; then
+    ROWS_NOBROWSER=$((ROWS_NOBROWSER + 1))
+    printf '  \033[33m%-56s %-10s NO BROWSER\033[0m\n' "$name" "$suite"
+    restore; node build.js >/dev/null 2>&1; return
+  fi
   if [ "$n" -eq 0 ]; then
     ROWS_SURVIVED=$((ROWS_SURVIVED + 1))
     printf '  \033[31m%-56s %-10s SURVIVED\033[0m\n' "$name" "$suite"
@@ -147,8 +159,8 @@ mutate "passthrough tags the target, not the body child" geometry \
 # Mutating either alone is survivable, so this restores the original pair.
 mutate "chrome never rebuilt after an SPA navigation (original pair)" run \
   src/core/pipeline.js '    if (rendered > 0) {
-      if (SHD.settings.chrome)' '    if (rendered > 0 && !SHD.gate.revealed) {
-      if (SHD.settings.chrome)' \
+      // A feed that was empty when we asked' '    if (rendered > 0 && !SHD.gate.revealed) {
+      // A feed that was empty when we asked' \
   src/core/gate.js '    revealed = false;
     engaged = false;                      // the incoming route has not been taken yet' \
                    '    engaged = false;                      // the incoming route has not been taken yet'
@@ -158,6 +170,7 @@ mutate "reset() leaves the stale header behind" run \
 
 mutate "failure leaves our unstyled DOM on the page" run \
   src/core/gate.js "    document.documentElement.classList.remove('shd-gate', SHD.C.BODY_CLASS);
+    document.documentElement.removeAttribute('data-shd-empty');   // our listing is gone with it
     document.getElementById(SHD.C.ROOT_ID)?.remove();" "    document.documentElement.classList.remove('shd-gate', SHD.C.BODY_CLASS);"
 
 mutate "nothing guards an in-flight flush (guard + queue clear)" run \
@@ -194,8 +207,10 @@ mutate "a released page re-suppresses itself on the next navigation" run \
   src/core/gate.js '    if (released) return;                 // the user asked for native Reddit; respect it' ''
 
 mutate "vote delegation stops piercing shadow roots" run \
-  src/modules/listing.js 'const native = SHD.dom.deepQuery(m.source, sel);' \
-                         'const native = m.source.querySelector(sel);'
+  src/modules/account.js '    up: SHD.dom.deepQuery(source, C.NATIVE.upvote),
+    down: SHD.dom.deepQuery(source, C.NATIVE.downvote)' \
+                         '    up: source.querySelector(C.NATIVE.upvote),
+    down: source.querySelector(C.NATIVE.downvote)'
 
 mutate "controversial accepted for subs but not the front page" run \
   src/core/route.js "  const SORT_RE = [...SORTS, ...EXTRA_SORTS].join('|');" \
@@ -242,9 +257,7 @@ mutate "standing down leaves native Reddit suppressed (blank page)" run \
 mutate "an age gate is blanked and then blamed (all paths)" run \
   src/core/gate.js "      const why = nothingToRender();
       if (why) unblank(why);" '' \
-  src/core/gate.js "    const why = nothingToRender();
-    if (why) {
-      unblank(why);
+  src/core/gate.js "      unblank(why);
       if (waited < MAX_WAIT_MS) scheduleCheck();
       return;
     }" "    if (waited < MAX_WAIT_MS) return scheduleCheck();
@@ -320,8 +333,10 @@ mutate "comment body lookup is not scoped to its own comment" run \
 echo
 echo "packed-extension suite (slower; representative mutations)"
 mutate "vote delegation stops piercing shadow roots" extension \
-  src/modules/listing.js 'const native = SHD.dom.deepQuery(m.source, sel);' \
-                         'const native = m.source.querySelector(sel);'
+  src/modules/account.js '    up: SHD.dom.deepQuery(source, C.NATIVE.upvote),
+    down: SHD.dom.deepQuery(source, C.NATIVE.downvote)' \
+                         '    up: source.querySelector(C.NATIVE.upvote),
+    down: source.querySelector(C.NATIVE.downvote)'
 mutate "suppress.css dropped from the manifest" extension \
   manifest.json '"src/styles/suppress.css"' '"src/styles/does-not-exist.css"'
 mutate "native Reddit shows through the failure screen" extension \
@@ -334,9 +349,7 @@ mutate "pagination cannot cross into the main world" extension \
 mutate "an age gate is blanked and then blamed (all paths)" extension \
   src/core/gate.js "      const why = nothingToRender();
       if (why) unblank(why);" '' \
-  src/core/gate.js "    const why = nothingToRender();
-    if (why) {
-      unblank(why);
+  src/core/gate.js "      unblank(why);
       if (waited < MAX_WAIT_MS) scheduleCheck();
       return;
     }" "    if (waited < MAX_WAIT_MS) return scheduleCheck();
@@ -582,10 +595,10 @@ mutate "a flush parked across a visibility flip is never re-booked" run \
 # the PRE-COMMIT navigate event (still the old URL), latch it unconditionally, and have no
 # post-commit safety net. Every sort change was swallowed or handled one navigation late.
 mutate "route.js reads the old URL and latches it (sort desync)" run \
-  src/core/route.js "        if (path) emit(path);" \
+  src/core/route.js "        if (path) emit(path, search);" \
                     "        queueMicrotask(() => emit(location.pathname));" \
   src/core/route.js "      navigation.addEventListener('navigatesuccess', () => emit(location.pathname));" "" \
-  src/core/route.js "    if (next === current && emit.lastPath === path) return;
+  src/core/route.js "    if (next === current && emit.lastPath === path && emit.lastSort === sort) return;
     current = next;
     emit.lastPath = path;" "    const changed = next !== current || emit.lastPath !== path;
     current = next;
@@ -722,7 +735,8 @@ mutate "zero-stamped failures blame the markup again" run \
 mutate "post selftext body vanishes from the comments page" run \
   src/modules/comments.js "    if (m.bodyNode) {
       row.querySelector('.entry').appendChild(
-        h('div.usertext-body.shd-selftext', null, m.bodyNode.cloneNode(true)));
+        h('div.usertext-body.shd-selftext', null,
+          SHD.dom.adoptBody(m.bodyNode)));
     }
 " ""
 
@@ -906,7 +920,7 @@ mutate "late replies nest under the latest chain, not their branch" run \
     const parentEl = el.parentElement?.closest(C.COMMENT);
     if (parentEl) {
       const pid = parentEl.getAttribute(C.COMMENT_ATTR.id);
-      const prow = pid && document.querySelector(\`#\${C.ROOT_ID} .thing[data-fullname=\"\${pid}\"]\`);
+      const prow = pid && document.querySelector(\`#\${C.ROOT_ID} \${SHD.dom.rowSel(pid)}\`);
       target = prow?.querySelector(':scope > .child > .sitetable') || null;
     }
     if (!target) {" "    let target = null;
@@ -1399,23 +1413,15 @@ mutate "an image submission loses its picture again" run \
 # whichever Reddit happened to list first, which is the SMALLEST. The anchor carries
 # imageOf()'s whole loop because the comparison line alone also matches imagesOf() —
 # a duplicated anchor silently tests whichever call site comes first (bug 48).
+# Anchored on imageOf()'s own head rather than on the loop body: the pick moved into
+# betterPicture() in 0.39.0, so the old anchor stopped matching and the row went silent.
+# Shadowing the helper is what reinstates first-url-wins.
 mutate "the largest rendition stops winning, and the first one does" run \
-  src/core/model.js "    let best = null, bestW = -1;
-    for (const img of el.querySelectorAll('img')) {
-      if (img.closest(C.POST) !== el) continue;
-      if (img.closest(C.THUMB_EXCLUDE)) continue;
-      for (const c of imageCandidates(img)) {
-        const host = (c.url || '').split('/')[2] || '';
-        if (!C.THUMB_HOSTS.test(host)) continue;
-        if (c.w > bestW) { bestW = c.w; best = c.url; }" \
-                    "    let best = null, bestW = -1;
-    for (const img of el.querySelectorAll('img')) {
-      if (img.closest(C.POST) !== el) continue;
-      if (img.closest(C.THUMB_EXCLUDE)) continue;
-      for (const c of imageCandidates(img)) {
-        const host = (c.url || '').split('/')[2] || '';
-        if (!C.THUMB_HOSTS.test(host)) continue;
-        if (bestW < 0) { bestW = c.w; best = c.url; }"
+  src/core/model.js "  function imageOf(el) {
+    let best = null, bestW = -1, bestOrig = false;" \
+                    "  function imageOf(el) {
+    let best = null, bestW = -1, bestOrig = false;
+    const betterPicture = () => bestW < 0;"
 
 mutate "an image title points at the viewer-bound image URL again" run \
   src/core/model.js "        : (type === 'image' && imageUrl && viewerBound(contentHref)) ? permalink" \
@@ -1426,8 +1432,8 @@ mutate "an image title points at the viewer-bound image URL again" run \
 # looking covered. This is bug 41's family — rendering our own <img> is what walks past the
 # blur Reddit applies for logged-out readers, and a full-size copy is that bypass enlarged.
 mutate "an adult post is enlarged on its comments page" run \
-  src/modules/comments.js "    if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;" \
-                          "    if (false) return null;"
+  src/modules/comments.js "  const adultGate = (m) => !!m.nsfw && !SHD.settings.showNsfwThumbnails;" \
+                          "  const adultGate = (m) => false;"
 
 mutate "an adult row gets an expando that opens the picture" run \
   src/modules/listing.js "    if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;" \
@@ -1449,8 +1455,8 @@ mutate "reopening an expando stacks another copy of the picture" run \
 # The cap. A picture arrives at whatever size Reddit stored it at, so without this a wide
 # photo widens the column and pushes the document sideways. Only geometry can see it.
 mutate "the comments-page picture loses its width cap" geometry \
-  src/styles/old-reddit.css ".shd-selfpost .shd-image { margin: 5px 0; max-width: var(--shd-video-max); }" \
-                            ".shd-selfpost .shd-image { margin: 5px 0; }"
+  src/styles/old-reddit.css ".shd-selfpost .shd-image { margin: 5px 0; max-width: var(--shd-video-max); position: relative; }" \
+                            ".shd-selfpost .shd-image { margin: 5px 0; position: relative; }"
 
 # The comments-page head: `all N comments` + the sort menu, requested twice from live use.
 mutate "the comment sort strip vanishes again" run \
@@ -1460,8 +1466,8 @@ mutate "the comment sort strip vanishes again" run \
 # ?sort=new boot, which exists precisely because a strip that always marks the default
 # looks perfectly correct on the default page.
 mutate "the sort strip stops noticing which sort the page is on" run \
-  src/modules/comments.js "      if (q && C.COMMENT_SORTS.some(s => s.id === q)) current = q;" \
-                          "      if (false) current = q;"
+  src/modules/comments.js "    if (q && C.COMMENT_SORTS.some(s => s.id === q)) current = q;" \
+                          "    if (false) current = q;"
 
 # The late-timestamp patch: a restored profile element re-consumed mid-hydration grows its
 # <time> after consume, and the row used to lose it permanently.
@@ -1562,8 +1568,8 @@ mutate "the hold blanks routes nobody will ever take" extension \
 # delivered at idle it answers undefined, which silently reverts to unblank-and-flash.
 mutate "route.js slips back to document_idle" run \
   manifest.json "        \"src/config/contracts.js\",
-        \"src/config/themes.js\",
         \"src/core/route.js\",
+        \"src/config/themes.js\",
         \"src/core/gate.js\"" \
                 "        \"src/config/contracts.js\",
         \"src/config/themes.js\",
@@ -1620,9 +1626,7 @@ mutate "the toggle stops reflecting the setting" run \
 # stays stale, which looks like a toggle that half works.
 mutate "the toggle mutates settings in memory instead of writing them" run \
   src/core/pipeline.js "      const { settings } = await chrome.storage.sync.get('settings');
-      await chrome.storage.sync.set({
-        settings: { ...C.settings, ...SHD.settings, ...(settings || {}), [key]: value }
-      });" "      SHD.settings[key] = value;"
+      await chrome.storage.sync.set({" "      SHD.settings[key] = value; if (true) return; await Promise.resolve({"
 
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an
 # oversight: there is no row for "a settings change keeps your scroll position", because
@@ -1691,8 +1695,7 @@ mutate "a dest that is itself a login wall is followed" run \
 # concatenating onto a hardcoded origin, which drops the scheme with it: the packed suite's
 # hop then aims at the real internet, and a reader on any non-default port goes nowhere.
 mutate "the target is concatenated onto a hardcoded origin, losing port and scheme" run \
-  src/core/oldreddit.js '    out.hostname = NEW_HOST;
-    return out.href;' '    return `https://${NEW_HOST}${out.pathname}${out.search}${out.hash}`;'
+  src/core/oldreddit.js '    out.hostname = NEW_HOST;' '    return `https://${NEW_HOST}${out.pathname}${out.search}${out.hash}`;'
 
 # The silent hop. This is the version that would still "work" and still be blamed for the
 # hostname changing under the reader — the entire reason the card exists.
@@ -1906,7 +1909,8 @@ mutate "a failed reply discards the draft" run \
       ta.value = '';"
 
 mutate "a failed reply no longer reveals Reddit's composer" run \
-  src/modules/account.js "      if (reveal && SHD.dom.passthrough(reveal)) reveal.scrollIntoView?.({ block: 'center' });" ''
+  src/modules/account.js "    if (!reveal || !SHD.dom.passthrough(reveal)) return false;" \
+                         "    if (!reveal) return false;"
 
 mutate "the top-level comment box is dropped" run \
   src/modules/account.js '  function commentBox(m) {
@@ -1958,9 +1962,14 @@ mutate "a missing username is cached, so a late name never arrives" run \
 # `grep -c FAIL` counted zero. It reported SURVIVED for a mutation the suite catches three
 # times over. That is this file's own thesis (a suite that DIES and a suite with nothing to
 # report look identical to grep) landing on one of its rows; keep replacements plain.
+# Anchored on signedInCorner's own head: `const name = SHD.session.username();` appears
+# in fillMenu() too, and apply() replaces the FIRST — so this row spent its life mutating
+# the menu rather than the corner it is named for.
 mutate "a missed username costs the whole corner, not just the name" run \
-  src/modules/account.js '    const name = SHD.session.username();' \
-                         '    const name = SHD.session.username(); if (!name) return null;'
+  src/modules/account.js '  function signedInCorner() {
+    const name = SHD.session.username();' \
+                         '  function signedInCorner() {
+    const name = SHD.session.username(); if (!name) return null;'
 
 # THE WORST FAILURE AVAILABLE TO THIS FEATURE: an unscoped lookup finds a POST AUTHOR and
 # greets the reader by a stranger's name. Caught on the page whose header carries no name.
@@ -2002,8 +2011,8 @@ mutate "account.js is delivered after the modules built from it" run \
 # form behind a hidden #shd-root, under a sentence saying so that the reader could not see.
 # Dropping the carry puts them back in front of an empty box.
 mutate "the handoff reveals Reddit's composer but leaves the draft behind" run \
-  src/modules/account.js '      try { carried = await handoff(m.source, kind, text, r); }' \
-                         '      try { await handoff(m.source, kind, text, r); }'
+  src/modules/account.js '      try { carried = await handoff(m.source, kind, posted ? null : text, r); }' \
+                         '      try { await handoff(m.source, kind, posted ? null : text, r); }'
 
 # The reveal is what MAKES the control exist: suppressed, the native tree is a clipped 1x1
 # box, so Reddit never hydrates the action row. Re-running the chain without revealing
@@ -2101,12 +2110,12 @@ mutate "unreadable settings are treated as permission to check" run \
 # "At browser start" is not a rate. Without the floor, six restarts in an afternoon are six
 # requests — the periodic-ping shape the click-only design existed to avoid.
 mutate "the startup check loses its rate limit" run \
-  src/core/background.js '  if ((await sinceLast()) < MIN_INTERVAL_MS) return;' '  ;'
+  src/core/background.js '  if (!(await due())) return;' '  ;'
 
 # An answer with no version is not an answer. Storing it stamps `at`, which silences the
 # next twenty hours of checks on the strength of nothing.
 mutate "an unusable answer is stored anyway and silences the next check" run \
-  src/core/background.js '    if (!j || typeof j.version !== '"'"'string'"'"') return;' '    if (!j) return; j.version = String(j.version);'
+  src/core/background.js '      if (j && typeof j.version === '"'"'string'"'"') {' '      if (j) { j.version = String(j.version);'
 
 # The worker writes the record the header turns into an href; a non-https answer must not
 # become a link. update.js's rule, repeated where the answer is actually written.
@@ -2133,13 +2142,13 @@ mutate "the Firefox build ships Chrome's worker key, which Gecko ignores" run \
 # in the DOM at first paint; this line is the whole difference.
 mutate "a gallery reads only the frames Reddit has already shown" run \
   src/core/model.js '    const lazy = img.getAttribute(C.GALLERY_LAZY_SRC);
-    if (lazy) out.push({ url: lazy, w: 0 });' '    ;'
+    if (lazy) out.push({ url: lazy, w: 0, orig: isOriginal(lazy) });' '    ;'
 
 # The lazy url states a URL, not a size, so it must never outbid a real responsive set —
 # a frame with both would drop from its best resolution to whatever Reddit lazy-listed.
 mutate "the lazy gallery url outranks a real responsive set" run \
   src/core/model.js '    const lazy = img.getAttribute(C.GALLERY_LAZY_SRC);
-    if (lazy) out.push({ url: lazy, w: 0 });' \
+    if (lazy) out.push({ url: lazy, w: 0, orig: isOriginal(lazy) });' \
                     '    const lazy = img.getAttribute(C.GALLERY_LAZY_SRC);
     if (lazy) out.push({ url: lazy, w: 99999 });'
 
@@ -2200,13 +2209,121 @@ mutate "preferring the original throws away the width ranking under it" run \
 # leaves every assertion in every suite green, correctly. A row for it would survive and
 # read as a hole. What would make it testable is a layout-count probe the suites do not have.
 
+# ---------------------------------------- the adversarial-review round (0.43.0) ---
+#
+# Each of these reintroduces something a full read of the tree found. The four guards on
+# the age-gate click get a row each on purpose: two of them are independent (the host
+# class and the button text) and either alone would leave the other looking covered.
+
+# `configured-xpromo` is Reddit's CROSS-PROMOTION container, not the age gate's. An
+# "Open in app" interstitial offering Yes / Not now sits in one, and matched every other
+# test here.
+mutate "the age gate matches any cross-promotion, not the modal" run \
+  src/config/contracts.js "    host: '.configured-xpromo-modal'," \
+                          "    host: '.configured-xpromo',"
+
+# A bare "yes" is not an age answer. This is the half that stops a promo whose dialog
+# DOES carry the modal class.
+mutate "a bare yes counts as an age affirmation again" run \
+  src/config/contracts.js '    affirm: /\b18\b/i,' \
+                          '    affirm: /\byes\b|\bover\s*18\b/i,'
+
+# `\bno\b` does not match "Not". Widening the DECLINE test can only ever make the click
+# refuse more often, which is the safe direction and the reason it is separate.
+mutate "the decline test stops recognising \"Not now\"" run \
+  src/config/contracts.js "    decline: /\\bno\\b|\\bnot\\b|\\bunder\\b|\\bback\\b|\\bleave\\b|\\bcancel\\b/i" \
+                          "    decline: /\\bno\\b|\\bunder\\b|\\bback\\b|\\bleave\\b/i"
+
+# The floor is read from the stored record, so an attempt that stores nothing is an
+# attempt the floor cannot see: a network that blocks raw.githubusercontent.com produced
+# a fresh request at every browser start, for ever.
+mutate "a failed update check leaves no trace, so it never backs off" run \
+  src/core/background.js "  await stamp(answer);" "  if (answer) await stamp(answer);"
+
+# ...and the other half: a failure must not be charged the full twenty hours, which is
+# what the original no-stamp reasoning was protecting.
+mutate "a blip silences the update check for a whole day" run \
+  src/core/background.js "  return Date.now() - rec.at >= (rec.ok === false ? RETRY_INTERVAL_MS : MIN_INTERVAL_MS);" \
+                         "  return Date.now() - rec.at >= MIN_INTERVAL_MS;"
+
+# classify() reads the PATH, so `/` on business.reddit.com is a listing. Measured live:
+# a marketing site blanked for the full first tick and stamped with our version.
+mutate "the blackout lands on any reddit.com subdomain again" run \
+  src/core/gate.js "    if (!SHD.route.rendersHost()) return false;" "    if (false) return false;"
+
+# The hop rewrote every path, including the ones this extension hands back — breaking
+# old.reddit for the readers who can still use all of it.
+mutate "the old.reddit hop rewrites paths we do not render" run \
+  src/core/oldreddit.js "    if (SHD.route.classify(out.pathname) === SHD.route.OTHER) return null;" "    ;"
+
+# `arrival` is the one step PAST the submit. Carrying the draft into Reddit's composer
+# and inviting a press is how a slow reply gets posted twice.
+mutate "a reply that may have posted is offered for posting again" run \
+  src/modules/account.js "      const posted = r.step === 'arrival';" "      const posted = false;"
+
+# standDown() clears our marks and the `load` listener runs after it, so a route we
+# disowned was re-marked. CONTRIBUTING promises those pages are untouched.
+mutate "a route we handed back is marked anyway" run \
+  src/core/gate.js "    if (SHD.route.classify() !== SHD.route.OTHER) {
+      document.documentElement.setAttribute('data-shd-waiting', why);
+    }" "    document.documentElement.setAttribute('data-shd-waiting', why);"
+
+# One `\"` or `\\` in a Reddit id turns the lookup into invalid CSS; querySelector throws
+# inside flush(), and eight of those spend the error budget on a page that is fine.
+mutate "a row lookup interpolates an unescaped id again" run \
+  src/core/dom.js '  const rowSel = (id) =>' \
+                  '  const rowSel = (id) => ".thing[data-fullname=\"" + id + "\"]"; const unusedRowSel = (id) =>'
+
+# A cloned <script> loses its already-started flag and runs on insertion.
+mutate "a cloned body carries its scripts across" run \
+  src/core/dom.js "    copy.querySelectorAll?.('script, iframe, object, embed').forEach(n => n.remove());" "    ;"
+
+# A malformed % in a header href throws URIError inside readIdentity(), under flush().
+mutate "a malformed username href spends an error-budget slot" run \
+  src/core/session.js "        try { out.name = decodeURIComponent(m[1]); } catch { out.name = m[1]; }" \
+                      "        out.name = decodeURIComponent(m[1]);"
+
+# .DS_Store shipped in both store zips, and broke --check on every machine but the one
+# that created it.
+mutate "the packager ships dotfiles again" run \
+  package-extension.js "const isPacked = (rel) =>
+  !rel.endsWith('.md') && !rel.split('/').some(seg => seg.startsWith('.'));" \
+                       "const isPacked = (rel) => !rel.endsWith('.md');"
+
 # The accounting. DECLARED is read from this file itself rather than maintained by hand —
 # a count that has to be kept in step with the rows is the same trap as the hand-maintained
 # token list in bug 43, and it would have been wrong the first time a row was added.
 DECLARED=$(grep -c '^mutate "' "$SRC/test/mutate.sh")
 echo
-printf 'rows: %s declared, %s run — %s caught, %s survived, %s anchor misses\n' \
-  "$DECLARED" "$ROWS_RUN" "$ROWS_CAUGHT" "$ROWS_SURVIVED" "$ROWS_MISSED"
+printf 'rows: %s declared, %s run — %s caught, %s survived, %s anchor misses, %s no browser\n' \
+  "$DECLARED" "$ROWS_RUN" "$ROWS_CAUGHT" "$ROWS_SURVIVED" "$ROWS_MISSED" "$ROWS_NOBROWSER"
+
+# AN ANCHOR MISS IS A FAILURE, NOT A FOOTNOTE.
+#
+# A row whose anchor stopped matching tests nothing, and it announces that by printing
+# ANCHOR MISS — which is neither a PASS nor a FAIL, so it scrolled past in a sweep that
+# ended "all caught". A review found 16 dead rows at once this way, two of them the pair
+# guarding vote delegation's shadow-root piercing, anchored on a line that had moved to
+# another file entirely; the sweep had been reporting a clean run over them for releases.
+#
+# The rule this file already states about editing a source file breaking someone else's
+# row only works if breaking one is loud. It is loud now.
+if [ "$ROWS_NOBROWSER" -ne 0 ]; then
+  printf '\033[31mNO BROWSER: %s rows needed Chromium and did not get it, so those bugs went\n' \
+    "$ROWS_NOBROWSER"
+  printf 'UNTESTED. Install a browser (or set SHEDDIT_CHROME) and run again; a sweep that\n'
+  printf 'skips the layout and packed-extension suites is not evidence about them.\033[0m\n'
+  exit 1
+fi
+
+if [ "$ROWS_MISSED" -ne 0 ]; then
+  printf '\033[31mDEAD ROWS: %s of %s anchors did not match, so those bugs went UNTESTED.\n' \
+    "$ROWS_MISSED" "$DECLARED"
+  printf 'An ANCHOR MISS is not a pass. Re-point each anchor at the code as it is now —\n'
+  printf 'and note that the row you broke is rarely the row for the code you edited.\n'
+  printf 'test/anchor-check.sh lists them in about a minute, without running any suite.\033[0m\n'
+  exit 1
+fi
 
 if [ "$ROWS_RUN" -ne "$DECLARED" ]; then
   printf '\033[31mSWEEP INCOMPLETE: %s of %s rows ran; %s never did. Something above stopped\n' \

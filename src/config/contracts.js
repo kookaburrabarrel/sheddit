@@ -536,22 +536,37 @@ SHD.C = {
    * endpoint serves an attested session, which retires the suppress-only open question.
    *
    * Anatomy from the 2026-08-18 live capture: the host is a direct child of shreddit-app
-   * carrying class `configured-xpromo` (NEVER anchor on its full id — the `bypassable` /
-   * `desktop` suffixes are variant names), with an open shadow root whose panel wraps a
-   * <slot> — so the BUTTONS ARE LIGHT-DOM and a plain querySelectorAll('button') on the
-   * host reaches them from the isolated world.
+   * carrying classes `rpl-dialog configured-xpromo configured-xpromo-modal` (NEVER anchor
+   * on its full id — the `bypassable` / `desktop` suffixes are variant names), with an
+   * open shadow root whose panel wraps a <slot> — so the BUTTONS ARE LIGHT-DOM and a
+   * plain querySelectorAll('button') on the host reaches them from the isolated world.
+   *
+   * TWO INDEPENDENT GUARDS, because either alone leaves the other's hole open, and they
+   * need separate mutation rows for the same reason.
+   *
+   *   STRUCTURAL — `configured-xpromo-modal`, not `configured-xpromo`. The bare class is
+   *   Reddit's CROSS-PROMOTION container, not the age gate's: it dresses "Open in app"
+   *   interstitials and every other promo Reddit raises. The `-modal` suffix is the
+   *   blocking-dialog variant, which is the shape the gate actually has.
+   *
+   *   TEXTUAL — affirm requires the literal `18`. It used to accept a bare "yes", and an
+   *   "Open in app" prompt offering `Yes` / `Not now` satisfied every other test here:
+   *   `\bno\b` does not match "Not", so the decline test cleared it, leaving exactly one
+   *   affirmative match and a click on an app-install control. A gate that is asking
+   *   about age says so; a promo does not.
    *
    * AFFIRM/DECLINE are text tests because no stable attribute was captured. THE TRAP: a
-   * decline button's text can legitimately contain "18" ("No, I am under 18"), so a bare
-   * /18/ match clicks the wrong button — and the wrong button NAVIGATES AWAY, which is
+   * decline button's text can legitimately contain "18" ("No, I am under 18") — which is
+   * why requiring `18` cannot stand alone — and the wrong button NAVIGATES AWAY, which is
    * the one failure mode worse than doing nothing. gate.js therefore clicks only when
    * EXACTLY ONE button matches affirm and not decline; any other outcome falls back to
-   * suppression, the pre-click behaviour.
+   * suppression, the pre-click behaviour. Every miss costs the click and nothing else, so
+   * both tests are deliberately biased towards refusing.
    */
   AGE_GATE: {
-    host: '.configured-xpromo',
-    affirm: /\byes\b|\bover\s*18\b/i,
-    decline: /\bno\b|\bunder\b|\bback\b|\bleave\b/i
+    host: '.configured-xpromo-modal',
+    affirm: /\b18\b/i,
+    decline: /\bno\b|\bnot\b|\bunder\b|\bback\b|\bleave\b|\bcancel\b/i
   },
 
   /* The exception. Captured live: `desktop_auth_blocking_upsell`, a login/signup upsell that

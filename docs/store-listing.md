@@ -98,16 +98,20 @@ PRIVACY
 
 For an extension whose point is reading without being profiled, privacy is the product,
 not the fine print. Sheddit collects nothing and transmits nothing about you. It makes
-no API calls, has no analytics, and stores two things: your display preferences, in
-Chrome's own settings storage, and the version number the last update check returned. It
-never sees your Reddit login or session. Two static files are fetched, both optional and
-neither about you: the manifest of a video you are watching, from Reddit's own media
-server, switchable off in the options; and a file on GitHub stating the current version —
-asked when you press "updates" in the header, and once when your browser starts unless you
-switch that off beside the button. Both are sent without cookies
-and without a referrer. Neither runs on a timer, neither carries anything about you, and
-the test suite counts those requests, so a change that quietly fetched more would fail the
-build.
+no Reddit API calls, has no analytics, and stores two things: your settings, in Chrome's
+own settings storage, and the result of the last update check. It never sees your Reddit
+login or session. Two static files are fetched, both optional and neither about you: the
+manifest of a video you are watching, from Reddit's own media server, switchable off in
+the options; and a file on GitHub stating the current version — asked when you press
+"updates" in the header, and once when your browser starts unless you switch that off
+beside the button. Both are sent without cookies and without a referrer, neither carries
+anything about you, and the test suite counts those requests, so a change that quietly
+fetched more would fail the build.
+
+One thing Sheddit does press on your behalf: on a subreddit marked adult it clicks
+Reddit's own "over 18" button so the page works normally underneath the layout. If you
+are signed in, Reddit records that answer against your account, exactly as it would had
+you clicked it yourself. The full description is in the privacy policy.
 The full policy is at
 https://github.com/kookaburrabarrel/sheddit/blob/main/PRIVACY.md
 
@@ -137,7 +141,15 @@ Sheddit re-renders pages on reddit.com into the old.reddit.com layout. It reads 
 and comment data already present in the loaded page and draws an alternative layout from
 it. That is its only function. Because old.reddit.com no longer serves those pages at
 all — it answers with a login wall — a link to that host is opened on www.reddit.com
-instead, behind a notice saying so, so the same layout can be drawn.
+instead, behind a notice saying so, so the same layout can be drawn. That applies only to
+the paths Sheddit renders; anything else is left on old.reddit.com.
+
+On a subreddit marked adult, Reddit covers the page with its own "over 18" dialog. The
+extension clicks that dialog's affirmative button so the page beneath it behaves
+normally — Reddit otherwise keeps a scroll lock in place and treats the session as
+unattested. This is the only control the extension activates without a click from the
+user; it fires only when exactly one button on Reddit's own blocking age-gate dialog both
+mentions 18 and is not a decline, and it is described in the privacy policy.
 ```
 
 ## Permission justifications
@@ -148,11 +160,19 @@ answered.
 **`storage`**
 
 ```
-Stores the user's display preferences: which colour theme they chose, which page types
-Sheddit should re-render (listings, comments, profiles), layout toggles such as compact
-rows, thumbnails, auto-paging and inline media, and whether old.reddit.com links should
-be opened on www.reddit.com. Twelve boolean-or-string values in one object. No
-identifiers, no browsing data, nothing derived from what the user reads.
+Stores the user's own settings: which colour theme they chose, which page types Sheddit
+should re-render (listings, comments, profiles), layout toggles such as compact rows,
+thumbnails, auto-paging and inline media, whether the vote and reply controls should
+work for an already-signed-in reader, whether old.reddit.com links should be opened on
+www.reddit.com, and whether the version check may run at browser start. Fourteen
+boolean-or-string values in one object, in chrome.storage.sync.
+
+One further object, in chrome.storage.local: the result of the last update check — the
+version number the file stated, the link and release note it gave, when it was asked,
+and whether that attempt succeeded. It is local rather than synced because it describes
+the copy installed on that one machine.
+
+No identifiers, no browsing data, nothing derived from what the user reads.
 ```
 
 **Host permission `*://*.reddit.com/*`**
@@ -184,9 +204,21 @@ If a justification is demanded anyway:
 ```
 The extension executes no remote code. All JavaScript and CSS is contained in the
 uploaded package. There is no eval, no new Function, no dynamic import, and no remotely
-hosted script. The extension makes no API calls. Its only request is a GET of a static
-video manifest from Reddit's own media CDN, used to select which video file to play; it
-carries no credentials and returns data, never code.
+hosted script. The extension makes no Reddit API calls.
+
+It makes two kinds of network request, both GETs of static files, both returning data
+and never code, both sent with credentials omitted:
+
+1. A video manifest from Reddit's own media CDN, used to select which video file to
+   play, when the user opens a video post's comments page.
+2. A static JSON file in the extension's own public GitHub repository holding the
+   current version number. It is requested when the user presses the "updates" button
+   in the extension's header, and once when the browser starts, rate-limited to one
+   attempt every twenty hours and switchable off from a control beside that button and
+   from the options page. This is what the background service worker exists for; it is
+   the extension's only background code and does nothing else. The response is parsed
+   for a version string and a URL, and neither is executed — the URL is only ever
+   rendered as a link, and only if it is https.
 ```
 
 ## Data usage disclosures
@@ -195,12 +227,22 @@ Tick **nothing** in the data-collection list. Sheddit collects none of the categ
 not personally identifiable information, health, financial, authentication, personal
 communications, location, browsing history, user activity, or website content.
 
-The video manifest request does **not** change this, and the reasoning is worth having
-to hand if a reviewer asks: the categories are about data *collected from the user*, and
-that request sends none — no cookies (`credentials: 'omit'`), no identifiers, no page or
-account data. It is an outbound GET for a static file that Reddit's own player
-reads to play the same video. Nothing is transmitted about the person using it, which is
-the test each category applies.
+Neither outbound request changes this, and the reasoning is worth having to hand if a
+reviewer asks: the categories are about data *collected from the user*, and neither
+request sends any — no cookies (`credentials: 'omit'`), no identifiers, no page or
+account data. The first is a GET for a static file that Reddit's own player reads to play
+the same video. The second is a GET for a static JSON file in the extension's own
+repository; the server that answers it sees an IP address and a timestamp, as any web
+server does for any request, and the extension neither sends nor receives anything
+further. Nothing is transmitted about the person using it, which is the test each
+category applies.
+
+Expect the startup timing to be asked about, since it is the one request not preceded by
+a click. It is rate-limited to one attempt every twenty hours regardless of how often the
+browser is restarted, a failed attempt counts toward that limit so an unreachable server
+cannot produce a retry loop, and the control that disables it sits beside the button it
+belongs to as well as on the options page. It exists because the extension is distributed
+by hand as well as through the stores, and a hand-installed copy never updates itself.
 
 Then certify all three:
 
@@ -359,8 +401,10 @@ policy URL is the same `PRIVACY.md` link.
 Worth stating in the "notes to reviewer" box, because it makes the review short: the zip
 contains plain unminified source — no build step, no bundler, no generated code — so the
 uploaded files ARE the source and no source-code package accompanies the submission. The
-extension makes no API calls; its one request class is a GET of Reddit's static video
-manifest, discussed in PRIVACY.md.
+extension makes no Reddit API calls. It makes two kinds of request, both GETs of static
+files: Reddit's video manifest, and a version-number JSON file in this repository, which
+is what `src/core/background.js` is for — requested on a button press and once at browser
+start, rate-limited, and switchable off. Both are discussed in full in PRIVACY.md.
 
 Pre-flight, before uploading:
 

@@ -70,7 +70,7 @@ SHD.comments = (() => {
       const src = b.closest(C.COMMENT);
       if (!src) continue;
       const id = src.getAttribute(C.COMMENT_ATTR.id);
-      const row = id && document.querySelector(`#${C.ROOT_ID} .thing[data-fullname="${id}"]`);
+      const row = id && document.querySelector(`#${C.ROOT_ID} ${SHD.dom.rowSel(id)}`);
       if (!row) continue;                       // not consumed yet — render() will offer it
       const listing = row.querySelector(':scope > .child > .sitetable');
       if (!listing || listing.querySelector(':scope > .shd-more-replies')) continue;
@@ -119,7 +119,7 @@ SHD.comments = (() => {
     // Move the already-rendered body across: it is light DOM and keeps links,
     // code blocks and blockquotes intact without re-parsing markdown. inlineGifs repairs
     // the one element the clone brings across BROKEN — see dom.js (bug 88).
-    if (m.bodyNode) body.appendChild(SHD.dom.inlineGifs(m.bodyNode.cloneNode(true)));
+    if (m.bodyNode) body.appendChild(SHD.dom.adoptBody(m.bodyNode));
 
     thing.append(
       /* Arrows only — old reddit keeps a comment's score in the tagline. Delegated since
@@ -230,7 +230,7 @@ SHD.comments = (() => {
        precisely what an expansion adds to. Falls back to the page-wide count only if our
        own row has gone (a re-render mid-click), where a coarse measure beats none. */
     const branchSize = () => {
-      const row = document.querySelector(`#${C.ROOT_ID} .thing[data-fullname="${m.id}"]`);
+      const row = document.querySelector(`#${C.ROOT_ID} ${SHD.dom.rowSel(m.id)}`);
       return row
         ? row.querySelectorAll(':scope > .child .thing.comment').length
         : document.querySelectorAll(`#${C.ROOT_ID} .thing.comment`).length;
@@ -305,7 +305,7 @@ SHD.comments = (() => {
     const parentEl = el.parentElement?.closest(C.COMMENT);
     if (parentEl) {
       const pid = parentEl.getAttribute(C.COMMENT_ATTR.id);
-      const prow = pid && document.querySelector(`#${C.ROOT_ID} .thing[data-fullname="${pid}"]`);
+      const prow = pid && document.querySelector(`#${C.ROOT_ID} ${SHD.dom.rowSel(pid)}`);
       target = prow?.querySelector(':scope > .child > .sitetable') || null;
     }
     if (!target) {
@@ -873,7 +873,7 @@ SHD.comments = (() => {
     if (m.bodyNode) {
       row.querySelector('.entry').appendChild(
         h('div.usertext-body.shd-selftext', null,
-          SHD.dom.inlineGifs(m.bodyNode.cloneNode(true))));
+          SHD.dom.adoptBody(m.bodyNode)));
     }
     /* A post Reddit has taken down said so nowhere in our layout: reported as a deleted
        thread rendering as an ordinary one, with a `[deleted]` author and a body, and no

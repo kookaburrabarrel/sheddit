@@ -78,6 +78,29 @@ SHD.route = (() => {
     { id: 'submitted', path: 'submitted/', label: 'submitted' }
   ];
 
+  /**
+   * The hosts this extension actually rebuilds.
+   *
+   * Reddit serves a dozen subdomains and only some of them are the site this extension
+   * imitates: `business.`, `ads.`, `mod.`, `chat.` and `support.` are separate
+   * applications with their own markup, `old.` and `np.` already serve the layout this
+   * one is imitating, and `new.` serves the 2018 redesign, which is a third DOM again.
+   *
+   * Measured live with the content scripts matched on `*://*.reddit.com/*`:
+   * business.reddit.com — a marketing site with no feed at all — came back carrying
+   * `html.shd-gate`, i.e. `visibility: hidden`, plus our version and theme stamps, and
+   * stayed blanked until the 1500ms tick. `classify()` cannot catch that on its own,
+   * because it reads only the PATH and `/` on any host is a listing.
+   *
+   * The manifest's `matches` is the real fence and carries the same list. This is the
+   * second one, and it is not redundant: a match pattern is one careless edit away from
+   * widening, the blackout runs before anything else we ship, and a page we do not render
+   * must never be blanked whatever delivered us onto it.
+   */
+  const RENDER_HOSTS = /^(?:www\.|sh\.)?reddit\.com$/i;
+  const rendersHost = (host) =>
+    RENDER_HOSTS.test(typeof host === 'string' ? host : location.hostname);
+
   function classify(path = emitPath()) {
     if (/^\/r\/[^/]+\/comments\//.test(path)) return COMMENTS;
     if (path === '/' || path === '') return LISTING;
@@ -236,6 +259,7 @@ SHD.route = (() => {
   }
 
   return { LISTING, COMMENTS, PROFILE, OTHER, SORTS, PROFILE_TABS, TIMES, TIMED_SORTS,
+           RENDER_HOSTS, rendersHost,
            classify, subredditOf, sortOf, usernameOf, profileTabOf, onChange, start,
            get current() { return current; },
            get path() { return emitPath(); },

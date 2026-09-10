@@ -133,7 +133,14 @@ SHD.session = (() => {
       let path = href;
       try { path = new URL(href, location.href).pathname; } catch { /* keep the raw value */ }
       const m = PROFILE_PATH.exec(path);
-      if (m && !NOT_A_NAME.test(m[1])) { out.name = decodeURIComponent(m[1]); break; }
+      if (m && !NOT_A_NAME.test(m[1])) {
+        /* A stray `%` in the href throws URIError, and this runs inside readIdentity()
+           under flush() — so one malformed link would spend an error-budget slot on a
+           page that is otherwise fine. Every other parse in this file is guarded; this
+           was the one that was not. The raw segment is a usable name either way. */
+        try { out.name = decodeURIComponent(m[1]); } catch { out.name = m[1]; }
+        break;
+      }
     }
 
     const img = findInHeader(S.avatar);

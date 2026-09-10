@@ -127,8 +127,27 @@ SHD.gate = (() => {
     try { return chrome.runtime.getManifest().version; } catch { return 'unknown'; }
   })();
 
-  function arm() {
+  /**
+   * Black the page out — and the single place the HOST is checked.
+   *
+   * Not our host, not our page: `classify()` reads the PATH alone, so it answers LISTING
+   * for `/` on business.reddit.com, ads., mod., chat. — separate applications with their
+   * own markup and no feed. Measured live: a marketing site came back carrying
+   * `html.shd-gate`, i.e. `visibility: hidden`, and stayed blanked until the 1500ms tick.
+   *
+   * It is a function rather than a check at each call site because there are TWO writers
+   * and the second is easy to miss: arm() at document_start, and resetForRoute() on every
+   * route change — guarding only the first left the blackout landing anyway, one route
+   * event later. The host cannot change for a document's lifetime, so this is a latch.
+   */
+  function blank() {
+    if (!SHD.route.rendersHost()) return false;
     document.documentElement.classList.add('shd-gate');
+    return true;
+  }
+
+  function arm() {
+    if (!blank()) return;
     document.documentElement.setAttribute('data-shd-version', VERSION);
     scheduleCheck();
     watchNativeModal();
@@ -395,7 +414,22 @@ SHD.gate = (() => {
   function unblank(why) {
     if (revealed || stopped()) return;
     document.documentElement.classList.remove('shd-gate');
-    document.documentElement.setAttribute('data-shd-waiting', why);
+    /* THE MARK BELONGS ONLY TO PAGES WE ARE RESPONSIBLE FOR. On a route the pipeline
+       hands back — search, chat, modmail — standDown() has already cleared our
+       attributes, and the `load` listener below runs AFTER it: measured live on
+       /search/, which carried data-shd-waiting="no-feed-container" on a page classified
+       OTHER. CONTRIBUTING promises those routes are left completely untouched, and bug 37
+       is the same rule learned once already — deleting an element and writing an
+       attribute are both "touching".
+
+       Dropping the blackout still happens on every route, because that is the removal of
+       a mark rather than the addition of one, and withholding it would leave a page we
+       disowned hidden. classify() is called with NO argument on purpose: it defaults to
+       the path route.js last emitted, which is the only reading that is correct inside
+       the pre-commit window resetForRoute() calls this from (bug 34). */
+    if (SHD.route.classify() !== SHD.route.OTHER) {
+      document.documentElement.setAttribute('data-shd-waiting', why);
+    }
     hideLoading();
   }
 
@@ -459,7 +493,7 @@ SHD.gate = (() => {
     // Only black the page out on a route we have never rendered. Mid-session .shd-active
     // is already on and our stylesheet should stay live for the incoming rows.
     if (!wasRevealed) {
-      document.documentElement.classList.add('shd-gate');
+      blank();
       // ...but do not re-blank a page we have already established has nothing to render.
       // pipeline.js boots at document_idle, which can land either side of `load`, so
       // without this the early unblank gets undone and the user stares at white until the
