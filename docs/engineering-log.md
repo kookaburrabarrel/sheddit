@@ -1973,6 +1973,51 @@ the way a question got settled is usually more useful than the answer.
     parent is the assumption `compose()` waits on; if Reddit re-renders the branch instead,
     the arrival check falls through to "the editor emptied", which is the weaker signal).
 
+12. **What the paginator's heartbeat should cost once there is nothing left to
+    drive — and whether the IntersectionObserver still earns its place.** Measured live
+    on `/r/programming/` during an ordinary read: `shdIoTicks: "0"`. The observer
+    delivered nothing at all on a page that paginated perfectly well. That is the THIRD
+    time it has been recorded silent in the field (logs 40, 53, 56) and it is the reason
+    the 2s heartbeat exists at all, so the observation itself is not news.
+
+    What has never been decided is what follows from it. `attach()` installs
+    `setInterval(…, HEARTBEAT_MS)` for the LIFE of the page and nothing ever stops it: no
+    `exhausted` state, no page cap and no teardown clears the interval. Each tick costs a
+    forced layout in `measure()`, two document-wide `querySelectorAll` calls and about
+    twenty-two dataset writes — 0.6ms at 27 posts, measured, and it scales with node
+    count against a 40-page ceiling. A thread left open in a tab pays that for ever.
+
+    Three candidate answers and none of them measured: back the interval off once the
+    empty state sticks; stop it outright and let the scroll listener restart it; or drop
+    the observer, which is dead weight in the field but costs nothing and is the one
+    wake-up that would still work if timers were throttled. Log 78 is the caution here
+    and it is a sharp one — the freeze it diagnosed was the MEASURING, not the loading,
+    so anything done to this must be measured under `geometry` rather than reasoned
+    about. Do not "optimise" the heartbeat on inspection.
+
+13. **Why the productivity guard trips during the unprompted fill.** Measured live on a
+    front-page load, tab foregrounded: `shdPages: "0"`, `shdRefusal: "unproductive"`,
+    `shdUnproductive: "2"`, `shdFresh: "true"` — twenty-seven rows on screen, work still
+    available in the feed, and the chain refusing itself. It recovers the moment the
+    reader scrolls, because `interacted` resets the count, which is why this has never
+    been reported as a hang and why it went unnoticed through several releases.
+
+    Log 66 was supposed to be exactly this case: a load whose content arrives after
+    `settle()` has closed its window is credited at the NEXT attempt, when the evidence
+    is finally there. The reading above says the arrears credit is not catching the
+    INITIAL fill — the one nobody asked for and the one a reader cannot rescue by
+    scrolling, because they have not scrolled yet. Whether `pages: 0` and
+    `unproductive: 2` are one fault or two is undecided; log 66 moved `pages++` inside
+    the productive branch, so a fill credited late would show both.
+
+    It does not reproduce from a fixture, and the reason is the fixture law about
+    DELIVERY (logs 16, 22, 28, 83): every pagination fixture delivers inside the settle
+    window, so there is nothing in the suite that can miss it. What would settle it is a
+    fixture that delivers a page's content deliberately late DURING the unprompted fill,
+    plus one live re-read of `shdSources` against the rendered row count — log 66 could
+    only be reached by inferring the source count from row growth, and `shdSources`
+    exists now precisely so that inference is not needed a second time.
+
 Two settled things, so nobody reopens them: the **staircase indentation report does not
 reproduce** (measured at 10 widths), and **comments being DOM-nested was a non-event**
 (`depth` agreed 25/25) — though it did expose the body-lookup bug, number 25 above.
