@@ -371,6 +371,12 @@ SHD.account = (() => {
     const reveal = r.host || (kind === 'comment' ? target : document.querySelector(C.MAIN));
     if (!reveal || !SHD.dom.passthrough(reveal)) return false;
     reveal.scrollIntoView?.({ block: 'center' });
+    /* A null `text` means REVEAL ONLY: show the reader Reddit's own page and open
+       nothing. That is the `arrival` caller, where the submit has already fired and a
+       pre-filled composer would be an invitation to post the same comment a second time.
+       Returning false is accurate — nothing was carried — and the caller says so in the
+       words that case needs rather than the generic ones. */
+    if (text == null) return false;
     let host = r.host;
     if (!host && kind === 'comment') {
       const btn = await waitFor(() => replyControl(target), timings.composeWaitMs);
@@ -430,19 +436,32 @@ SHD.account = (() => {
       save.disabled = false;
       form.dataset.shdState = 'failed';
       form.dataset.shdStep = r.step;
-      /* Say what happened BEFORE the handoff, so the sentence is on screen if the reveal
-         takes the layout with it, and correct it after with what actually happened to the
-         draft. `carried` is the fact the reader needs: their words are either in Reddit's
-         box or still in ours, and those need different next steps. */
-      status.textContent = `sheddit ${STEP_COPY[r.step] || 'could not post this'} — opening Reddit's own reply box`;
+      /* ARRIVAL IS THE ONE STEP ON THE FAR SIDE OF THE SUBMIT, AND IT GETS ITS OWN EXIT.
+         Every other miss here happens BEFORE `submit.click()` — no request was made, so
+         carrying the draft into Reddit's box and inviting a press is exactly right.
+         `arrival` means the button WAS pressed and the reply did not show up inside
+         arriveWaitMs, which is as consistent with a slow post as with a failed one. Doing
+         the ordinary handoff there pre-fills Reddit's composer with the same text and
+         tells the reader to press reply — so a comment that posted slowly gets posted
+         twice, by our own instruction.
+
+         So: reveal Reddit's own page, because checking the thread is the next thing the
+         reader needs to do, and carry NOTHING into it. The draft stays in our form, where
+         re-sending it is a deliberate act rather than the path of least resistance. */
+      const posted = r.step === 'arrival';
+      status.textContent = posted
+        ? 'sheddit did not see your reply appear — opening Reddit\'s own page so you can check'
+        : `sheddit ${STEP_COPY[r.step] || 'could not post this'} — opening Reddit's own reply box`;
       let carried = false;
-      try { carried = await handoff(m.source, kind, text, r); }
+      try { carried = await handoff(m.source, kind, posted ? null : text, r); }
       catch { carried = false; }
       if (!form.isConnected) return;
       form.dataset.shdCarried = carried ? 'yes' : 'no';
-      status.textContent = carried
-        ? `sheddit ${STEP_COPY[r.step] || 'could not post this'} — your text is in Reddit's reply box; press its own reply button to post it`
-        : `sheddit ${STEP_COPY[r.step] || 'could not post this'} — your text is still here, behind “← back to sheddit”`;
+      status.textContent = posted
+        ? 'sheddit did not see your reply appear, and it may already have posted — check the thread before sending it again. Your text is still here, behind “← back to sheddit”.'
+        : carried
+          ? `sheddit ${STEP_COPY[r.step] || 'could not post this'} — your text is in Reddit's reply box; press its own reply button to post it`
+          : `sheddit ${STEP_COPY[r.step] || 'could not post this'} — your text is still here, behind “← back to sheddit”`;
     });
     return form;
   }

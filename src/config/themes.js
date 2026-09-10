@@ -102,8 +102,15 @@ SHD.theme = (() => {
     return t;
   }
 
-  /* Runs immediately, at document_start. See the header. */
+  /* Runs immediately, at document_start. See the header.
+
+     Skipped entirely on a host this extension does not render. The theme attribute is
+     only ever read by our own stylesheets, so on business.reddit.com or ads.reddit.com
+     it colours nothing — it just marks a page we are not on, which is one more thing a
+     site can read us by for no benefit at all. route.js loads before this and its answer
+     is a constant for the document. */
   (async function preload() {
+    if (SHD.route && !SHD.route.rendersHost()) return;
     try {
       const { settings } = await chrome.storage.sync.get('settings');
       apply(settings && settings.theme);

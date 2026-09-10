@@ -348,10 +348,12 @@ function serveFixtures() {
     // them — so the fixture puts it in one too. A light-DOM-only check for "is there a
     // dialog" would miss it on the real page.
     if (/gate-modal/.test(pathname)) {
-      // /strange/ is the same gate with text the affirm matcher cannot place (a locale we
-      // never captured) AND an adversarial decline whose text contains "18" — the exact
-      // trap in C.AGE_GATE. Correct behaviour is the FAIL-SAFE: click nothing, fall back
-      // to suppression (gate hidden, lock stripped, inline overflow overridden by the CSS
+      // /strange/ is the same gate with an affirmative the matcher cannot place (a locale
+      // we never captured, and one that does not happen to carry a numeral) AND an
+      // adversarial decline whose text DOES contain "18" — the exact trap in C.AGE_GATE,
+      // since affirm is the literal 18 and the decline is therefore the only button that
+      // matches it. Correct behaviour is the FAIL-SAFE: click nothing, fall back to
+      // suppression (gate hidden, lock stripped, inline overflow overridden by the CSS
       // backstop — this page is what keeps that backstop under test now that the plain
       // gate gets answered and clears its own styles).
       const strange = /strange/.test(pathname);
@@ -367,7 +369,7 @@ function serveFixtures() {
       body = body.replace('</shreddit-app>', `
         <shd-fake-gate class="rpl-dialog configured-xpromo configured-xpromo-modal">
           ${strange
-            ? '<button id="over18">Continuar (18)</button><button id="nope">No, I am under 18</button>'
+            ? '<button id="over18">Continuar</button><button id="nope">No, I am under 18</button>'
             : '<button id="over18">Yes, I\'m Over 18</button><button id="nope">No, take me back</button>'}
         </shd-fake-gate>
         </shreddit-app>

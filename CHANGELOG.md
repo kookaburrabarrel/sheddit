@@ -1,6 +1,6 @@
 # Changelog
 
-Sheddit is in **beta**: 0.42.0 is the current build, open to anyone who wants to install
+Sheddit is in **beta**: 0.43.0 is the current build, open to anyone who wants to install
 it by hand while the store listings are in review. Sections are builds, newest first; the
 top one is the version `manifest.json` carries today. Every one of them shipped as a
 hand-install — it is the store listings that are still in review, not the builds.
@@ -15,6 +15,122 @@ existed from the first commit and were only found once a test could see them —
 marked **never worked**, because "fixed" would imply it once did.
 
 ---
+
+## 0.43.0
+
+A full read of the source, the manifest, the packaging and the docs, plus a live run
+against Chrome. Nothing here came from a user report; most of it is the gap between what
+the code does and what the documents say it does, which for a project whose stated point
+is being checkable is the class of defect that costs most.
+
+### Changed — Sheddit only runs on the Reddit it rebuilds
+
+The content scripts matched `*://*.reddit.com/*`, so they loaded on every subdomain.
+Measured live on `business.reddit.com` — a marketing site with no feed at all — which
+came back blanked, carrying `visibility: hidden` plus the extension's version and theme
+stamps, and stayed that way until the 1500ms deadline let go. `ads.`, `mod.`, `chat.` and
+`support.` are the same shape: separate applications with their own markup.
+
+The cause is that route classification reads the URL PATH and nothing else, so `/` on any
+host looks like a listing. Both fences are in place now, because a match pattern is one
+careless edit from widening again: the manifest matches `reddit.com`, `www.` and `sh.`,
+and the blackout refuses any host outside that set.
+
+### Fixed — the startup version check could repeat without limit
+
+The rate limit read a timestamp that was only written when a check SUCCEEDED. For anyone
+whose network cannot reach GitHub — a corporate proxy, a filtered resolver — nothing was
+ever stored, so the limit never applied and a request went out at every browser start and
+every extension update, indefinitely.
+
+Every attempt is recorded now, successful or not. A failure is charged a shorter floor
+than an answer (an hour against twenty), so a single blip does not silence the check until
+tomorrow while a persistently unreachable server still cannot produce a loop.
+
+### Fixed — a reply that might have posted was offered for posting again
+
+When a reply is saved, Sheddit types it into Reddit's own composer and presses Reddit's
+own submit. If something goes wrong BEFORE that press, revealing Reddit's box with the
+text already in it is exactly right. One failure happens after it: the press went through
+and no comment appeared in time, which looks the same whether the post was slow or failed.
+Sheddit was treating that like the others — handing Reddit's composer back with the same
+text and inviting another press, which could post a slow reply twice.
+
+It now says the reply may already have posted, opens Reddit's page so the thread can be
+checked, and carries nothing across. The draft stays in Sheddit's own box, so sending it
+again is a deliberate act.
+
+### Fixed — old.reddit links to pages Sheddit does not draw
+
+The redirect rewrote every path. `/prefs/`, `/message/inbox/`, `/r/x/about/modqueue`,
+`/r/x/wiki/…` and the `.compact` variants either differ on `www.reddit.com` or do not
+exist there, and Sheddit hands all of them back untouched anyway — so the hop broke
+old.reddit for the readers who can still use every part of it, and did so by default.
+Those links stay where they are now; the hop applies to the pages Sheddit actually draws.
+
+### Documented — Sheddit answers Reddit's 18+ prompt for you
+
+On a subreddit marked adult, Reddit covers the page with a dialog asking whether you are
+over 18, and Sheddit has clicked its affirmative button since 0.30.0. That is deliberate:
+a dialog that is merely hidden leaves Reddit's scroll lock in place and the session
+treated as unattested, so the page underneath half-works.
+
+What was wrong is that nothing said so. The privacy policy said Sheddit "never acts on
+your behalf", the security policy said it "cannot act on your account", and neither store
+submission mentioned it — while for a signed-in reader the click puts an age affirmation
+on a real account. It is described in full now, under its own heading in `PRIVACY.md`, and
+in `SECURITY.md`, the README and both store answers.
+
+The targeting was also wrong, and that is fixed rather than described. The dialog was
+matched by `configured-xpromo`, which is Reddit's cross-promotion container and dresses
+"Open in app" interstitials too, and the affirmative test accepted a bare "yes" while the
+decline test did not recognise "Not". A promotion offering **Yes** / **Not now** therefore
+satisfied every guard. Two independent narrowings now: the dialog must be the blocking
+modal variant, and the affirmative must mention 18.
+
+### Fixed — documents that asserted things the code did not do
+
+- The README's privacy section said the version check runs "never on its own", a hundred
+  lines below its own install section describing the startup check.
+- `PRIVACY.md` offered a checkable test — a `grep` that "returns exactly two hits" — and
+  it returned three. It listed eleven settings keys where there are fourteen, missing
+  precisely the three that are not display preferences; said the update record is written
+  only on a button press when a fresh install writes one at startup; and its policy
+  changelog stopped at 0.29.0 across four releases that changed behaviour.
+- Both store-submission answers said the only request is the video manifest.
+- `SECURITY.md`'s "No network requests of its own" had been false since 0.29.0.
+
+`PRIVACY.md` also gains a **What the page can see** section. Nothing leaves the browser,
+so the policy was literally true — but the extension's version and chosen theme sit on
+`<html>` where Reddit's own scripts can read them, and for a project about not being
+profiled that belongs in the policy rather than being left to be found.
+
+### Fixed — smaller, defensive
+
+Row lookups interpolated a Reddit post id straight into a CSS selector; cloned comment
+bodies kept any `<script>`, `<iframe>`, `<object>` or `<embed>` in them, which a clone
+revives on insertion; one username parse could throw on a malformed escape and spend an
+error-budget slot; the main-world history patch had no guard against a double injection;
+and the packager shipped `.DS_Store` inside both store zips, which also made the package
+check fail on any machine but the one that created the file. None had been observed to
+break a page. The dead settings-merge in the options writer was removed rather than
+wired: it spread a key that does not exist and had never done anything.
+
+### Tests
+
+**A review of the test suite found twenty-one mutation rows whose anchors no longer
+matched any code**, so those bugs were going untested while the sweep reported a clean
+run — an `ANCHOR MISS` is neither a pass nor a failure, and only failures were counted.
+All twenty-one are repointed, and a miss now fails the sweep. So does a browser suite that
+ran without a browser, which looked like a result in both directions: skipped, every row
+reads as surviving; forced to fail, every row reads as *caught*.
+
+`test/anchor-check.sh` answers the same question in a minute without running a suite, and
+generates its check from the mutation file on every invocation — the first version was a
+snapshot and quietly reported rows that had already been fixed.
+
+Thirteen new rows, each watched go red. Four of them needed a test written first, because
+the fix they guard had nothing asserting it at all.
 
 ## 0.42.0
 

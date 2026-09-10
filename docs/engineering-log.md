@@ -1374,7 +1374,42 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     invisible, and a captured `top` page means something different depending on when it
     is replayed.
 
-95. **A link to old.reddit.com looked exactly like Sheddit being broken.** Not a code
+95. **A logged-in thread came up as the failure card — 52 processed, 0 rendered, 0
+    errors, 0 rejected.** Reported 2026-09-05 from `/r/IdiotsTowingThings/comments/…`,
+    the first page anyone had opened with the 0.34.0 build signed in, and the card's own
+    numbers ruled out everything the card suggests: the queue ran (stamped 52), no row
+    threw (errors 0), no model rejected anything (rejected none). The only way to hold
+    all four at once is that the rows WERE rendered and then removed.
+
+    They were. Reddit rewrites a thread's URL in place after rendering it —
+    `replaceState`, the same document, the same elements — and a logged-in session does
+    it where a logged-out one had not been seen to. route.js saw a path that classified
+    the same (`COMMENTS` → `COMMENTS`) but differed as a string, emitted, and `onRoute`
+    did what it does for a navigation: removed `#shd-root`, reset the modules, swept. The
+    sweep collects only UNSTAMPED sources, deliberately (bug 34: un-stamping pre-commit
+    re-renders the outgoing sort into the incoming root), and every source on the page
+    was stamped from the first render. Nothing queued, nothing rendered, and 1.5s later
+    the deadline read "sources present, processed, none rendered" and raised the card.
+    Reproduced in jsdom with one `history.replaceState` on a rendered comments page:
+    25 rows → 0 rows → `shd-failed`.
+
+    The fix is at the deadline, not in `onRoute`, and the placement is the point.
+    Pre-commit, nothing can tell a rewrite from a navigation — both leave the old
+    elements connected for the moment. At the deadline tick the distinction has made
+    itself: a real navigation has replaced the elements (measured live, 0 of 4 posts
+    survive a sort change), a rewrite has left every one of them in the document. So
+    before accusing anyone, the gate asks the pipeline to `readopt()`: un-stamp the
+    sources that are still connected, re-collect, flush synchronously, and only fail if
+    that too draws nothing. The reject tally is cleared first, or a stale-contract page
+    would report twice as many rejects as posts. Costs the reader the deadline's wait on
+    a rewrite — the `#shd-loading` line covers it — and nothing on any other page.
+
+    Not an account-layer bug, though the account layer is how it was found: nothing in
+    0.34.0 touches routing. It is the first time a signed-in page has been read with the
+    renderer on, and signed-in Reddit does more to `history` than signed-out Reddit does.
+    Whether logged-out Reddit ever rewrites in place is unmeasured; the fix does not care.
+
+96. **A link to old.reddit.com looked exactly like Sheddit being broken.** Not a code
     defect — an unhandled case with a code defect's shape, and recorded here for the
     reason bug 52 is: the observable is what matters, and this observable was *the
     extension you just installed does not work*.
@@ -1413,40 +1448,185 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
       is the entire point, and the mutation that removes it leaves a feature that still
       "works".
 
-95. **A logged-in thread came up as the failure card — 52 processed, 0 rendered, 0
-    errors, 0 rejected.** Reported 2026-09-05 from `/r/IdiotsTowingThings/comments/…`,
-    the first page anyone had opened with the 0.34.0 build signed in, and the card's own
-    numbers ruled out everything the card suggests: the queue ran (stamped 52), no row
-    threw (errors 0), no model rejected anything (rejected none). The only way to hold
-    all four at once is that the rows WERE rendered and then removed.
+97. **The extension answered Reddit's 18+ prompt for you, and three documents said it
+    could not.** `answerAgeGate()` has clicked Reddit's own affirmative button since
+    0.30.0, deliberately: a merely hidden gate leaves Reddit's scroll lock in place and
+    the session unattested, so the page underneath the layout half-works. That decision
+    stands. What was wrong was everything around it. PRIVACY.md said Sheddit "never acts
+    on your behalf", SECURITY.md said "it cannot act on your account", and the Chrome
+    Web Store single-purpose answer described the extension without mentioning it — and
+    for a signed-in reader the click puts an age affirmation on a real account that the
+    reader never made. Searching the whole repository for `age gate`, `18+` or
+    `answerAgeGate` outside the source returned nothing at all.
 
-    They were. Reddit rewrites a thread's URL in place after rendering it —
-    `replaceState`, the same document, the same elements — and a logged-in session does
-    it where a logged-out one had not been seen to. route.js saw a path that classified
-    the same (`COMMENTS` → `COMMENTS`) but differed as a string, emitted, and `onRoute`
-    did what it does for a navigation: removed `#shd-root`, reset the modules, swept. The
-    sweep collects only UNSTAMPED sources, deliberately (bug 34: un-stamping pre-commit
-    re-renders the outgoing sort into the incoming root), and every source on the page
-    was stamped from the first render. Nothing queued, nothing rendered, and 1.5s later
-    the deadline read "sources present, processed, none rendered" and raised the card.
-    Reproduced in jsdom with one `history.replaceState` on a rendered comments page:
-    25 rows → 0 rows → `shd-failed`.
+    The behaviour is documented now rather than removed (project decision), under its own
+    heading in PRIVACY.md, in SECURITY.md's scoping list, in the README's privacy section
+    and in both store answers, each saying plainly what it means for a signed-in account.
 
-    The fix is at the deadline, not in `onRoute`, and the placement is the point.
-    Pre-commit, nothing can tell a rewrite from a navigation — both leave the old
-    elements connected for the moment. At the deadline tick the distinction has made
-    itself: a real navigation has replaced the elements (measured live, 0 of 4 posts
-    survive a sort change), a rewrite has left every one of them in the document. So
-    before accusing anyone, the gate asks the pipeline to `readopt()`: un-stamp the
-    sources that are still connected, re-collect, flush synchronously, and only fail if
-    that too draws nothing. The reject tally is cleared first, or a stale-contract page
-    would report twice as many rejects as posts. Costs the reader the deadline's wait on
-    a rewrite — the `#shd-loading` line covers it — and nothing on any other page.
+    The SELECTOR was a separate and worse problem, and it is fixed rather than described.
+    `C.AGE_GATE.host` was `.configured-xpromo` — Reddit's CROSS-PROMOTION container, not
+    the age gate's; it dresses "Open in app" interstitials too. And `affirm` accepted a
+    bare "yes" while `decline` was `/\bno\b|…/`, which does not match "Not". So a promo
+    offering **Yes** / **Not now** satisfied every guard in the function: one affirmative
+    match, no decline match, click — on an app-install control. Two independent narrowings
+    now, with a mutation row each because either alone leaves the other looking covered:
+    the host must be the blocking `configured-xpromo-modal` variant, and the affirmative
+    must contain the literal `18`. A gate asking about age says so; a promotion does not.
+    The decline test also learned `not`, `cancel` — widening the REFUSAL side can only
+    ever make the click happen less often, which is the safe direction.
 
-    Not an account-layer bug, though the account layer is how it was found: nothing in
-    0.34.0 touches routing. It is the first time a signed-in page has been read with the
-    renderer on, and signed-in Reddit does more to `history` than signed-out Reddit does.
-    Whether logged-out Reddit ever rewrites in place is unmeasured; the fix does not care.
+98. **The update check's rate limit counted answers, not attempts, so a blocked network
+    got no limit at all.** The floor is read from `chrome.storage.local`'s `update`
+    record, and `at` was written only on the success path: a non-ok status returned
+    early, a body without a version returned early, and the `catch` swallowed everything
+    else. For a reader whose network cannot reach `raw.githubusercontent.com` — a
+    corporate proxy, a filtered resolver, a country that blocks it — nothing was ever
+    stored, the floor was never tripped, and a fresh request went out at every browser
+    start and every extension update, without end. background.js's own header claimed
+    "the frequency is bounded by the clock"; it was bounded by the clock only when the
+    request worked, which is exactly backwards.
+
+    The obvious repair overshoots. Stamping the full twenty hours on a failure silences
+    the check for a day on the strength of one blip, which is what the original
+    no-stamp reasoning was protecting against and it was right to — the test that encoded
+    it said so in as many words. So a failure is now its own event with its own floor:
+    every attempt stamps, the record carries whether it got an answer, and
+    `RETRY_INTERVAL_MS` charges a failure an hour where an answer costs twenty. Two
+    mutation rows, one per half; either alone reads as covered.
+
+99. **The blackout landed on Reddit's other applications.** Measured live on
+    `business.reddit.com` — a marketing site with no feed at all — which came back
+    carrying `html.shd-gate`, i.e. `visibility: hidden`, plus our version and theme
+    stamps, and stayed blanked until the 1500ms tick. `ads.`, `mod.`, `chat.` and
+    `support.` are the same shape: separate applications with their own markup.
+
+    The cause is that `classify()` reads the PATH and nothing else, so `/` on any host
+    answers LISTING and the pipeline engages. `route.rendersHost()` is the missing
+    question and route.js is where it belongs, beside the one definition of "a page we
+    render". Both fences are in place, because a match pattern is one careless edit from
+    widening: the manifest now matches `reddit.com`, `www.` and `sh.` instead of
+    `*.reddit.com`, and the gate refuses to blank a host outside that set.
+
+    Two traps in fixing it. The blackout has TWO writers — `arm()` at document_start and
+    `resetForRoute()` on every route change — and guarding only the first left the
+    blackout landing anyway, one route event later; they go through one `blank()` now.
+    And themes.js was stamping `data-shd-theme` before route.js had even loaded, so the
+    guard there was inert until route.js moved ahead of it in both load-order lists.
+
+100. **A reply that may have posted was offered for posting again.** `compose()` reports
+     six failure steps and five of them happen BEFORE `submit.click()` — no request was
+     made, so revealing Reddit's composer with the draft in it and saying "press its own
+     reply button" is exactly right. `arrival` is the sixth, and it is on the far side of
+     the button: it means the submit WAS pressed and no comment appeared within
+     `arriveWaitMs`, which is as consistent with a slow post as a failed one. The generic
+     handoff ran there too, so a comment that posted slowly got posted twice, on our own
+     instruction.
+
+     `arrival` now reveals Reddit's page and carries NOTHING into it, and says so: "it may
+     already have posted — check the thread before sending it again". The draft stays in
+     our form, where re-sending is a deliberate act rather than the path of least
+     resistance. `handoff(…, null, …)` is the reveal-only mode that makes the difference
+     one argument rather than a second code path.
+
+101. **The old.reddit hop rewrote every path, including the ones this extension hands
+     back.** Verified live: `old.reddit.com/r/programming/` → `www.reddit.com/r/programming/`,
+     rendered, with `location.replace` so no back-button trap — all correct. But
+     `targetFor()` rewrote the hostname for `/prefs/`, `/message/inbox/`,
+     `/r/x/about/modqueue`, `/r/x/wiki/…` and the `.compact` variants too, onto www, where
+     those pages differ or do not exist and Sheddit hands every one of them straight back.
+     That breaks old.reddit for precisely the readers who can still use all of it —
+     logged-in moderators — and it was on by default.
+
+     The hop is now gated on `route.classify()`, which means route.js ships to
+     old.reddit.com alongside oldreddit.js. That is deliberately reusing the one
+     definition of "a page we render" rather than writing a second list to drift; route.js
+     is pure regex over the path with no load-time side effects, and a test asserts it
+     registers nothing until `start()` is called.
+
+102. **The mutation sweep reported a clean run over twenty-one rows that tested nothing.**
+     `ANCHOR MISS` is printed but is neither a PASS nor a FAIL, and the summary counted
+     only `FAIL` lines — so a row whose anchor had stopped matching read as silence. This
+     is bug 48's lesson, which added the anchor check, arriving again at three times the
+     scale because nothing enforced it. Two of the dead rows were the pair guarding vote
+     delegation's shadow-root piercing, anchored on a line that had moved to a different
+     FILE.
+
+     A miss fails the sweep now, and so does a browser suite that ran without a browser —
+     which looked like a result both ways round and is the subtler of the two. Unset,
+     `SHEDDIT_REQUIRE_BROWSER` makes the suite print SKIP and every row reads SURVIVED;
+     set to 1 it prints a line beginning `  FAIL` and every row reads *caught*, a whole
+     suite's worth of rows reporting a bug they caught with no browser ever launched.
+
+     `test/anchor-check.sh` answers the same question in a minute without running a suite,
+     and it GENERATES its dry run from mutate.sh on every invocation. The first version was
+     a snapshot and quietly reported rows that had already been repaired — a checker that
+     can go stale is the thing it exists to catch, turned on itself.
+
+103. **The documents asserted things the code did not do.** Collected here because for a
+     project whose stated point is being checkable, this is the class of defect that costs
+     most, and because two of these were store-submission answers that would have been
+     false on a form.
+
+     - README's privacy section — the one it calls "the point" — said the version check
+       runs "never on its own", a hundred lines below its own install section describing
+       the startup check. Both are 0.37.0 behaviour; the two paragraphs had simply not
+       been reconciled.
+     - PRIVACY.md offered a falsifiable test — `grep -rn "fetch(\|XMLHttpRequest\|…" src/`
+       "returns **exactly two hits**" — and it returned three. It also listed eleven
+       settings keys when there are fourteen, missing exactly the three that are not
+       display preferences (`account`, `redirectOldReddit`, `autoUpdateCheck`), said the
+       `storage.local` record is written "only once you have pressed updates" when a fresh
+       install writes one at startup, and its policy changelog stopped at 0.29.0 across
+       four subsequent releases that changed what the extension does.
+     - The Chrome remote-code justification and the AMO reviewer note both said the only
+       request is the video manifest.
+     - SECURITY.md's "No network requests of its own" had been false since 0.29.0.
+     - Smaller: chrome.js painted "No API calls" on a comments page where media.js may
+       just have fetched a manifest (paginator.js has carried the accurate "no Reddit API"
+       in a comment since 0.9.0); media.js called itself "the extension's only `fetch`";
+       ARCHITECTURE's module tree omitted background.js, the only background context and
+       the only unattended request; and "at most once a day" appeared in three places for
+       a twenty-hour floor, whose worst case is two requests inside one day.
+
+     PRIVACY.md also gained a **What the page can see** section. Nothing leaves the
+     browser, so the policy was literally true — but `data-shd-version` and
+     `data-shd-theme` sit on `<html>` on every page, and Reddit's own scripts can read
+     them. For a project whose thesis is non-participation, "the site can enumerate your
+     extension version" belongs in the policy rather than being left to be discovered.
+
+104. **Four defensive fixes with no observed failure, recorded so they are not undone as
+     unnecessary.** None of these has been seen to break a page; each is one line, and
+     each closes a class rather than a case.
+
+     - Five row lookups interpolated a Reddit id straight into an attribute selector.
+       `t3_`/`t1_` ids are safe today, which is exactly what would have kept this broken:
+       one `"` or `\` makes the string invalid CSS, `querySelector` throws inside
+       `flush()`, and eight of those spend the whole error budget and put the failure card
+       over a page that is fine. All five go through `SHD.dom.rowSel()` now.
+     - Comment and selftext bodies are cloned out of Reddit's DOM, and a cloned `<script>`
+       loses its already-started flag and executes on insertion; iframes, objects and
+       embeds revive the same way. Reddit sanitises what it renders, so this was defence
+       in depth — but dom.js's own header promises "no innerHTML with data" as though the
+       question were settled, and for a subtree we did not author it is not.
+       `SHD.dom.adoptBody()` is the single chokepoint and strips the four.
+     - `decodeURIComponent` on a username href was the one unguarded parse in session.js;
+       a stray `%` throws URIError inside `readIdentity()`, under `flush()`.
+     - bridge.js patched `history.pushState` with no idempotence guard, so a second
+       injection — an extension reload leaves the first copy's patch on the page — wrapped
+       the wrapper and dispatched twice per navigation. `emit()` is idempotent per path, so
+       the duplicate was survivable, which is precisely why it would never have been
+       noticed.
+
+     Two more from the same read that are not defensive but are too small for their own
+     entries: `pipeline.js`'s `setSetting` spread `{ ...C.settings, … }`, and contracts.js
+     has no top-level `settings` key — the `settings:` it does have is a route path nested
+     in `ACCOUNT` — so it spread `undefined` and read as a defaults merge that was not one.
+     And the packager shipped `.DS_Store` inside both store zips: `isPacked()` excluded
+     only `*.md`, the file is gitignored so it exists on one machine and not in the
+     repository, and `--check` therefore failed on every OTHER machine — walking a tree
+     without it, finding it in the zip, and calling it a removed file. The package check
+     could only pass where the problem was.
+
 
 ## The popup policy — supersedes bugs 30, 33 and 38
 

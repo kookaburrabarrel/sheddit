@@ -264,7 +264,7 @@ SHD.listing = (() => {
     ]);
   }
 
-  const row = (id) => document.querySelector(`#shd-root .thing[data-fullname="${id}"]`);
+  const row = (id) => document.querySelector(`#shd-root ${SHD.dom.rowSel(id)}`);
 
   /** model -> DOM node. Pure; no side effects on the page. */
   function render(m) {
@@ -333,7 +333,7 @@ SHD.listing = (() => {
     const body = h('div.usertext-body');
     // required by the model, never null here; inlineGifs repairs the player the clone
     // brings across broken (bug 88)
-    body.appendChild(SHD.dom.inlineGifs(m.bodyNode.cloneNode(true)));
+    body.appendChild(SHD.dom.adoptBody(m.bodyNode));
     return h('div.thing.comment.shd-profile-comment', {
       dataset: { fullname: m.id }
     }, [

@@ -1,5 +1,5 @@
 /**
- * oldreddit.js — the only script Sheddit runs ON old.reddit.com.
+ * oldreddit.js — what Sheddit runs ON old.reddit.com, with route.js and nothing else.
  *
  * WHY THIS FILE EXISTS AT ALL
  * Every other content script EXCLUDES old.reddit.com, and that is still right: old reddit
@@ -69,8 +69,8 @@ SHD.oldReddit = (() => {
   const LOOP_WINDOW_MS = 10000;
 
   /* The default for `redirectOldReddit`. contracts.js owns the real one and is NOT
-     delivered to this page — this script ships alone, because a page we are leaving does
-     not need 500 lines of selectors. So the value is repeated here and asserted against
+     delivered to this page — this script ships with route.js and nothing else, because a
+     page we are leaving does not need 500 lines of selectors. So the value is repeated here and asserted against
      contracts.js by test/run.js, the same arrangement bridge.js has with the protocol
      literals: duplicated deliberately, and kept in step by a test rather than by memory. */
   const REDIRECT_BY_DEFAULT = true;
@@ -114,6 +114,21 @@ SHD.oldReddit = (() => {
        scheme survive at all, and what actually loses them is a target built by
        concatenating onto a hardcoded origin. That is what the mutation row reintroduces. */
     out.hostname = NEW_HOST;
+
+    /* A PATH THIS EXTENSION ACTUALLY RENDERS, OR NO HOP AT ALL.
+     *
+     * The hop is worth making because www serves the page and Sheddit draws it in the
+     * layout the link was asking for. Neither half is true off the routes Sheddit takes:
+     * `/prefs/`, `/message/inbox/`, `/r/x/about/modqueue`, `/r/x/wiki/…` and the
+     * `.compact` variants either differ on www or do not exist there, and Sheddit hands
+     * every one of them straight back. Rewriting them anyway broke old.reddit for the
+     * readers who can still use all of it — logged-in moderators — and did it by default.
+     *
+     * classify() rather than a second list: route.js already owns the one definition of
+     * "a page we render", and the manifest delivers it here for this line. A path it
+     * calls OTHER is a page old.reddit serves better than we do, so the reader keeps it.
+     */
+    if (SHD.route.classify(out.pathname) === SHD.route.OTHER) return null;
     return out.href;
   }
 

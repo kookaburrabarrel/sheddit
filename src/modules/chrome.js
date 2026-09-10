@@ -296,7 +296,11 @@ SHD.chrome = (() => {
         h('div.spacer', null, [
           h('div.titlebox', null, [
             h('h1.redditname', null, h('a', title)),
-            h('div.shd-note', { text: 'Rendered locally from page data. No API calls.' })
+            /* "No Reddit API", not "no API calls" — the extension does read a video
+               manifest from Reddit's CDN and a version file from GitHub, and this note
+               sits on a comments page where the first of those may just have happened.
+               paginator.js has carried the precise version in a comment since 0.9.0. */
+            h('div.shd-note', { text: 'Rendered locally from page data. No Reddit API.' })
           ]),
           /* Old reddit's two submit buttons, under the title box. Only for a logged-in
              reader with the account layer on (account.js decides); a profile page gets

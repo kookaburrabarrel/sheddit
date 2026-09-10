@@ -76,7 +76,7 @@ globalThis.SHD = globalThis.SHD || {};
       : tag === C.PROFILE_COMMENT ? C.PROFILE_COMMENT_ATTR.id
         : C.POST_ATTR.id;
     const id = el.getAttribute(idAttr);
-    return id ? document.querySelector(`#${C.ROOT_ID} .thing[data-fullname="${id}"]`) : null;
+    return id ? document.querySelector(`#${C.ROOT_ID} ${SHD.dom.rowSel(id)}`) : null;
   };
   const revive = (el) => {
     if (isDone(el) && !rowFor(el)) el.removeAttribute(C.MARK);
@@ -481,7 +481,13 @@ globalThis.SHD = globalThis.SHD || {};
     try {
       const { settings } = await chrome.storage.sync.get('settings');
       await chrome.storage.sync.set({
-        settings: { ...C.settings, ...SHD.settings, ...(settings || {}), [key]: value }
+        /* `SHD.settings` is the live, defaults-merged object this module already keeps;
+           the stored copy is layered over it so a key nobody has ever written keeps its
+           default rather than vanishing. There used to be a `...C.settings` in front of
+           this, which read as the defaults merge and was not one — contracts.js has no
+           top-level `settings` key (the `settings:` it does have is a route path nested
+           in ACCOUNT), so it spread undefined and did nothing at all. */
+        settings: { ...SHD.settings, ...(settings || {}), [key]: value }
       });
     } catch (err) {
       /* One path only, deliberately: the write is what re-renders, via the listener

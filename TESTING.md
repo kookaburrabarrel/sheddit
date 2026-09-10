@@ -193,6 +193,22 @@ npm run test:mutate      # ~20 min, on a throwaway copy
 `test/mutate.sh` reintroduces bugs this codebase actually shipped and reports whether
 the suite that should notice does. A `SURVIVED` row is a hole in the tests.
 
+```bash
+bash test/anchor-check.sh   # ~1 min, runs no suite
+```
+
+**Run this after touching any source file, and before believing a green sweep.** A row
+whose anchor no longer matches any code tests nothing, and it says so with `ANCHOR MISS`,
+which is neither a pass nor a failure — so for a long time those rows read as silence. A
+single review found twenty-one of them at once. `anchor-check.sh` lists them in a minute
+without running a suite; the sweep itself now exits non-zero on a miss, and on a browser
+suite that ran without a browser, which looked like a result whichever way the
+`SHEDDIT_REQUIRE_BROWSER` switch was set.
+
+Note that **the row you break is rarely the row for the code you edited** — an anchor is
+a literal string, so a refactor in one module routinely kills a row belonging to another
+bug entirely.
+
 **Put each mutation against the suite that can see it.** `resetForRoute`'s unblank looked
 redundant under jsdom and survived — jsdom fires `load` after the listener registers, so
 the load listener covered it there. In a real browser `pipeline.js` boots at

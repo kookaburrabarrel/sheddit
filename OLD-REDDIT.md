@@ -18,7 +18,7 @@ observation about the host's availability, not a correction to any measurement b
 those stand exactly as recorded on 2026-08-18. What it changed in the extension is
 `src/core/oldreddit.js`: a link to that host is now taken to `www.reddit.com`, behind a
 notice, because a dead Reddit link gets blamed on whichever extension is installed
-(ARCHITECTURE §5.2, engineering log 95).
+(ARCHITECTURE §5.2, engineering log 96).
 
 ## Provenance and its limits
 
@@ -28,7 +28,9 @@ notice, because a dead Reddit link gets blamed on whichever extension is install
 - Element widths that are content-driven (old reddit floats `.rank` and `.midcol`, so both
   shrink-to-fit) describe *that page's* content, not a fixed column.
 - Pages covered: front page, a comments page, a subreddit listing. Search, profiles, wiki,
-  inbox and the submit form were never reached — and Sheddit does not claim those routes.
+  inbox and the submit form were never reached. Of those, profiles have since come into
+  scope (0.10.0) and are therefore built without a measured reference; the rest Sheddit
+  still does not claim.
 
 ## What was acted on
 

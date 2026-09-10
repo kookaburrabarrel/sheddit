@@ -1,6 +1,6 @@
 {
-  "version": "0.42.0",
-  "released": "2026-09-09",
+  "version": "0.43.0",
+  "released": "2026-09-10",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.42.0 makes the account corner clickable: your avatar and name open a menu of Reddit's own account pages — profile, saved, messages, preferences — ending in a log out that presses Reddit's own control rather than building a request. Logged out, the corner says so and links to Reddit's login page."
+  "notes": "0.43.0 comes out of a full read of the source: Sheddit now runs only on the Reddit it rebuilds rather than on every reddit.com subdomain, the startup version check can no longer repeat without limit on a network that blocks GitHub, a reply it could not confirm is no longer offered for posting twice, and old.reddit links to pages it does not draw stay where they are. It also documents, for the first time, that Sheddit answers Reddit's 18+ prompt for you."
 }

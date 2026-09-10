@@ -3,7 +3,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.png">
-  <img src="docs/assets/banner-light.png" alt="Sheddit — modern Reddit, rewritten into the old.reddit.com layout, live, on every page. No account, no redirect, no API calls. Alongside, a Reddit front page rendered in the old.reddit layout." width="900">
+  <img src="docs/assets/banner-light.png" alt="Sheddit — modern Reddit, rewritten into the old.reddit.com layout, live, on every page. No account, no profile, no Reddit API. Alongside, a Reddit front page rendered in the old.reddit layout." width="900">
 </picture>
 
 ### Shed the manipulative endless feed. Keep the conversation.
@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
 
-[![version 0.42.0](https://img.shields.io/badge/version-0.42.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.43.0](https://img.shields.io/badge/version-0.43.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
 [![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.42.0 is out — everyone is welcome to try it
+### Beta 0.43.0 is out — everyone is welcome to try it
 
 Works in Chrome and Firefox, [installed by hand](#install) in about a minute — **Chrome is
 the better-tested of the two**, so start there if you have the choice.
@@ -76,6 +76,24 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
 
+**0.43.0 — a full read of the code, and what it turned up**
+- **Changed:** Sheddit only runs on the Reddit it actually rebuilds. It was loading on
+  every `reddit.com` subdomain, including `business.`, `ads.`, `mod.` and `chat.` — real
+  applications with their own layouts, which it briefly blanked and then left alone.
+- **Fixed:** the startup version check could repeat without limit if your network blocks
+  GitHub. Only a *successful* check reset the clock, so a blocked one never did.
+- **Fixed:** a reply that Sheddit could not confirm had posted was offered for posting a
+  second time, which could double-post a slow reply. It now says it may already have gone
+  through and leaves your text where it is.
+- **Fixed:** an `old.reddit.com` link to a page Sheddit does not draw — your preferences,
+  your inbox, a wiki page, a moderation queue — was being sent to `www.reddit.com`, where
+  those pages differ or do not exist. Those links stay on old.reddit now.
+- **Documented:** on a subreddit marked adult, Sheddit clicks Reddit's own *over 18*
+  button for you. It has done that since 0.30.0 and the privacy policy did not say so; it
+  does now, including what it means if you are signed in. The same release made it much
+  harder to fire on anything that is not the age gate — an "Open in app" prompt offering
+  *Yes* / *Not now* previously matched.
+
 **0.42.0 — the account corner opens**
 - **Added:** the avatar and your name are a button now, opening a menu of Reddit's own
   account pages — *my profile*, *saved*, *messages*, *preferences* — ending in **log out**.
@@ -96,18 +114,6 @@ Full detail in the [changelog](CHANGELOG.md). The most recent builds:
   under it, in place of the sideways-scrolling row. The box stays the size of one picture
   however many frames the post has, so a long gallery no longer pushes the comments off the
   bottom of the page, and only the frame you are looking at is downloaded.
-
-**0.39.0 — pictures at the size they were uploaded**
-- **Fixed:** a post's picture rendered at 640px when a full-size copy was sitting in the
-  same page. Reddit offers the original alongside smaller resizes, and only the resizes
-  state a width — so the original scored nothing and lost to them.
-
-**0.38.0 — galleries show every picture**
-- **Fixed:** a gallery post rendered only its first image. Reddit keeps the other frames in
-  an attribute it fills in when its own carousel advances — which never happens here, since
-  Sheddit replaces that carousel. Every frame is read straight from the page now.
-- **Changed:** a gallery's frames sit in one sideways-scrolling row instead of stacking
-  down the page.
 
 ---
 
@@ -209,7 +215,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.42.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.43.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite
@@ -239,8 +245,8 @@ anything installed outside the Web Store. Dismiss it.
 Sheddit card in `chrome://extensions`. A hand-installed extension never updates itself, so
 the **updates** button in Sheddit's header turns orange once your copy is 30 days old.
 Under it, **auto: on/off** decides whether Sheddit asks GitHub for the current version once
-when your browser starts — on by default, at most one request a day, and off means nothing
-leaves until you press the button yourself. Details in
+when your browser starts — on by default, no more than one request every twenty hours, and
+off means nothing leaves until you press the button yourself. Details in
 [PRIVACY.md](PRIVACY.md#the-short-version).
 
 Works in Chrome 111+ and any Chromium browser (Edge, Brave, Vivaldi, Opera).
@@ -283,7 +289,7 @@ build step. See [CONTRIBUTING.md](CONTRIBUTING.md).
 | **Your account, if you have one** *(experimental)* | Already logged in to Reddit? The vote arrows register, `reply` opens an old-reddit reply box, and the sidebar gets *submit a new link / text post* — each a click forwarded to Reddit's own control on the page. Off with one checkbox; nothing changes for a logged-out reader |
 | **Old Reddit links that still work** | `old.reddit.com` answers every page with a login wall now; Sheddit catches those links and opens the same page on `www.reddit.com`, in the same layout, behind a notice saying so |
 | **Tells you when it breaks** | If Reddit ships markup Sheddit can't read, you get a screen saying so, with a button to hand the page back |
-| **Nothing leaves your browser** | No API calls and no telemetry; your settings live in your browser's own storage and go nowhere else |
+| **Nothing about you leaves your browser** | No Reddit API and no telemetry; your settings live in your browser's own storage and go nowhere else. Three requests exist — a video manifest, and a version file on GitHub asked for on a press and once at browser start — and [PRIVACY.md](PRIVACY.md) describes each |
 
 ## Themes
 
@@ -329,17 +335,29 @@ For most extensions this section is fine print. Here it is the point: an extensi
 so you can read without being profiled had better not profile you itself, and had better
 be checkable on that claim rather than taken at its word.
 
-Sheddit makes **no API calls** — not to Reddit's, not to anyone else's. There is no
-analytics, no telemetry, no remote configuration. Nothing about you is sent anywhere.
+Sheddit makes **no Reddit API calls**, and there is no analytics, no telemetry, no remote
+configuration and no server belonging to this project. Nothing about you is sent anywhere.
 
-Exactly two requests ever leave the browser, both optional, neither about you:
+Three requests can leave the browser. All are optional, none carries a cookie, and none
+is about you:
 
 - **A video manifest, to play video**, read from Reddit's media server without cookies —
   the same file your browser reads to play the video on Reddit. Untick *"Play video on
   the comments page"* and it never happens.
-- **A version number, if you press the button that asks.** No cookies, no referrer, and
-  never on its own. A check that ran by itself would make every install phone home with an
-  IP and a timestamp, which is telemetry whatever it is called. The press is the consent.
+- **A version number, when you press the button that asks.** No cookies, no referrer.
+- **The same version number, once when your browser starts** — since 0.37.0, on by
+  default, and switched off by **auto: off** beside that same button. A hand-installed
+  copy never updates itself, and a notice that has to be pressed is one the people
+  running a broken build never see; that is the reason it was made automatic, and it is
+  worth being blunt about the cost. GitHub, who serve the file, see what any host sees:
+  an IP address and a timestamp. No more than one request every twenty hours however
+  often you restart, and a failed attempt counts, so a browser that cannot reach GitHub
+  backs off rather than retrying at every start.
+
+**One thing Sheddit presses for you:** on a subreddit marked adult it clicks Reddit's own
+*over 18* button, without asking. If you are signed in, Reddit records that affirmation
+against your account. It is narrowly targeted and it is described in full in
+[PRIVACY.md](PRIVACY.md#what-it-presses-for-you).
 
 It asks for two permissions: to run on `reddit.com`, and `storage` to remember your
 theme. The tests count every request the extension makes, so a change that quietly

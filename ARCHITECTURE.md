@@ -145,9 +145,10 @@ sheddit/
 │   │   ├── paginator.js        drives faceplate-partial.loadContent() off its own sentinel
 │   │   ├── model.js            shreddit-* element → plain JS model object
 │   │   ├── media.js            DASH-manifest resolution + video/audio pairing (0.16–0.30)
-│   │   ├── update.js           build-age nudge + the click-only version check (0.29.0)
+│   │   ├── update.js           build-age nudge + the version check on a press (0.29.0)
+│   │   ├── background.js       the ONLY background context — the startup version check (0.37.0)
 │   │   ├── session.js          is the page a logged-in one? presence-based, C.SESSION (0.34.0)
-│   │   ├── oldreddit.js        the ONLY script on old.reddit.com — the hop to www (§5.2)
+│   │   ├── oldreddit.js        the hop to www, on old.reddit.com — with route.js, alone (§5.2)
 │   │   └── dom.js              tiny h() builder, escaping, number/time formatting
 │   ├── modules/
 │   │   ├── listing.js          feed & subreddit → old-reddit link rows
