@@ -1,9 +1,11 @@
 # Changelog
 
-Sheddit is in **beta**: 0.43.0 is the current build, open to anyone who wants to install
-it by hand while the store listings are in review. Sections are builds, newest first; the
-top one is the version `manifest.json` carries today. Every one of them shipped as a
-hand-install — it is the store listings that are still in review, not the builds.
+Sheddit is in **beta**: 0.43.0 is the current build, on the
+[Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
+and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/). Sections
+are builds, newest first; the top one is the version `manifest.json` carries today. The
+builds up to and including 0.43.0 shipped as hand-installs, while the listings were in
+review.
 Everything below is pre-1.0 development on `main`. The version in
 `manifest.json`/`package.json`/`README.md` moves on every push, because it is the only
 build identity available while testing: the failure screen prints it, so a report can

@@ -92,8 +92,8 @@ the extension removes them.
   image servers the same way any page loads its images — Sheddit only writes the `<img>`
   tag, and listing pictures are not fetched at all until you open them. Untick *"Show
   images inline"* to turn the full-size ones off.
-- **The update check, and how to switch it off.** Sheddit is installed by hand and never
-  updates itself, so since 0.29.0 the header carries an **updates** control. Pressing it
+- **The update check, and how to switch it off.** A copy installed by hand never updates
+  itself, so since 0.29.0 the header carries an **updates** control. Pressing it
   makes one request: a GET of
   [`dist/latest.json`](https://github.com/kookaburrabarrel/sheddit/blob/main/dist/latest.json)
   from GitHub, a static file holding a version number. It is sent **without cookies** and

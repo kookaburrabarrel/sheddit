@@ -21,14 +21,14 @@ No account. No profile. No feed tuned to keep you scrolling.
 
 [![version 0.43.0](https://img.shields.io/badge/version-0.43.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
-[![Chrome 111+](https://img.shields.io/badge/chrome-111+-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](#install)
-[![Firefox 140+](https://img.shields.io/badge/firefox-140+-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](#firefox)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
+[![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
 ### Beta 0.43.0 is out — everyone is welcome to try it
 
-Works in Chrome and Firefox, [installed by hand](#install) in about a minute — **Chrome is
-the better-tested of the two**, so start there if you have the choice.
+On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
+**Chrome is the better-tested of the two**, so start there if you have the choice.
 If Sheddit makes Reddit better for you, tell a friend — or post about it on Reddit itself,
 if you still have an account ;)
 
@@ -221,10 +221,19 @@ Chromium (the packed extension, layout geometry, media playback) against one for
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite
 passes; it simply has fewer miles on it, so a rough edge is likelier there. Either way
 Reddit can change something tomorrow that breaks it — if that happens,
-[tell me](https://github.com/kookaburrabarrel/sheddit/issues/new/choose). Store listings
-are in progress; until they land, the zips below are the way in. Nothing to build.
+[tell me](https://github.com/kookaburrabarrel/sheddit/issues/new/choose). Both store
+listings are live, so installing is one click and updates arrive on their own.
 
 ### Chrome
+
+**[⬇ Install from the Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)**
+
+Then open [reddit.com](https://www.reddit.com). Chrome keeps it updated on its own.
+
+Works in Chrome 111+ and any Chromium browser (Edge, Brave, Vivaldi, Opera).
+
+<details>
+<summary>Install by hand instead</summary>
 
 **[⬇ Download sheddit.zip](https://github.com/kookaburrabarrel/sheddit/raw/main/dist/sheddit.zip)**
 
@@ -241,30 +250,39 @@ are in progress; until they land, the zips below are the way in. Nothing to buil
 Chrome will warn about developer-mode extensions each time it starts. It says that about
 anything installed outside the Web Store. Dismiss it.
 
-**To update:** download the zip again, replace the folder's contents, then press ↻ on the
-Sheddit card in `chrome://extensions`. A hand-installed extension never updates itself, so
-the **updates** button in Sheddit's header turns orange once your copy is 30 days old.
-Under it, **auto: on/off** decides whether Sheddit asks GitHub for the current version once
-when your browser starts — on by default, no more than one request every twenty hours, and
-off means nothing leaves until you press the button yourself. Details in
-[PRIVACY.md](PRIVACY.md#the-short-version).
+**To update a hand-install:** download the zip again, replace the folder's contents, then
+press ↻ on the Sheddit card in `chrome://extensions`. A hand-installed extension never
+updates itself, so the **updates** button in Sheddit's header turns orange once your copy
+is 30 days old. Under it, **auto: on/off** decides whether Sheddit asks GitHub for the
+current version once when your browser starts — on by default, no more than one request
+every twenty hours, and off means nothing leaves until you press the button yourself.
+Details in [PRIVACY.md](PRIVACY.md#the-short-version).
 
-Works in Chrome 111+ and any Chromium browser (Edge, Brave, Vivaldi, Opera).
+</details>
 
 ### Firefox
 
+**[⬇ Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)**
+
+Same extension, **fewer miles on it — this is the less-tested of the two builds**, so bug
+reports from here are especially useful. Firefox 140+; it updates itself like any other
+add-on.
+
+If reddit.com ever loads without the layout, Firefox has revoked the site permission. The
+extension's options page will say so and offer a button to grant it back.
+
+<details>
+<summary>Install by hand instead</summary>
+
 **[⬇ Download sheddit-firefox.zip](https://github.com/kookaburrabarrel/sheddit/raw/main/dist/sheddit-firefox.zip)**
 
-Same extension, newer build, **fewer miles on it — this is the less-tested of the two
-builds**, so bug reports from here are especially useful. Until the addons.mozilla.org
-listing lands, Firefox 140+ only accepts it as a *temporary* install, which lasts until the
-browser closes:
+Loaded this way it is a *temporary* add-on, which Firefox discards when the browser
+closes — the store listing above is the one that persists.
 
 1. Open `about:debugging#/runtime/this-firefox`.
 2. Click **Load Temporary Add-on…** and pick the zip. No need to unzip.
 
-If reddit.com ever loads without the layout, Firefox has revoked the site permission. The
-extension's options page will say so and offer a button to grant it back.
+</details>
 
 ### From source
 
