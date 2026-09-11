@@ -1675,6 +1675,14 @@ mutate "the gif video is muted in markup only, so autoplay is blocked and the bo
 
 # The failure the login wall actually produces. Swapping the host on /login/ rather than
 # reading `dest` lands the reader on WWW's login page — a hop that "works", to another wall.
+# watchSettings() re-runs the route to rebuild with the new setting. Called with one
+# argument it stores `onRoute.lastPath = undefined`, so the next genuine ?sort= click on a
+# thread compares undefined against the path, concludes "not a sort swap", and skips the
+# posts-only un-stamp that is bug 87's second half — leaving the thread with no post row and
+# no sort strip, permanently, from a click on our own header.
+mutate "the settings re-run forgets the path, poisoning the next sort swap" run \
+  src/core/pipeline.js '        onRoute(R.classify(), R.path);' '        onRoute(R.classify());'
+
 # onRoute runs PRE-COMMIT, so the DOM is the OUTGOING page. When the page being LEFT is
 # itself an empty listing, sourceCount() is 0 and Reddit's no-content panel is still in that
 # outgoing feed — so emptyFeedReason() answers about a route zero milliseconds old, the

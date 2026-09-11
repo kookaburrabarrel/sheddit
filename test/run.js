@@ -1045,6 +1045,55 @@ async function boot(html, url, setup) {
       doc.querySelector('#shd-root') === root);
   }
 
+  {
+    /* ...AND AFTER A SETTINGS CHANGE, which is where the above quietly stopped being true.
+       watchSettings() re-runs the route to rebuild with the new setting, and it called
+       onRoute() with ONE argument — so `onRoute.lastPath = undefined` was stored, and the
+       next genuine `?sort=` click compared `undefined === '/r/x/comments/…'`, decided it
+       was not a sort swap, and skipped the posts-only un-stamp that is bug 87's second
+       half. Reddit leaves the post element in place on a query-only sort change, so
+       revive() never fires for it either: the row goes down with #shd-root and nothing
+       re-adopts the post. Permanent for that page, and reachable from our own header —
+       `nsfw thumbnails` writes a setting. The block above passes because it never changes
+       one first. */
+    let fire = null;
+    const { doc, window } = await boot(commentsPage(),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/', (w) => {
+        w.chrome = { storage: {
+          sync: { get: async () => ({ settings: {} }), set: async () => {} },
+          onChanged: { addListener: (fn) => { fire = fn; } }
+        } };
+      });
+    const rows = () => [...doc.querySelectorAll('#shd-root .thing.comment')];
+    check('setup: the thread rendered before any setting moved',
+      rows().length === COMMENT_DEPTHS.length && !!doc.querySelector('#shd-root .shd-selfpost'),
+      String(rows().length));
+
+    check('setup: the settings watcher is registered', typeof fire === 'function');
+    fire({ settings: { newValue: { showNsfwThumbnails: true }, oldValue: {} } }, 'sync');
+    await waitFor(() => !!doc.querySelector('#shd-root .shd-selfpost'), { timeout: 3000 });
+
+    const section = doc.querySelector('shreddit-comment-tree section');
+    window.history.pushState({}, '', '/r/programming/comments/link1/nasa/?sort=top');
+    section.querySelectorAll('shreddit-comment').forEach(c => c.remove());
+    for (let i = 0; i < 2; i++) {
+      section.insertAdjacentHTML('beforeend',
+        `<shreddit-comment thingid="t1_aft${i}" postid="t3_link1" author="aft${i}"
+           score="${5 - i}" created="2026-08-27T00:00:00.000000+0000" depth="0"
+           comment-position="${i}" content-type="text"
+           permalink="/r/programming/comments/link1/comment/aft${i}/">
+           <div slot="comment"><div class="md"><p>after-settings ${i}</p></div></div>
+         </shreddit-comment>`);
+    }
+    const ok = await waitFor(() => rows().length === 2, { timeout: 3000 });
+    check('a sort swap after a settings change still renders the thread post',
+      ok && !!doc.querySelector('#shd-root .shd-selfpost'),
+      'no post row: the settings re-run stored an undefined path and the swap was not seen');
+    check('...and still bolds the incoming sort',
+      doc.querySelector('.menuarea .selected')?.textContent === 'top',
+      doc.querySelector('.menuarea .selected')?.textContent);
+  }
+
   console.log('\n\x1b[1mCOMMENTS PAGE — AN IMAGE SUBMISSION\x1b[0m');
   {
     const { doc } = await boot(commentsPage({ imagePost: true }),
