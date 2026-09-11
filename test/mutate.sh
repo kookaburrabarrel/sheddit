@@ -2119,6 +2119,23 @@ mutate "unreadable settings are treated as permission to check" run \
 mutate "the startup check loses its rate limit" run \
   src/core/background.js '  if (!(await due())) return;' '  ;'
 
+# Two clocks, not one. `at` answers "when did we last TRY" and carries the floor; the nudge
+# asks "how long since anything ANSWERED". Collapsing them means a reader who cannot reach
+# GitHub re-stamps the staleness count at every browser start and never ages past a day —
+# the one reader the nudge exists for is the one who can never see it.
+mutate "a failed attempt counts as an answer, resetting the staleness clock" run \
+  src/core/background.js '               okAt: answer ? Date.now() : (prev.okAt || null) }' '               okAt: Date.now() }'
+
+# ...and the reading half of the same pair, in the module the reader actually meets.
+mutate "the nudge measures from the last attempt rather than the last answer" run \
+  src/core/update.js '      ? (typeof record.okAt === '"'"'number'"'"' ? record.okAt : (record.ok === false ? 0 : record.at))' '      ? record.at'
+
+# onStartup and onInstalled both fire when a browser opens on an update installed while it
+# was closed. The listeners discard the promise, and due() reads a record check() does not
+# write until stamp() — so without the lock both pass the gate and two GETs leave at once.
+mutate "two events at one browser start each send their own request" run \
+  src/core/background.js '  if (inflight) return inflight;' '  ;'
+
 # An answer with no version is not an answer. Storing it stamps `at`, which silences the
 # next twenty hours of checks on the strength of nothing.
 mutate "an unusable answer is stored anyway and silences the next check" run \

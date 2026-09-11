@@ -98,9 +98,22 @@ SHD.update = (() => {
     return 0;
   }
 
-  /** The last moment we have any evidence about, as ms. */
+  /**
+   * The last moment we have any EVIDENCE about, as ms — which is the last moment something
+   * answered, not the last moment we asked.
+   *
+   * `at` moves on every attempt, answered or not, because the background floor charges
+   * attempts (bug 98). Reading the staleness count off it meant a reader who cannot reach
+   * GitHub re-stamped this on every browser start and never aged past a day, so the nudge
+   * that exists for exactly that reader never lit. `okAt` is written only by an answer.
+   * A record stored before `okAt` existed has neither field to offer if it failed, so the
+   * build date carries it — honest, and never newer than the truth.
+   */
   function since() {
-    return Math.max(record ? record.at : 0, Date.parse(BUILT) || 0);
+    const answered = record
+      ? (typeof record.okAt === 'number' ? record.okAt : (record.ok === false ? 0 : record.at))
+      : 0;
+    return Math.max(answered, Date.parse(BUILT) || 0);
   }
 
   /**

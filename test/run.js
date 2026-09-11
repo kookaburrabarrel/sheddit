@@ -3717,6 +3717,49 @@ async function boot(html, url, setup) {
     }
 
     {
+      /* ...AND A FAILED ATTEMPT IS NOT A FRESH ANSWER. The background floor stamps `at` on
+         every attempt, answered or not, because a blocked network is the case that most
+         needs a floor (bug 98). Reading the nudge's age off that same field meant the
+         reader who cannot reach GitHub re-stamped it at every browser start and never aged
+         past a day — so the one reader the nudge exists for could never see it. `okAt` is
+         written only by an answer, and this is the half of that pair the reader meets:
+         asked a moment ago, answered nothing since long before the build went stale. */
+      const probe = await bootUpdate();
+      const DAY_MS = 86400000;
+      const BUILT_MS = Date.parse(probe.window.SHD.update.BUILT);
+      const FUTURE = BUILT_MS + (probe.window.SHD.update.STALE_DAYS + 40) * DAY_MS;
+      /* The answer has to sit AFTER the build date, or the build-date floor decides the
+         age on its own and both readings of the record agree — a row that pins nothing. */
+      const ANSWERED = BUILT_MS + 5 * DAY_MS;
+      {
+        const { window: w } = await bootUpdate({
+          stored: { version: '0.29.0', at: FUTURE, okAt: ANSWERED, ok: false }
+        });
+        await w.SHD.update.load();          // the record is adopted asynchronously
+        const real = w.Date.now;
+        w.Date.now = () => FUTURE;
+        const b = w.SHD.chrome.themeBar().querySelector('.shd-update-btn');
+        check('a failed check does not reset the nudge the offline reader depends on',
+          b.classList.contains('shd-update-stale'), `${b.textContent} / ${b.title}`);
+        w.Date.now = real;
+      }
+      /* The counterweight, or the row above would pass by simply never resetting: a record
+         that really did answer recently still silences it, on the same clock. */
+      {
+        const { window: w } = await bootUpdate({
+          stored: { version: '0.29.0', at: FUTURE, okAt: FUTURE - DAY_MS, ok: true }
+        });
+        await w.SHD.update.load();          // the record is adopted asynchronously
+        const real = w.Date.now;
+        w.Date.now = () => FUTURE;
+        const b = w.SHD.chrome.themeBar().querySelector('.shd-update-btn');
+        check('...while an answer that really is recent still silences it',
+          !b.classList.contains('shd-update-stale'), `${b.textContent} / ${b.title}`);
+        w.Date.now = real;
+      }
+    }
+
+    {
       const { window } = await bootUpdate();
       const cmp = window.SHD.update.cmp;
       check('0.29.0 < 0.30.0 < 0.30.1 < 1.0.0',
@@ -5627,6 +5670,54 @@ async function boot(html, url, setup) {
     await failing.SHD_BG.maybeCheck();
     check('...but it retries within the hour-scale floor, not the twenty-hour one',
       tries === 2, `${tries} requests`);
+
+    /* THE STALENESS CLOCK IS NOT THE FLOOR CLOCK. `at` moves on every attempt, because
+       the floor charges attempts (bug 98) — but update.js asks how long it has been since
+       anything ANSWERED, which is what lights the orange nudge at thirty days. Reading
+       that off `at` meant a reader who cannot reach GitHub re-stamped it at every browser
+       start and never aged past a day: the nudge exists for precisely that reader and was
+       the one thing they could never see. `okAt` moves only on an answer.
+
+       Seeded through a real success rather than by hand, because a hand-written okAt
+       survives the merge either way and would pin nothing. */
+    const DAY = 24 * 3600 * 1000;
+    let answering = true;
+    const flaky = mkCtx({ fetch: () => (answering
+      ? Promise.resolve({ ok: true, json: async () => ({ version: '9.9.9' }) })
+      : Promise.reject(new Error('blocked'))) });
+    await flaky.SHD_BG.maybeCheck();
+    const answeredAt = flaky.__local.update.okAt;
+    check('an answer records WHEN it answered, not merely that we asked',
+      typeof answeredAt === 'number' && flaky.__local.update.ok === true,
+      JSON.stringify(flaky.__local.update));
+
+    // Off the network, and far enough back that the floor allows another attempt.
+    answering = false;
+    flaky.__local.update.at = Date.now() - 40 * DAY;
+    flaky.__local.update.okAt = Date.now() - 40 * DAY;
+    await flaky.SHD_BG.maybeCheck();
+    check('a failed attempt moves the floor clock',
+      Date.now() - flaky.__local.update.at < 5000,
+      String(Date.now() - flaky.__local.update.at));
+    check('...and leaves the answer clock where the last answer put it',
+      typeof flaky.__local.update.okAt === 'number' &&
+      Date.now() - flaky.__local.update.okAt > 39 * DAY,
+      JSON.stringify({ okAt: flaky.__local.update.okAt, now: Date.now() }));
+    check('...while the last good answer survives the merge, for the header to render',
+      flaky.__local.update.version === '9.9.9' && flaky.__local.update.ok === false,
+      JSON.stringify(flaky.__local.update));
+
+    /* ONE CHECK PER BROWSER START, even when both events fire. An update installed while
+       the browser was closed delivers onInstalled and onStartup together; the listeners
+       discard the promise, so neither can await the other, and due() reads a record that
+       check() does not write until stamp(). Without a lock both pass the gate and two GETs
+       leave for the same file — the floor is this worker's one promise about what leaves
+       the browser, so it cannot be a race. */
+    let racing = 0;
+    const both = mkCtx({ fetch: () => { racing++; return Promise.reject(new Error('blocked')); } });
+    await Promise.all([both.SHD_BG.maybeCheck(), both.SHD_BG.maybeCheck()]);
+    check('two events at one browser start send one request, not two',
+      racing === 1, `${racing} requests`);
 
     /* Packaging. The worker is not a content script and must never be bundled into one —
        it would run in a page, where chrome.runtime.onStartup does not exist — but it does
