@@ -168,6 +168,13 @@ SHD.listing = (() => {
    * it asks the same question the tile does.
    */
   function expandoBox(m) {
+    /* A LISTING affordance, and only there. comments.js builds the submission row through
+       this same render() and then appends the picture OPEN beneath it, so an expando on
+       that page offers to reveal what is already on screen: pressing [+] stacked a second
+       identical full-size copy above the first and doubled the post's height. "Two
+       properties, two rows" (log 79) — the expando for a listing row, the inline picture
+       for the comments page — and contracts.js says the same thing in words. */
+    if (SHD.route.current === SHD.route.COMMENTS) return null;
     if (m.type !== 'image' || !m.image) return null;
     if (!SHD.settings.inlineImages) return null;
     if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;

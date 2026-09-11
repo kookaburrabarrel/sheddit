@@ -436,7 +436,15 @@ SHD.comments = (() => {
    */
   function gateImages(box, m, resolve) {
     box.classList.add('shd-image-gated');
+    /* THE BLUR NEEDS SOMETHING TO GIVE IT HEIGHT. The still is the post's thumbnail, and
+       thumbnailFor() returns null outright when the Thumbnails setting is off — so with
+       that setting off the gated box held nothing but the reveal button, which is
+       absolutely positioned inside a `position: relative; overflow: hidden` box. No still
+       means height 0, and height 0 with overflow hidden clips the button out of existence:
+       an adult post showed no picture, no blur, no control, and no click could ever reach
+       it. The class gives the empty box a floor to stand on. */
     if (m.thumbnail) box.appendChild(h('img.shd-image-still', { src: m.thumbnail, alt: '' }));
+    else box.classList.add('shd-image-gated-bare');
     const show = h('button.shd-image-reveal', {
       type: 'button',
       text: 'adult content — click to view',

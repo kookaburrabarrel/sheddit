@@ -900,6 +900,47 @@ const overlaps = (a, b) =>
     check('...still capped, and still not scrolling the page sideways',
       after.w > 0 && after.w <= cap + 1 && after.scrollW <= after.clientW + 1,
       JSON.stringify(after));
+    /* THE BLUR WITH NOTHING UNDER IT. The still is the post's THUMBNAIL, and
+       thumbnailFor() returns null outright when the Thumbnails setting is off — so that
+       reader's gated box holds only the reveal button, which is absolutely positioned
+       inside a `position: relative; overflow: hidden` box. Height 0 plus overflow hidden
+       clips the one control they have out of existence: no picture, no blur, no button,
+       and no click that could ever reach it.
+
+       Built here rather than harvested from the page, because the shape only occurs with a
+       setting this harness cannot inject — and measured in the engine both ways, because
+       this is exactly the claim jsdom cannot make: checkVisibility() inspects
+       display/visibility/opacity and returns true for a button clipped to nothing, and
+       jsdom does no layout at all. */
+    const bare = await page.evaluate(() => {
+      const host = document.querySelector('.shd-selfpost .entry') ||
+                   document.querySelector('.shd-selfpost');
+      const box = document.createElement('div');
+      box.className = 'shd-image shd-image-gated';
+      const btn = document.createElement('button');
+      btn.className = 'shd-image-reveal';
+      btn.type = 'button';
+      btn.textContent = 'adult content — click to view';
+      box.appendChild(btn);
+      host.appendChild(box);
+      const read = () => ({
+        box: Math.round(box.getBoundingClientRect().height),
+        btn: Math.round(btn.getBoundingClientRect().height),
+        inside: btn.getBoundingClientRect().top >= box.getBoundingClientRect().top - 1 &&
+                btn.getBoundingClientRect().bottom <= box.getBoundingClientRect().bottom + 1
+      });
+      const without = read();
+      box.classList.add('shd-image-gated-bare');
+      const withFloor = read();
+      box.remove();
+      return { without, withFloor, clipped: 'hidden' };
+    });
+    check('with no still to fill it, the gated box collapses and clips its own button away',
+      bare.without.box === 0 && !bare.without.inside, JSON.stringify(bare.without));
+    check('...and the floor gives the reader back a button they can actually reach',
+      bare.withFloor.box > 0 && bare.withFloor.btn > 0 && bare.withFloor.inside,
+      JSON.stringify(bare.withFloor));
+
     check('no page errors on an adult image post', pageErrors.length === 0, pageErrors.join(' | '));
     await page.close();
   }

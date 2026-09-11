@@ -1054,6 +1054,16 @@ async function boot(html, url, setup) {
     check('an image post shows its picture on the comments page', !!pic);
     check('...inside the row\'s entry, where old reddit hangs the expando',
       !!doc.querySelector('.shd-selfpost .entry .shd-image'));
+    /* ...AND NOT ALSO BEHIND AN EXPANDO. The submission row is built by listing.render(),
+       which adds old reddit's [+] for an image post — a LISTING affordance. On a comments
+       page the picture is already open below it, so that control carried the identical URL
+       and pressing it stacked a second full-size copy above the first, doubling the post's
+       height. "Two properties, two rows" (log 79): the expando for a listing row, the
+       inline picture here. */
+    check('...and the row grows no listing expando to duplicate it',
+      !doc.querySelector('.shd-selfpost .expando') &&
+      !doc.querySelector('.shd-selfpost .expando-button'),
+      doc.querySelector('.shd-selfpost .expando')?.getAttribute('data-shd-src'));
     /* THE ORIGINAL BEATS EVERY RESIZE. Reported from live use: a post rendered at 640px
        with a full-size copy in the same element. `i.redd.it` serves the file as uploaded
        and `preview.redd.it` serves generated variants of it — and the original carries no
