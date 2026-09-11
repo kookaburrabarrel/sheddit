@@ -6366,8 +6366,34 @@ async function boot(html, url, setup) {
     const said = await waitFor(() => /could not find/.test(
       doc.querySelector('.shd-account-menu .shd-account-status')?.textContent || ''), { timeout: 2000 });
     check('two controls saying "log out" means clicking neither', drawer.logouts === 0 && reloaded === 0);
+    /* AND THE MENU IS STILL OPEN TO BE READ. The corner closes on any click outside it,
+       captured on document — and logOut()'s first act is to click Reddit's avatar button,
+       which bubbles there and reads as exactly that. The menu was hidden before the
+       reader's press even returned, so every message below was written into a hidden
+       subtree: invisible, and unannounced, because aria-live does not fire from one.
+       textContent reads the same either way, which is why the existing rows could not see
+       it. */
+    check('...with our own menu still open, so the message can be read at all',
+      doc.querySelector('.shd-account-menu')?.hidden === false,
+      String(doc.querySelector('.shd-account-menu')?.hidden));
     check('...saying so, and revealing Reddit\'s own menu in place', said === true &&
       doc.documentElement.classList.contains('shd-passthrough-active'));
+    /* WHICH element was revealed, not merely that something was. C.USER_DRAWER.host leads
+       with `[id*="user-drawer" i]`, and the toggle's own id is `#expand-user-drawer-button`
+       — which contains that string and sits EARLIER in document order. So the fallback
+       handed passthrough() the avatar button, and passthrough display:none's every sibling
+       on the corridor to its target: the panel holding Reddit's log-out control was hidden
+       by our own class, on a blanked page showing one button. Asserting only that
+       passthrough is active cannot tell the two apart, which is how this survived. */
+    const revealedPanel = doc.querySelector('#user-drawer-panel');
+    const revealedToggle = doc.querySelector('#expand-user-drawer-button');
+    check('...and the thing revealed is the DRAWER, not the button that opens it',
+      revealedPanel?.classList.contains('shd-passthrough') === true ||
+      revealedPanel?.classList.contains('shd-native-passthrough') === true,
+      `panel=${revealedPanel?.className} toggle=${revealedToggle?.className}`);
+    check('...so the panel is not hidden by the reveal that was meant to show it',
+      !revealedPanel?.classList.contains('shd-passthrough-hide'),
+      revealedPanel?.className);
     window.SHD.dom.passthroughClear();
   }
   {
@@ -6671,6 +6697,51 @@ async function boot(html, url, setup) {
     check('...while the draft stays in our form, where re-sending is deliberate',
       formOf('t1_c9').querySelector('textarea').value === 'Might already be posted.');
     window.SHD.dom.passthroughClear();
+
+    /* THE PAGINATOR'S ARRIVALS ARE NOT THE READER'S. A top-level comment has no branch to
+       count, so the post path counted the whole document — and on a comments page the
+       paginator is auto-loading further batches of `shreddit-comment` on a 2s heartbeat,
+       inside the same 8s window. Any batch landing there read as "your comment arrived",
+       and replyForm closed on it, taking the reader's draft with it while Reddit still
+       held unposted text. Log 773 wrote this rule for the `N more replies` control —
+       "page-wide would credit the paginator's arrivals to our click" — and the post path
+       never got it.
+
+       Driven through compose() directly: the post composer has no harness here, and
+       building one to reach two lines of counting would be the larger risk. */
+    {
+      const tree = doc.querySelector('shreddit-comment-tree section');
+      const box = doc.createElement('comment-composer-host');
+      box.innerHTML = '<textarea></textarea><button type="submit">Comment</button>';
+      const ed = box.querySelector('textarea');
+      const btn = box.querySelector('button');
+      btn.addEventListener('click', () => {
+        // Reddit takes the press and nothing of the reader's lands — a rate limit, a
+        // silent refusal. The composer stays, the editor keeps its text.
+        setTimeout(() => {
+          const c = doc.createElement('shreddit-comment');
+          for (const [k, v] of Object.entries({
+            thingid: 't1_stranger', postid: 't3_link1', author: 'someone_else', score: '1',
+            created: new Date().toISOString(), depth: '0', 'content-type': 'text'
+          })) c.setAttribute(k, v);
+          c.innerHTML = '<div slot="comment"><div class="md"><p>unrelated</p></div></div>';
+          tree.appendChild(c);                    // the next batch, mid-window
+        }, 20);
+      });
+      doc.querySelector('#main-content').appendChild(box);
+      const before = doc.querySelectorAll('shreddit-comment').length;
+      const res = await window.SHD.account.compose(doc.querySelector('shreddit-post'),
+        'Mine, still unposted.', 'post');
+      check('a stranger\'s comment arriving mid-window is not the reader\'s comment posting',
+        res.ok === false && res.step === 'arrival', JSON.stringify(res));
+      check('...and it really did arrive, so the row is measuring the right thing',
+        doc.querySelectorAll('shreddit-comment').length === before + 1,
+        `${before} -> ${doc.querySelectorAll('shreddit-comment').length}`);
+      check('...while the reader\'s text is still in Reddit\'s editor, undiscarded',
+        ed.value === 'Mine, still unposted.', ed.value);
+      box.remove();
+      doc.querySelector('shreddit-comment[thingid="t1_stranger"]')?.remove();
+    }
 
     check('no console errors while replying',
       logs.filter(l => l.startsWith('error') || l.startsWith('jsdomError')).length === 0, logs.join(' | '));

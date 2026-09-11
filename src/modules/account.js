@@ -269,11 +269,28 @@ SHD.account = (() => {
     return scan(target, 0);
   }
 
-  /** How many comments exist under the target — the measurement that says "it posted". */
+  /**
+   * How many comments exist under the target — the measurement that says "it posted".
+   *
+   * COUNTED NARROWLY, because a wider count is not a measurement of OUR action. A reply is
+   * scoped to its own branch already; a top-level comment has no branch, so the post path
+   * counted the whole document — and on a comments page the paginator is auto-loading
+   * further batches of `shreddit-comment` on a 2s heartbeat, inside the same 8s window.
+   * Any batch landing there read as "your comment arrived", and the form closed on it,
+   * taking the reader's draft with it while Reddit still held unposted text.
+   *
+   * This is the rule log 773 already wrote for the `N more replies` control — "page-wide
+   * would credit the paginator's arrivals to our click" — reaching the one path that had
+   * not been narrowed. Where the session knows who the reader is, the count is theirs
+   * alone; where it does not, the old page-wide count stands rather than a guess.
+   */
   function commentsUnder(target, kind) {
-    return kind === 'comment'
-      ? target.querySelectorAll(C.COMMENT).length
-      : document.querySelectorAll(C.COMMENT).length;
+    if (kind === 'comment') return target.querySelectorAll(C.COMMENT).length;
+    const all = [...document.querySelectorAll(C.COMMENT)];
+    const me = SHD.session.username && SHD.session.username();
+    if (!me) return all.length;
+    return all.filter(n =>
+      (n.getAttribute(C.COMMENT_ATTR.author) || '') === me).length;
   }
 
   /**
@@ -525,6 +542,9 @@ SHD.account = (() => {
   /* The open menu, so a route change can close it — chrome.reset() removes the header, but
      the document-level listeners below would outlive it. */
   let openMenu = null;
+  /* Raised while logOut() is pressing Reddit's own controls, so the corner does not read
+     our own programmatic click as the reader clicking away from it. */
+  let driving = false;
 
   function closeMenu() {
     if (!openMenu) return;
@@ -594,6 +614,25 @@ SHD.account = (() => {
    * matched loosely ends the reader's session on something that merely mentions the words,
    * and there is no undo for that short of signing back in.
    */
+  /**
+   * Reddit's drawer PANEL — the thing that holds the log-out control — and never the
+   * avatar button that opens it.
+   *
+   * `C.USER_DRAWER.host` leads with `[id*="user-drawer" i]`, and the toggle's own id is
+   * `#expand-user-drawer-button`, which contains that string. querySelector returns the
+   * first match in DOCUMENT ORDER and the button is in the header, above where the panel
+   * mounts — so the "reveal Reddit's drawer" fallback was handing passthrough() the
+   * BUTTON. passthrough() then walks the corridor to it and display:none's every sibling
+   * on the way, which is where the panel it had just opened sits: a blanked page showing
+   * one avatar button, with the log-out control hidden by our own class. The opposite of
+   * what the fallback promises.
+   */
+  function drawerPanel() {
+    const toggle = document.querySelector(C.USER_DRAWER.toggle);
+    const hosts = [...document.querySelectorAll(C.USER_DRAWER.host)];
+    return hosts.find(el => el !== toggle && !(toggle && el.contains(toggle))) || null;
+  }
+
   function findLogoutControl() {
     for (const root of drawerRoots()) {
       const byAttr = SHD.dom.deepQuery(root, C.NATIVE.logout);
@@ -636,6 +675,20 @@ SHD.account = (() => {
     const say = (text) => { if (status) status.textContent = text; };
     if (button) button.disabled = true;
     say('logging out…');
+    /* OUR OWN MENU MUST SURVIVE THIS, and nothing else here can keep it open. The corner
+       closes on any click outside it, captured on document — and the first thing this
+       function does is click Reddit's avatar button, which bubbles there and reads as
+       exactly such a click. The menu was therefore hidden before the reader's press even
+       returned, so `logging out…` and every miss message below were written into a hidden
+       subtree: invisible, and unannounced too, because `role="status" aria-live="polite"`
+       does not fire from a hidden container. "A message nobody can read is not a fallback"
+       is this file's own rule, written for replies (line 354) and broken here.
+
+       It also re-armed the press it was meant to guard: re-opening the corner rebuilds the
+       menu with a fresh ENABLED `log out`, so a second run could start while the first was
+       still waiting — clicking Reddit's toggle again and closing the very panel the first
+       one was watching for. */
+    driving = true;
     try {
       let ctl = findLogoutControl();
       if (!ctl) {
@@ -648,7 +701,7 @@ SHD.account = (() => {
       if (!ctl) {
         if (button) button.disabled = false;
         say('could not find Reddit\'s log-out control — its own menu is shown instead');
-        const panel = document.querySelector(C.USER_DRAWER.host) || document.querySelector(C.HEADER);
+        const panel = drawerPanel() || document.querySelector(C.HEADER);
         if (panel && SHD.dom.passthrough(panel)) panel.scrollIntoView?.({ block: 'center' });
         return false;
       }
@@ -661,13 +714,15 @@ SHD.account = (() => {
       if (gone) { nav.reload(); return true; }
       if (button) button.disabled = false;
       say('Reddit did not end the session — its own menu is shown instead');
-      const panel = document.querySelector(C.USER_DRAWER.host) || document.querySelector(C.HEADER);
+      const panel = drawerPanel() || document.querySelector(C.HEADER);
       if (panel && SHD.dom.passthrough(panel)) panel.scrollIntoView?.({ block: 'center' });
       return false;
     } catch (err) {
       if (button) button.disabled = false;
       say('log out failed');
       return false;
+    } finally {
+      driving = false;
     }
   }
 
@@ -725,7 +780,10 @@ SHD.account = (() => {
 
     const corner = h('span.shd-account', null, [toggle, menu]);
 
-    const onDocClick = (e) => { if (!corner.contains(e.target)) closeMenu(); };
+    /* ...except while logOut() is driving Reddit's own UI: the click it makes on the avatar
+       button is an outside click by every test available here, and closing on it hides the
+       status line the flow is still writing to. */
+    const onDocClick = (e) => { if (!driving && !corner.contains(e.target)) closeMenu(); };
     const onKey = (e) => { if (e.key === 'Escape') { closeMenu(); toggle.focus(); } };
 
     toggle.addEventListener('click', (e) => {
