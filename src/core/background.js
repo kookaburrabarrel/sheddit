@@ -123,13 +123,22 @@ const safeUrl = (u) => (typeof u === 'string' && /^https:\/\//.test(u) ? u : HOM
  * The write MERGES rather than replaces: a failed attempt must move the clock without
  * throwing away the last good answer, which is what the header renders from. `ok` is what
  * lets due() charge a failure the short floor instead of the full day.
+ *
+ * `okAt` IS A SECOND CLOCK, and the two are not the same question. `at` answers "when did
+ * we last TRY", which is what the floor above charges against. update.js asks a different
+ * one — "how long has it been since we knew anything", the number behind the orange
+ * `updates` nudge at 30 days — and reading that off `at` meant every failed attempt reset
+ * it. A reader whose network cannot reach GitHub attempts on every browser start, so the
+ * count never passed a day, and the one reader the nudge exists for was the one who could
+ * never see it. Only an answer moves `okAt`, and the merge carries it across failures.
  */
 async function stamp(answer) {
   try {
     const got = await chrome.storage.local.get(KEY);
     const prev = (got && got[KEY]) || {};
     await chrome.storage.local.set({
-      [KEY]: { ...prev, ...(answer || {}), at: Date.now(), ok: !!answer }
+      [KEY]: { ...prev, ...(answer || {}), at: Date.now(), ok: !!answer,
+               okAt: answer ? Date.now() : (prev.okAt || null) }
     });
   } catch { /* no storage, no floor — nothing further this function can do about it */ }
 }
@@ -176,11 +185,26 @@ async function check() {
   await stamp(answer);
 }
 
-/** The whole worker: two gates, then one request. */
-async function maybeCheck() {
-  if (!(await enabled())) return;
-  if (!(await due())) return;
-  await check();
+/**
+ * The whole worker: two gates, then one request.
+ *
+ * ONE AT A TIME, for the same reason update.js holds `inflight`. Both events below can
+ * fire at a single browser start — an update installed while the browser was closed
+ * delivers onInstalled and onStartup together — and the listeners discard the promise, so
+ * neither can await the other. due() reads the stored record and the record is not written
+ * until stamp(), at the bottom of check(): two invocations both pass the gate before
+ * either has stamped, and two GETs leave for the same file. The floor is the one promise
+ * this worker makes about what leaves the browser, so it cannot be a race.
+ */
+let inflight = null;
+function maybeCheck() {
+  if (inflight) return inflight;
+  inflight = (async () => {
+    if (!(await enabled())) return;
+    if (!(await due())) return;
+    await check();
+  })().finally(() => { inflight = null; });
+  return inflight;
 }
 
 /* onStartup is the browser opening. onInstalled covers the install and the update, where
