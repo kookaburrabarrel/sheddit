@@ -1508,7 +1508,12 @@ async function boot(html, url, setup) {
     check('header names the starting subreddit',
       [...doc.querySelectorAll('#shd-header .tabmenu li.selected a')]
         .some(a => a.textContent === 'r/aww'));
+    check('...exactly once, because a tab bar that says it twice says nothing',
+      doc.querySelectorAll('#shd-header .tabmenu li.selected').length === 1,
+      [...doc.querySelectorAll('#shd-header .tabmenu li.selected a')]
+        .map(a => a.textContent).join(','));
     check('sidebar is present on first render', !!doc.querySelector('#shd-sidebar'));
+
 
     // Reddit swaps feed content client-side; the fixture DOM is static, so un-stamping
     // stands in for a fresh batch of markup arriving.
@@ -1565,6 +1570,23 @@ async function boot(html, url, setup) {
     // page we just promised to leave alone is a broken promise in eleven characters.
     check('the placeholder does not survive onto a handed-back page',
       !doc.querySelector('#shd-loading'));
+  }
+
+  {
+    /* `all` and `popular` are subreddits by every test route.js applies, and the bar already
+       carries a tab for each — so /r/all/ marked the static `all` tab not at all and grew a
+       second, selected `r/all` beside it, naming one page twice. The front page had the
+       opposite fault and marked nothing, because the only rule that could mark anything was
+       "there is a subreddit". */
+    for (const [url, want] of [['https://www.reddit.com/r/all/', 'all'],
+                               ['https://www.reddit.com/r/popular/', 'popular'],
+                               ['https://www.reddit.com/', 'front']]) {
+      const { doc: d } = await boot(listingPage(), url);
+      const marked = [...d.querySelectorAll('#shd-header .tabmenu li.selected a')]
+        .map(a => a.textContent);
+      check(`${url} marks exactly one tab, and it is "${want}"`,
+        marked.length === 1 && marked[0] === want, marked.join(',') || '(none)');
+    }
   }
 
   /* Live testing, on a verified build: every browser back/forward landed on the error
@@ -3751,6 +3773,11 @@ async function boot(html, url, setup) {
         a.title.includes('0.30.0') && a.title.includes('0.29.0'), a.title);
       check('...and saying the reload step, which is the part people miss',
         /chrome:\/\/extensions/.test(a.title));
+      /* ...for BOTH builds. This text predates the Firefox build and sent every Firefox
+         reader to chrome://extensions, a URL their browser does not have — and it predates
+         the store listings too, which update themselves and need none of this. */
+      check('...without sending Firefox readers to a Chrome-only URL',
+        /about:debugging/.test(a.title) && /Firefox Add-ons/.test(a.title), a.title);
       check('the answer is stored, so the next page load knows without asking again',
         writes.length === 1 && writes[0].update.version === '0.30.0' &&
         typeof writes[0].update.at === 'number', JSON.stringify(writes));

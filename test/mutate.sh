@@ -1675,6 +1675,22 @@ mutate "the gif video is muted in markup only, so autoplay is blocked and the bo
 
 # The failure the login wall actually produces. Swapping the host on /login/ rather than
 # reading `dest` lands the reader on WWW's login page — a hop that "works", to another wall.
+# `all` and `popular` are subreddits by every test route.js applies, and the tab bar already
+# carries one of each — so /r/all/ left the static tab unmarked and grew a second, selected
+# `r/all` beside it, naming one page twice. The front page marked nothing at all.
+mutate "all and popular are treated as ordinary subreddits in the tab bar" run \
+  src/modules/chrome.js '    const fixedTab = sub && /^(all|popular)$/i.test(sub) ? sub.toLowerCase() : null;' '    const fixedTab = null;'
+
+# Both fills in the theme bar are theme-owned; a hardcoded white over them inverts where the
+# palette is dark. Measured: white on night's --shd-nsfw is 2.78:1 and on its --shd-tab-text
+# 2.42:1, under the 4.5 floor and under even the 3:1 large-text one.
+mutate "the selected nsfw button hardcodes white over a theme-owned fill" run \
+  src/styles/old-reddit.css '  background: var(--shd-nsfw);
+  border-color: var(--shd-nsfw);
+  color: var(--shd-bg);' '  background: var(--shd-nsfw);
+  border-color: var(--shd-nsfw);
+  color: #fff;'
+
 # onRoute removes #shd-root and then calls reset(). suppress.css holds every native body
 # child at 1px, so #shd-root IS the document height: removing it collapses the page, the
 # browser clamps scrollY to 0, and the scroll event that fires in the NEXT frame lands after
