@@ -2047,6 +2047,22 @@ the way a question got settled is usually more useful than the answer.
       row went red instead ("a page that does not fill the window loads without being
       asked — 14 -> 14 rows, untouched").
 
+    **A hand-walk of the shipped 0.44.0 zip then found something the three attempts had
+    obscured: the settings path loses the reader's place ON ITS OWN, and always did.** Real
+    Chromium, the packed extension unzipped and loaded as a reader loads it, `/r/pager/`
+    filled to 1983px, scrolled to 600, then *nsfw thumbnails* pressed from our own header:
+    `600 -> 0`. The SAME walk against the pre-review baseline (9b5ce47, 0.43.0, unmodified)
+    gives `600 -> 0` too. So this is not a regression from any of the three attempts and not
+    new in 0.44.0 — it is the behaviour that has been shipping, and the reason the first
+    attempt looked like it "broke" scroll restoration is that it made an already-broken case
+    fail more often rather than starting it.
+
+    That also means geometry's "the reader is still where they were" row does not cover the
+    case that actually fails: it passes on both builds while a hand-walk loses the position
+    on both. Whatever rig gets built for this has to reproduce the LOSS first — a row that
+    is green while the product is broken is worth less than no row, and this one cost three
+    reverts by looking like the oracle it is not.
+
     What is NOT yet known is which of those three is closest, because each was judged on
     four or five runs of a test whose failure rate is itself around 50% — a sample that
     cannot separate a fix from a coincidence. What would settle it is a rig that runs the
