@@ -2991,6 +2991,32 @@ async function boot(html, url, setup) {
        layout looks abandoned rather than deliberate. */
     fs.writeFileSync(path.join(__dirname, 'out.empty.html'), doc.documentElement.outerHTML);
 
+    /* LEAVING an empty listing must not paint the next one empty before it arrives.
+       onRoute runs PRE-COMMIT, so the DOM at that instant is still the OUTGOING page —
+       and when the page being left is itself empty, sourceCount() is 0 and Reddit's
+       no-content panel is still sitting in that outgoing feed, so emptyFeedReason()
+       answers 'reddit-says-empty' about a route zero milliseconds old. renderEmpty() then
+       drew that notice over the incoming page AND gate.empty() -> reveal() cleared the
+       deadline resetForRoute() had just re-armed — so an incoming feed we cannot read
+       leaves the reader on a false empty notice with no rows, no error card and no
+       waiting flag, permanently. The silent hand-back, reached through the shortcut meant
+       to avoid one. */
+    {
+      const w = doc.defaultView;
+      const before = doc.documentElement.getAttribute('data-shd-empty');
+      check('setup: the outgoing page really is the empty one', before === 'reddit-says-empty',
+        String(before));
+      w.history.pushState({}, '', '/r/aww/');
+      w.dispatchEvent(new w.Event('popstate'));
+      await hold(30);
+      check('...and navigating away does not carry its emptiness onto the next route',
+        !doc.querySelector('#shd-root .shd-empty') ||
+        doc.documentElement.getAttribute('data-shd-empty') === null,
+        `empty=${doc.documentElement.getAttribute('data-shd-empty')} ` +
+        `notice=${!!doc.querySelector('#shd-root .shd-empty')}`);
+      w.history.pushState({}, '', '/r/DIYfail/top/');
+    }
+
     const hint = notice?.querySelector('.shd-empty-hint')?.textContent || '';
     check('an empty `top` blames the time window, not the community',
       /time window/i.test(why), why);

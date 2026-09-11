@@ -1675,6 +1675,14 @@ mutate "the gif video is muted in markup only, so autoplay is blocked and the bo
 
 # The failure the login wall actually produces. Swapping the host on /login/ rather than
 # reading `dest` lands the reader on WWW's login page — a hop that "works", to another wall.
+# onRoute runs PRE-COMMIT, so the DOM is the OUTGOING page. When the page being LEFT is
+# itself an empty listing, sourceCount() is 0 and Reddit's no-content panel is still in that
+# outgoing feed — so emptyFeedReason() answers about a route zero milliseconds old, the
+# notice is drawn over the incoming page, and gate.empty() -> reveal() throws away the
+# deadline this route had just re-armed. A feed we cannot read then goes undetected for ever.
+mutate "the empty-feed shortcut runs on a route change, over the outgoing page" run \
+  src/core/pipeline.js '    if (served) renderEmpty();' '    renderEmpty();'
+
 # A top-level comment has no branch, so the post path counted the whole document — and the
 # paginator is auto-loading batches of shreddit-comment inside the same 8s window. Any batch
 # read as "your comment arrived" and the form closed on it, dropping the reader's draft
