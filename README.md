@@ -146,9 +146,6 @@ about you anywhere.
   a whistleblower. The profiles are richer now and the targeting is better. Anyone who
   thinks that kind of manipulation is a thing of the past is dreaming.
 
-None of which is an argument for deleting your account. It is an argument for not being
-logged in by default — and Sheddit still works if you are, see the note at the top.
-
 ## WHY SHEDDIT?
 
 Old Reddit was a page of links, ranked by votes. You scanned it, picked something, and
