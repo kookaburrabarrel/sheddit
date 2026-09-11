@@ -12,12 +12,12 @@
 
 No account. No profile. No feed tuned to keep you scrolling.
 
-[![account: none](https://img.shields.io/badge/account-none-success?style=flat-square)](#why)
-[![profile: none](https://img.shields.io/badge/profile-none-success?style=flat-square)](#why)
+[![account: none](https://img.shields.io/badge/account-none-success?style=flat-square)](#why-sheddit)
+[![profile: none](https://img.shields.io/badge/profile-none-success?style=flat-square)](#why-sheddit)
 [![API calls: zero](https://img.shields.io/badge/API_calls-zero-success?style=flat-square)](#privacy)
 [![tracking: none](https://img.shields.io/badge/tracking-none-success?style=flat-square)](#privacy)
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
-[![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why)
+[![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
 [![version 0.43.0](https://img.shields.io/badge/version-0.43.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
@@ -117,7 +117,7 @@ Full detail in the [changelog](CHANGELOG.md). The most recent builds:
 
 ---
 
-## What it is
+## WHAT IS IT?
 
 Sheddit is a browser extension that turns modern Reddit back into old Reddit, on every
 page, while you stay logged out.
@@ -127,27 +127,26 @@ redraws them in the `old.reddit.com` layout: a ranked list of links you can scan
 from, and leave. It never logs in, never calls Reddit's API, and never sends anything
 about you anywhere.
 
-### If you are logged in anyway
+## WHY LOGGED OUT?
 
-Sheddit does not need an account, and it never touches yours. But if you are already
-logged in to Reddit in this browser, old reddit's arrows should register, and since 0.34.0
-they do: the vote arrows forward to Reddit's own vote buttons, `reply` opens an old-reddit
-reply box whose *save* hands your text to Reddit's own composer and presses Reddit's own
-submit, and the sidebar grows old reddit's *submit a new link / text post* buttons, which
-open Reddit's composer. Every one of those is a click on a control Reddit put on the page
-for the same purpose — Sheddit still makes no request of its own, holds no token, and
-reads no cookie. It is on by default, does nothing at all for a logged-out reader, and
-turns off with one checkbox on the options page.
+- **The feed is a different product.** Logged out it's ranked by votes. Logged in it's
+  ranked against a model of you, tuned so the session doesn't end.
+- **Durability.** Your account is what welds fifteen years of scrolling and hesitating
+  into one profile that follows you across devices. Logged out it scatters.
+- **Reading is broader than posting.** Most people don't want every sub they lurk in
+  attached to the name they argue under.
+- **The record exists.** Voted, saved, visited. A durable list that gets breached,
+  subpoenaed, or changes hands in an acquisition.
+- **Shared machines.** Work laptop, someone else's browser, a session you don't control.
+- **Some people just want to make it harder for Reddit to monetize them.** No grand
+  principle, just declining to be the product. And don't forget — u/spez was a moderator
+  on r/jailbait.
+- **Cambridge Analytica.** Eighty-seven million Facebook profiles, harvested through a
+  quiz app, turned into political ad targeting — and the only reason anyone found out was
+  a whistleblower. The profiles are richer now and the targeting is better. Anyone who
+  thinks that kind of manipulation is a thing of the past is dreaming.
 
-**Treat it as experimental** — see the note at the top of this page. It has been driven
-end to end against modelled pages and, since 0.34.0, against a real signed-in session,
-which is what turned up the rough edges being worked on now. The arrows and the reply box
-fall back to Reddit's own controls when something does not line up, so the worst case is a
-jump out to Reddit's own interface rather than a lost action, and a
-[report](https://github.com/kookaburrabarrel/sheddit/issues/new/choose) of what happened is
-what settles the rest.
-
-## Why
+## WHY SHEDDIT?
 
 Old Reddit was a page of links, ranked by votes. You scanned it, picked something, and
 left. What replaced it is a slot machine: an endless feed, tuned to you, built to keep you
