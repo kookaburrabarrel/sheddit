@@ -322,14 +322,28 @@ SHD.model = (() => {
    *  - The MATCH is trusted, the length is not. A node whose text runs long is a container
    *    that happens to hold the sentence plus other content; the notice itself is one
    *    sentence, so anything past a sane ceiling is rejected rather than rendered.
+   *  - NOT THE POST'S OWN WORDS. A `<shreddit-post>` carries the author's title and
+   *    selftext in its own light DOM, so a live post titled "This post was removed by
+   *    Reddit — anyone know why?" matched itself. r/ModSupport, r/undelete and r/help are
+   *    made of those titles. Neither guard above catches it: the title anchor IS the
+   *    innermost node, and a title is far under the length ceiling rather than over it.
+   *    So the author's regions are skipped before the sentence is tested.
+   *
+   *    The cost is deliberate and it is this: if Reddit ever renders the notice INSIDE the
+   *    body slot, that removal goes unmarked. contracts.js and 0.36.0 both already settled
+   *    which way to err — "a tombstone over live content is the worse error of the two" —
+   *    and this is that rule applied to the sentence signal itself, which is the one place
+   *    it had not been.
    *
    * Returns the trimmed text, never the node: we show Reddit's own words rather than
    * cloning its markup, so nothing of Reddit's styling comes with it (open question 7).
    */
   function removalOf(el) {
     try {
+      const authored = `${C.NATIVE.titleLink}, ${C.NATIVE.fullPostLink}, ${C.POST_BODY}`;
       const hits = [...el.querySelectorAll('*')].filter(n =>
         n.closest(C.POST) === el &&
+        !n.closest(authored) &&
         C.POST_REMOVED_TEXT.test(n.textContent || ''));
       if (!hits.length) return null;
       const inner = hits.find(n => !hits.some(o => o !== n && n.contains(o))) || hits[hits.length - 1];
