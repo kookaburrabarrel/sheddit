@@ -453,7 +453,19 @@ globalThis.SHD = globalThis.SHD || {};
         // than any mechanism for it, which is what would catch a future change that
         // defeats anchoring.
         document.querySelectorAll(`[${C.MARK}]`).forEach(el => el.removeAttribute(C.MARK));
-        onRoute(R.classify());
+        /* WITH THE PATH, and it has to be. onRoute() records `onRoute.lastPath = path` and
+           the sort-swap latch one line above reads it — so calling this with one argument
+           stored `undefined`, and the NEXT genuine `?sort=` click on a thread compared
+           `undefined === '/r/x/comments/…'`, decided it was not a sort swap, and skipped
+           the posts-only un-stamp that is the whole of bug 87's second half. Reddit leaves
+           the post element in place on a query-only sort change, so revive() never fires
+           for it either: the row is torn down with #shd-root and nothing ever re-adopts
+           the post. Permanent for the life of that page, and reachable from our own
+           header — `nsfw thumbnails` and `check for updates` both write a setting.
+
+           R.path is the route's own answer, which is what emit() latched; reading location
+           here would be the same value today and a trap the day this moves. */
+        onRoute(R.classify(), R.path);
       });
     } catch { /* no chrome.storage (dev harness) — nothing to watch */ }
   }
