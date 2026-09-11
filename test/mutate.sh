@@ -1675,6 +1675,14 @@ mutate "the gif video is muted in markup only, so autoplay is blocked and the bo
 
 # The failure the login wall actually produces. Swapping the host on /login/ rather than
 # reading `dest` lands the reader on WWW's login page — a hop that "works", to another wall.
+# A <shreddit-post> carries the author's own title and selftext in its light DOM, so the
+# sentence walk can read the post's own words as Reddit's notice about it. A live thread
+# titled "This post was removed by Reddit — anyone know why?" tombstones itself, and
+# r/ModSupport and r/undelete are made of those titles. The two existing guards miss it: the
+# title anchor IS the innermost node, and a title is under the length ceiling, not over it.
+mutate "a post's own title and selftext are searched for Reddit's removal notice" run \
+  src/core/model.js '        !n.closest(authored) &&' '        true &&'
+
 mutate "the login wall's dest is ignored and only the host is swapped" run \
   src/core/oldreddit.js '    if (isLogin(url)) {' '    if (false) {'
 

@@ -935,6 +935,15 @@ function commentsPage(opts = {}) {
     ? { ...post, removed: typeof opts.removed === 'string' ? opts.removed
         : 'Sorry, this post was deleted by the person who originally posted it.' }
     : post;
+  /* A LIVE post whose own words discuss removals — the false-positive side of the same
+     contract. r/ModSupport, r/undelete and r/help are made of these titles, and the post
+     carries its title and selftext in its own light DOM, so the sentence walk can read
+     them as Reddit's notice about itself. */
+  const shown = (opts.title || opts.selftext)
+    ? { ...removedPost,
+        ...(opts.title ? { title: opts.title } : {}),
+        ...(opts.selftext ? { selftext: opts.selftext } : {}) }
+    : removedPost;
   const deliver = opts.deliver ?? COMMENT_DEPTHS.length;
   let delivered = COMMENT_DEPTHS.slice(0, deliver).map(commentHtml).join('');
   let partial = (deliver < COMMENT_DEPTHS.length || opts.pager) && !opts.branchPager
@@ -964,7 +973,7 @@ function commentsPage(opts = {}) {
   <shreddit-app>
     ${headerHtml(opts)}
     <div><div id="subgrid-container"><div><main id="main-content">
-      ${postHtml(removedPost)}
+      ${postHtml(shown)}
       <shreddit-comment-tree post-id="t3_link1" totalcomments="${COMMENT_DEPTHS.length}">
         <section>
           ${delivered}${partial}

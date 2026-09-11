@@ -756,6 +756,24 @@ async function boot(html, url, setup) {
     check('a live post gets no notice', !live.querySelector('.shd-removed-notice'));
     check('...and no stamp on its listing rows', !live.querySelector('.shd-removed-stamp'));
 
+    /* ...AND NOT A POST THAT IS TALKING ABOUT REMOVALS. A <shreddit-post> carries the
+       author's own title and selftext in its light DOM, so the sentence walk was reading
+       the post's own words: a live thread titled "This post was removed by Reddit — anyone
+       know why?" tombstoned itself, and r/ModSupport, r/undelete and r/help are made of
+       those titles. Neither existing guard catches it — the title anchor IS the innermost
+       node, and a title is under the length ceiling rather than over it. */
+    const TALKING = 'This post was removed by Reddit — anyone know why?';
+    const { doc: meta } = await boot(
+      commentsPage({ title: TALKING, selftext: 'The comment was deleted, so here it is again.' }),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    check('a live post whose TITLE discusses removals is not tombstoned',
+      !meta.querySelector('.shd-removed-notice') &&
+      !meta.querySelector('#shd-root .thing.shd-removed'),
+      JSON.stringify(meta.querySelector('.shd-removed-notice')?.textContent));
+    check('...and its title still renders as the title',
+      /removed by Reddit/.test(meta.querySelector('#shd-root a.title')?.textContent || ''),
+      meta.querySelector('#shd-root a.title')?.textContent);
+
     /* A listing row has no room for a sentence; it gets old reddit's one-word stamp,
        beside the nsfw one and for the same reason — it tells a reader the row is a dead
        end before they spend a click on it. */
