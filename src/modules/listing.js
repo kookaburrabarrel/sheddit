@@ -269,10 +269,13 @@ SHD.listing = (() => {
   /** model -> DOM node. Pure; no side effects on the page. */
   function render(m) {
     rank += 1;
-    /* Old reddit numbers listings but not profiles, and on a profile the counter would be
-       wrong anyway: comment rows sit between the posts, so the visible sequence would
-       skip. */
-    const onProfile = SHD.route.current === SHD.route.PROFILE;
+    /* Old reddit numbers LISTINGS, and only listings. Not profiles, where the counter
+       would be wrong anyway because comment rows sit between the posts and the visible
+       sequence would skip — and not comments pages, where comments.js calls this same
+       render() to build the submission row above the thread. A page showing one post has
+       no ordinal to print, so the rank there was always a grey "1" beside the title, which
+       old reddit never drew. */
+    const ranked = SHD.route.current === SHD.route.LISTING;
     /* Old reddit's expando: the picture opens under the row instead of navigating away.
        Both halves are null together for a row with nothing to open, so a row never grows a
        control that does nothing — a control that ignores a click is worse than no control
@@ -282,7 +285,7 @@ SHD.listing = (() => {
       dataset: { fullname: m.id, type: m.type, subreddit: m.subreddit },
       class: (m.isSelf ? 'self' : 'linkpost') + (SHD.settings.compactRows ? ' compact' : '')
     }, [
-      onProfile ? null : h('span.rank', { text: String(rank) }),
+      ranked ? h('span.rank', { text: String(rank) }) : null,
       midcol(m),
       thumb(m),
       expandoButton(box),

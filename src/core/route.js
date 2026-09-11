@@ -142,8 +142,20 @@ SHD.route = (() => {
     return m ? m[1] : null;
   }
 
+  /* A SORT ONLY COUNTS WHERE REDDIT PUTS ONE, and the anchors are the point. Matching a
+     sort name anywhere at the end of the path reads `/r/top/` — a real subreddit, as are
+     /r/new, /r/best, /r/rising and /r/controversial — as the SORT `top` on no subreddit,
+     because the trailing segment is both. chrome.js draws the tab bar and the `links from`
+     period strip off this answer, so that page came up with a tab bolded it never asked
+     for and, since TIMED_SORTS carries top and controversial, a window strip over a
+     default listing: a control that changes nothing, which route.js already refuses to
+     draw elsewhere for exactly the reason in bug 62 and bug 10.
+
+     So the sort has to sit where a sort can sit: the whole path on the front page
+     (`/top/`), or the segment after a subreddit (`/r/aww/top/`). Anywhere else the
+     trailing name belongs to something that merely shares the word. */
   function sortOf(path = emitPath()) {
-    const m = path.match(new RegExp(`/(${SORT_RE})/?$`));
+    const m = path.match(new RegExp(`^/(?:r/[^/]+/)?(${SORT_RE})/?$`));
     return m ? m[1] : 'hot';
   }
 
