@@ -1675,6 +1675,23 @@ mutate "the gif video is muted in markup only, so autoplay is blocked and the bo
 
 # The failure the login wall actually produces. Swapping the host on /login/ rather than
 # reading `dest` lands the reader on WWW's login page — a hop that "works", to another wall.
+# onRoute removes #shd-root and then calls reset(). suppress.css holds every native body
+# child at 1px, so #shd-root IS the document height: removing it collapses the page, the
+# browser clamps scrollY to 0, and the scroll event that fires in the NEXT frame lands after
+# reset() cleared the flag. Every navigation from a scrolled page then began "interacted",
+# losing the unprompted-fill bound (bug 78) and the held load-more label (bug 85).
+mutate "the teardown's own scroll clamp counts as the reader touching the page" run \
+  src/core/paginator.js '    if (sentinel || (window.scrollY || document.documentElement.scrollTop || 0) > 0) {
+      interacted = true;
+    }' '    interacted = true;'
+
+# A load that spans a route change resumes on the NEW page: SOURCE has been re-pointed, so it
+# counts the incoming route's sources against the outgoing route's baseline and writes the
+# verdict into state that now belongs to someone else — a page credited, the arrears baseline
+# poisoned, and `busy` cleared for a load this page never made.
+mutate "a load in flight writes its verdict into the route that replaced it" run \
+  src/core/paginator.js '      if (mine !== epoch) return false;' '      if (false) return false;'
+
 # resetForRoute() reads `revealed` as its proxy for "is .shd-active on the document".
 # fail() removed the class and left the latch set, so the next navigation skipped blank()
 # — native Reddit fully visible for the whole incoming load — and mounted showLoading()

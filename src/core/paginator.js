@@ -77,6 +77,9 @@ SHD.paginator = (() => {
 
   let pages = 0;
   let busy = false;
+  /* Bumped by reset(). A load that started on the previous route compares this after its
+     await and leaves without writing anything — see reset() for what it used to write. */
+  let epoch = 0;
   let lastAt = 0;
   let sentinel = null;
   let io = null;
@@ -257,6 +260,7 @@ SHD.paginator = (() => {
   const refuse = (why) => { lastRefusal = why; diag(); return false; };
 
   async function loadNext(reason = 'auto') {
+    const mine = epoch;                  // the route this load belongs to; see reset()
     if (busy) return refuse('busy');
     if (pages >= MAX_PAGES) { setStatus(`stopped after ${MAX_PAGES} pages`); return refuse('max-pages'); }
     // A deliberate click is not a runaway loop, and a button that silently does nothing is
@@ -328,6 +332,11 @@ SHD.paginator = (() => {
       // The MutationObserver in pipeline.js picks up whatever arrived — posts or comments.
       // We just need to know when to allow another.
       await settled;
+      /* Still the same page? A reset() while we were waiting means everything below would
+         be measuring, and writing to, a route this load knows nothing about. Leave without
+         touching a single field — including `busy`, which the finally clause below also
+         has to leave alone for the same reason. */
+      if (mine !== epoch) return false;
       /* Did that actually produce anything? A driven partial that yields no new sources is
          a dead end — a hovercard, a spent loader, content that never came (live testing's front
          page burned all 40 page slots that way). Later testing then measured what the limit
@@ -366,7 +375,8 @@ SHD.paginator = (() => {
       return refuse('threw');
     } finally {
       target.removeAttribute(DRIVING);
-      busy = false;
+      // ...but never clear the NEW page's flag on the way out of the old page's load.
+      if (mine === epoch) busy = false;
     }
   }
 
@@ -754,8 +764,27 @@ SHD.paginator = (() => {
   addEventListener('scroll', () => {
     /* Reader intent, recorded before every early return below. This is the signal that
        releases the unprompted-fill limits, so it must not depend on a sentinel existing
-       yet, nor be swallowed by the pump throttle. */
-    interacted = true;
+       yet, nor be swallowed by the pump throttle.
+
+       BUT NOT A SCROLL WE CAUSED. onRoute removes #shd-root and then calls reset(); with
+       suppress.css holding every native body child at 1px, #shd-root IS the document's
+       height, so removing it collapses the page and the browser clamps scrollY to 0 —
+       firing a scroll event in the NEXT frame, AFTER reset() has cleared this flag. Every
+       navigation from a scrolled page therefore began with `interacted` already true, and
+       the incoming page lost both of the guards this flag releases: pump()'s FILL_VIEWPORTS
+       and UNPROMPTED_MAX bound on the unprompted fill, which is the whole of bug 78's fix
+       and the reason its two field reports stayed fixed — a comments page locking the tab
+       for 30+ seconds, and a history traversal doing the same — and settling()'s hold on
+       the `load more` label, which is bug 85's bait: a live control under rows that are
+       still arriving.
+
+       The clamp is distinguishable from a reader. It lands at the very top, and it lands
+       while we are detached, in the gap between reset() and the incoming page's attach().
+       A reader scrolling during that gap is going somewhere, so scrollY leaves 0 and still
+       counts. */
+    if (sentinel || (window.scrollY || document.documentElement.scrollTop || 0) > 0) {
+      interacted = true;
+    }
     if (!sentinel) return;
     const now = Date.now();
     if (now - lastScrollPump < 250) return;
@@ -774,6 +803,16 @@ SHD.paginator = (() => {
   }
 
   function reset() {
+    /* A LOAD IN FLIGHT BELONGS TO THE PAGE THAT STARTED IT. loadNext() awaits settle(),
+       which runs for up to SETTLE_CEILING_MS — long enough for a navigation to land in the
+       middle of one — and nothing here can cancel it. Resuming, it read the NEW page: by
+       then useMode() has re-pointed SOURCE, so it counted the incoming thread's comments
+       against a `sourcesBefore` taken from the outgoing listing's posts, and wrote that
+       verdict into module state that now belongs to the new route — pages++ for a page
+       that loaded nothing, lastAfter from a different route poisoning the next arrears
+       credit, and `busy = false` cleared for a load this page never made. The epoch is how
+       the continuation finds out it is stale. */
+    epoch++;
     detach(); pages = 0; busy = false; lastAt = 0; unproductive = 0; exhausted = 0;
     lastAfter = null;
     /* A new route is a new page to fill, and the reader has not touched THIS one — the
