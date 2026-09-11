@@ -316,6 +316,12 @@ async function boot(html, url, setup) {
     check('renders one node per comment', comments.length === COMMENT_DEPTHS.length,
       `got ${comments.length}, expected ${COMMENT_DEPTHS.length}`);
     check('renders the submission above the thread', !!doc.querySelector('.shd-selfpost'));
+    /* ...and it carries no rank. comments.js builds that row through listing.render(),
+       so a rank gated only on PROFILE printed a grey "1" beside every thread's title —
+       an ordinal for a page showing one post, which old reddit never drew. */
+    check('the submission row carries no listing rank',
+      !doc.querySelector('#shd-root .thing.link .rank'),
+      String(doc.querySelector('#shd-root .thing.link .rank')?.textContent));
     check('does not fail', !doc.documentElement.hasAttribute('data-shd-fail'),
       doc.documentElement.getAttribute('data-shd-fail'));
 
@@ -1605,6 +1611,23 @@ async function boot(html, url, setup) {
     check('chrome helpers answer for the emitted path, not a possibly-stale location',
       window.SHD.route.sortOf() === 'top' && window.SHD.route.subredditOf() === 'programming',
       `sortOf=${window.SHD.route.sortOf()} subredditOf=${window.SHD.route.subredditOf()}`);
+
+    /* A SORT ONLY WHERE A SORT CAN SIT. /r/top, /r/new, /r/best, /r/rising and
+       /r/controversial are all real subreddits, and their front pages are Reddit's
+       default listing — not a sorted one. Read as a sort, chrome.js bolds a tab the URL
+       never asked for and, for the two TIMED_SORTS, draws the whole `links from` period
+       strip over a page it cannot change: the control-that-does-nothing shape route.js
+       refuses elsewhere (bugs 62 and 10). */
+    const sortOf = (p) => window.SHD.route.sortOf(p);
+    for (const [path, want] of [['/r/aww/top/', 'top'], ['/top/', 'top'], ['/', 'hot'],
+                                ['/r/aww/', 'hot'], ['/r/top/', 'hot'], ['/r/new/', 'hot'],
+                                ['/r/best/', 'hot'], ['/r/rising/', 'hot'],
+                                ['/r/controversial/', 'hot'], ['/r/aww/top', 'top']]) {
+      check(`sortOf(${path}) is ${want}`, sortOf(path) === want, sortOf(path));
+    }
+    check('...and a sort-named subreddit is still read as the subreddit',
+      window.SHD.route.subredditOf('/r/top/') === 'top',
+      String(window.SHD.route.subredditOf('/r/top/')));
   }
 
   {

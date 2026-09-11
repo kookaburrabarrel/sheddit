@@ -516,21 +516,32 @@ ours anywhere on it, and concludes the extension is broken. That is bug 52's arg
 (*a silent hand-back is indistinguishable from an unrelated bug*) arriving through a host
 we were never on. Silence is not available to us here.
 
-`src/core/oldreddit.js` is therefore the only script that runs there, delivered at
-`document_start` with `redirect.css` and nothing else — no contracts, no themes, no route.
-It swaps the host for `www.reddit.com`, where the page loads and the renderer draws it in
-the layout the link was asking for, behind an interstitial that says so.
+`src/core/oldreddit.js` is therefore the script that runs there, delivered at
+`document_start` with `redirect.css` and `route.js` — and nothing else: no contracts, no
+themes, no modules. `route.js` is there because the hop is gated on `classify()`, below;
+it is the one definition of "a page Sheddit renders" and the manifest delivers it for that
+single call. The script swaps the host for `www.reddit.com`, where the page loads and the
+renderer draws it in the layout the link was asking for, behind an interstitial that says
+so.
 
-Four details are load-bearing:
+Five details are load-bearing:
 
 - **The `dest` parameter is unwrapped, not the host swapped.** The 302 is server-side, so
   no document is ever created for the URL the reader clicked — by the time the script
   runs, `location` reads `/login/?reason=lor2&dest=…`. Swapping only the host there lands
   them on **www's** login page: the same wall in different paint.
-- **`dest` is treated as hostile.** It is followed only when it resolves back to
-  reddit.com, and never when it is itself another login wall. Anything else falls back to
-  the front page. A redirector that follows an arbitrary parameter is an open redirect
-  wearing the extension's name.
+- **`dest` is treated as hostile.** It is followed only when it is `http(s)` AND resolves
+  back to reddit.com, and never when it is itself another login wall. Anything else falls
+  back to the front page. A redirector that follows an arbitrary parameter is an open
+  redirect wearing the extension's name — and the scheme is half of that pair, because
+  `new URL('javascript://reddit.com/…')` parses with hostname `reddit.com` and the host
+  swap keeps the scheme on purpose. Host alone would hand `location.replace()` a
+  `javascript:` URL.
+- **The hop only happens on a path Sheddit renders**, decided by `route.classify()` —
+  which is why `route.js` ships here. `/prefs/`, `/message/inbox/`, `/r/x/about/modqueue`,
+  `/r/x/wiki/…` and the `.compact` variants either differ on www or do not exist there, so
+  every one of them is handed back untouched. Rewriting them anyway broke old.reddit for
+  the readers who can still use all of it — logged-in moderators — and did it by default.
 - **The blackout is a class the script sets synchronously**, exactly as `.shd-gate` is,
   and `redirect.css` hangs every rule off it. An unconditional stylesheet would blank
   old.reddit for the reader who turned the redirect off — the one group whose page must be
