@@ -2047,23 +2047,33 @@ the way a question got settled is usually more useful than the answer.
       row went red instead ("a page that does not fill the window loads without being
       asked — 14 -> 14 rows, untouched").
 
-    **A hand-walk of the shipped 0.44.0 zip then found something the three attempts had
-    obscured: the settings path loses the reader's place ON ITS OWN, and always did.** Real
-    Chromium, the packed extension unzipped and loaded as a reader loads it, `/r/pager/`
-    filled to 1983px, scrolled to 600, then *nsfw thumbnails* pressed from our own header:
-    `600 -> 0`. The SAME walk against the pre-review baseline (9b5ce47, 0.43.0, unmodified)
-    gives `600 -> 0` too. So this is not a regression from any of the three attempts and not
-    new in 0.44.0 — it is the behaviour that has been shipping, and the reason the first
-    attempt looked like it "broke" scroll restoration is that it made an already-broken case
-    fail more often rather than starting it.
+    **A claim that was published here and is wrong, which is worth more than the finding
+    it replaced.** A hand-walk of the shipped zip appeared to show that a settings change
+    loses the reader's scroll position outright — `600 -> 0`, ten times out of ten, on the
+    shipped build AND on the pre-review baseline. That was recorded here as fact, along
+    with the conclusion that geometry's "the reader is still where they were" row is green
+    while the product is broken. Both were false.
 
-    That also means geometry's "the reader is still where they were" row does not cover the
-    case that actually fails: it passes on both builds while a hand-walk loses the position
-    on both. Whatever rig gets built for this has to reproduce the LOSS first — a row that
-    is green while the product is broken is worth less than no row, and this one cost three
-    reverts by looking like the oracle it is not.
+    The rig drove the setting by clicking the *nsfw thumbnails* control with Puppeteer's
+    `page.click()`, which SCROLLS THE TARGET INTO VIEW before clicking it. `#shd-header` is
+    `position: static`, so it sits at the top of the document — the harness was scrolling
+    the page to the top itself and then measuring that it was at the top. Traced by
+    listening for the events in order: `scroll y=0` arrives BEFORE `mousedown`. A reader
+    600px down cannot click that control at all without scrolling up first, which is the
+    thing the rig was simulating away.
 
-    What is NOT yet known is which of those three is closest, because each was judged on
+    Driven the way the setting really arrives — the same handler, reached with an in-page
+    `.click()` that neither scrolls nor focuses — the position is kept 6 times out of 6,
+    with the restore code and without it. There is no scroll bug on the settings path, the
+    comment in pipeline.js that says anchoring holds it is correct, and the save/restore
+    written against this was deleted unused.
+
+    The lesson is the one this log keeps re-learning from a new direction: an oracle that
+    can be satisfied by the harness's own behaviour proves nothing about the product. The
+    previous entry demanded a rig that "reproduces the LOSS first" — this rig did reproduce
+    a loss, deterministically, ten times running, and the loss was its own.
+
+    What is NOT yet known is which of those three is closest, because each was judged on    What is NOT yet known is which of those three is closest, because each was judged on
     four or five runs of a test whose failure rate is itself around 50% — a sample that
     cannot separate a fix from a coincidence. What would settle it is a rig that runs the
     scroll-preservation row alone, twenty times, against each candidate; and a decision
