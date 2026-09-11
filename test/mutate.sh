@@ -1675,6 +1675,25 @@ mutate "the gif video is muted in markup only, so autoplay is blocked and the bo
 
 # The failure the login wall actually produces. Swapping the host on /login/ rather than
 # reading `dest` lands the reader on WWW's login page — a hop that "works", to another wall.
+# A top-level comment has no branch, so the post path counted the whole document — and the
+# paginator is auto-loading batches of shreddit-comment inside the same 8s window. Any batch
+# read as "your comment arrived" and the form closed on it, dropping the reader's draft
+# while Reddit still held unposted text. Log 773's rule, reaching the path that lacked it.
+mutate "any comment arriving anywhere counts as the reader's comment posting" run \
+  src/modules/account.js '    const all = [...document.querySelectorAll(C.COMMENT)];' '    const all = []; return document.querySelectorAll(C.COMMENT).length;'
+
+# C.USER_DRAWER.host leads with [id*="user-drawer"], which the TOGGLE's own id contains, and
+# the toggle sits earlier in document order. Revealing it hands passthrough() the button and
+# display:none's the panel holding Reddit's log-out control — the opposite of the promise.
+mutate "the log-out fallback reveals the avatar button instead of the drawer" run \
+  src/modules/account.js '    return hosts.find(el => el !== toggle && !(toggle && el.contains(toggle))) || null;' '    return hosts[0] || null;'
+
+# logOut()'s first act is a programmatic click on Reddit's avatar button, which bubbles to
+# the document listener that closes our menu on an outside click. Without the guard the menu
+# is hidden before the reader's press returns, and every message goes into a hidden subtree.
+mutate "our own menu closes on the click logOut makes, hiding its own status line" run \
+  src/modules/account.js 'if (!driving && !corner.contains(e.target)) closeMenu();' 'if (!corner.contains(e.target)) closeMenu();'
+
 # comments.js builds the submission row through listing.render(), so an expando built
 # regardless of route offers to reveal a picture that is already open below it: pressing [+]
 # stacks a second identical full-size copy and doubles the post's height.
