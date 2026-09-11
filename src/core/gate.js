@@ -719,6 +719,17 @@ SHD.gate = (() => {
     // old-reddit.css is scoped under .shd-active, so anything already rendered would
     // otherwise sit there unstyled behind the error screen.
     document.documentElement.classList.remove('shd-gate', SHD.C.BODY_CLASS);
+    /* AND THE LATCH GOES WITH THE CLASS. resetForRoute() uses `revealed` as its proxy for
+       "is .shd-active on the document" — `wasRevealed` decides between blank() and
+       showLoading() on the next navigation. standDown() keeps that proxy honest; this path
+       did not, so after any failure following a successful reveal the next route change
+       took the wrong branch twice: blank() never ran, leaving native Reddit fully visible
+       for the whole load of the incoming page (bug 83's flash, re-opened, against this
+       module's own first contract), and showLoading() mounted with neither gate class set
+       — and #shd-loading has rules under `html.shd-gate` and `html.shd-active` and nowhere
+       else, so the reader got a bare static "loading…" paragraph at the bottom of native
+       Reddit. The comment at showLoading() asserts that cannot happen. */
+    revealed = false;
     document.documentElement.removeAttribute('data-shd-empty');   // our listing is gone with it
     document.getElementById(SHD.C.ROOT_ID)?.remove();
     document.getElementById('shd-header')?.remove();

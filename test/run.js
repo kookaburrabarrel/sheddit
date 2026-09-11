@@ -2308,6 +2308,22 @@ async function boot(html, url, setup) {
       !doc.querySelector('.shd-native-passthrough'));
     check('a render-errors failure surfaces the underlying exception',
       /boom/.test(doc.querySelector('#shd-error')?.textContent || ''));
+
+    /* AND THE NEXT ROUTE STARTS FROM A HONEST LATCH. resetForRoute() uses `revealed` as its
+       proxy for "is .shd-active on the document", choosing between blank() and
+       showLoading(). standDown() keeps that proxy honest; fail() removed the class and left
+       the latch set, so after any failure following a successful reveal the next navigation
+       took the wrong branch twice over — blank() never ran, so native Reddit stayed fully
+       visible for the whole load of the incoming page (bug 83's flash, and this module's
+       own first contract), and showLoading() mounted with NEITHER gate class set. #shd-loading
+       has rules under `html.shd-gate` and `html.shd-active` and nowhere else, so what the
+       reader got was a bare static "loading…" paragraph at the bottom of native Reddit —
+       which the comment at showLoading() says cannot happen. */
+    check('a failure clears the reveal latch, so the next route blacks out as it should',
+      window.SHD.gate.revealed === false, String(window.SHD.gate.revealed));
+    check('...which matches the class the failure actually removed',
+      doc.documentElement.classList.contains('shd-active') === window.SHD.gate.revealed,
+      `active=${doc.documentElement.classList.contains('shd-active')} revealed=${window.SHD.gate.revealed}`);
   }
 
   /* The two failures that share "render-failed", told apart on the card itself.

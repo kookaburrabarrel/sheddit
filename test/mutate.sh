@@ -1675,6 +1675,15 @@ mutate "the gif video is muted in markup only, so autoplay is blocked and the bo
 
 # The failure the login wall actually produces. Swapping the host on /login/ rather than
 # reading `dest` lands the reader on WWW's login page — a hop that "works", to another wall.
+# resetForRoute() reads `revealed` as its proxy for "is .shd-active on the document".
+# fail() removed the class and left the latch set, so the next navigation skipped blank()
+# — native Reddit fully visible for the whole incoming load — and mounted showLoading()
+# with neither gate class set, which #shd-loading has no rule for: a bare static "loading…"
+# paragraph at the bottom of native Reddit.
+mutate "a failure leaves the reveal latch set, so the next route never blacks out" run \
+  src/core/gate.js '    revealed = false;
+    document.documentElement.removeAttribute' '    document.documentElement.removeAttribute'
+
 # watchSettings() re-runs the route to rebuild with the new setting. Called with one
 # argument it stores `onRoute.lastPath = undefined`, so the next genuine ?sort= click on a
 # thread compares undefined against the path, concludes "not a sort swap", and skips the
