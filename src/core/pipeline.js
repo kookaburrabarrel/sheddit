@@ -321,6 +321,9 @@ globalThis.SHD = globalThis.SHD || {};
        its row just went down with the teardown below: the re-sorted page would render
        comments with no post and no sort strip. Detected here, acted on below. */
     const sortSwap = mode === R.COMMENTS && next === R.COMMENTS && onRoute.lastPath === path;
+    /* The FIRST emit is the document we were served; every later one runs PRE-COMMIT, over
+       the outgoing page. renderEmpty() at the bottom of this function depends on which. */
+    const served = onRoute.lastPath === undefined;
     onRoute.lastPath = path;
     mode = next;
     // A new page is a fresh attempt: clear the previous one's failure screen and re-arm
@@ -389,7 +392,19 @@ globalThis.SHD = globalThis.SHD || {};
     // is in the document we were served and there is no reason to make the reader look at
     // native Reddit for a deadline tick first. Declines unless it is certain — see
     // gate.emptyFeedReason.
-    renderEmpty();
+    //
+    // ONLY on that served document. The docblock above renderEmpty() says the mid-session
+    // call "declines, correctly, and the tick settles it 1500ms later", and it does —
+    // except when the page being LEFT is itself an empty listing. Then sourceCount() is 0
+    // and Reddit's no-content panel is still sitting in the outgoing feed, so
+    // emptyFeedReason() answers 'reddit-says-empty' about a route that is zero
+    // milliseconds old and belongs to the previous page. renderEmpty() then draws "there
+    // doesn't seem to be anything here" over the incoming page, and gate.empty() ->
+    // reveal() clears the deadline this route had just re-armed — so an incoming feed we
+    // cannot read produces no rows, no error card and no waiting flag, for ever. That is
+    // the silent hand-back this module exists to prevent, reached through its own
+    // shortcut. The tick settles the mid-session case, which is what it is for.
+    if (served) renderEmpty();
   }
 
   async function loadSettings() {
