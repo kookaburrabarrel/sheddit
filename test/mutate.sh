@@ -1675,6 +1675,19 @@ mutate "the gif video is muted in markup only, so autoplay is blocked and the bo
 
 # The failure the login wall actually produces. Swapping the host on /login/ rather than
 # reading `dest` lands the reader on WWW's login page — a hop that "works", to another wall.
+# comments.js builds the submission row through listing.render(), so an expando built
+# regardless of route offers to reveal a picture that is already open below it: pressing [+]
+# stacks a second identical full-size copy and doubles the post's height.
+mutate "the listing expando is built on comments pages too" run \
+  src/modules/listing.js '    if (SHD.route.current === SHD.route.COMMENTS) return null;' '    ;'
+
+# With the Thumbnails setting off there is no still, so the gated box holds only its
+# absolutely-positioned button: height 0 plus overflow hidden clips the one control the
+# reader has out of existence. Measured in the engine, not inspected — checkVisibility()
+# returns true for a button clipped to nothing.
+mutate "the empty adult blur gets no floor, so its button is clipped away" run \
+  src/modules/comments.js "    else box.classList.add('shd-image-gated-bare');" '    ;'
+
 # A <shreddit-post> carries the author's own title and selftext in its light DOM, so the
 # sentence walk can read the post's own words as Reddit's notice about it. A live thread
 # titled "This post was removed by Reddit — anyone know why?" tombstones itself, and

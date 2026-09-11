@@ -624,6 +624,11 @@ html.shd-active body {
    <img> would be CSS over a completed download of the picture nobody asked for. See
    comments.js gateImages. */
 .shd-selfpost .shd-image-gated { overflow: hidden; }
+/* ...and with no thumbnail to blur — the Thumbnails setting off, so thumbnailFor() returned
+   null — there is nothing in the box to give it height. The reveal button is absolutely
+   positioned, so an empty box computes to 0 and `overflow: hidden` clips the only control
+   the reader has out of existence. A floor, and room for the button to sit in. */
+.shd-selfpost .shd-image-gated-bare { min-height: 120px; background: var(--shd-panel); }
 .shd-selfpost .shd-image-still {
   display: block;
   width: 100%;
