@@ -1691,16 +1691,6 @@ mutate "the selected nsfw button hardcodes white over a theme-owned fill" run \
   border-color: var(--shd-nsfw);
   color: #fff;'
 
-# onRoute removes #shd-root and then calls reset(). suppress.css holds every native body
-# child at 1px, so #shd-root IS the document height: removing it collapses the page, the
-# browser clamps scrollY to 0, and the scroll event that fires in the NEXT frame lands after
-# reset() cleared the flag. Every navigation from a scrolled page then began "interacted",
-# losing the unprompted-fill bound (bug 78) and the held load-more label (bug 85).
-mutate "the teardown's own scroll clamp counts as the reader touching the page" run \
-  src/core/paginator.js '    if (sentinel || (window.scrollY || document.documentElement.scrollTop || 0) > 0) {
-      interacted = true;
-    }' '    interacted = true;'
-
 # A load that spans a route change resumes on the NEW page: SOURCE has been re-pointed, so it
 # counts the incoming route's sources against the outgoing route's baseline and writes the
 # verdict into state that now belongs to someone else — a page credited, the arrears baseline

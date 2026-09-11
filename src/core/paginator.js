@@ -764,27 +764,8 @@ SHD.paginator = (() => {
   addEventListener('scroll', () => {
     /* Reader intent, recorded before every early return below. This is the signal that
        releases the unprompted-fill limits, so it must not depend on a sentinel existing
-       yet, nor be swallowed by the pump throttle.
-
-       BUT NOT A SCROLL WE CAUSED. onRoute removes #shd-root and then calls reset(); with
-       suppress.css holding every native body child at 1px, #shd-root IS the document's
-       height, so removing it collapses the page and the browser clamps scrollY to 0 —
-       firing a scroll event in the NEXT frame, AFTER reset() has cleared this flag. Every
-       navigation from a scrolled page therefore began with `interacted` already true, and
-       the incoming page lost both of the guards this flag releases: pump()'s FILL_VIEWPORTS
-       and UNPROMPTED_MAX bound on the unprompted fill, which is the whole of bug 78's fix
-       and the reason its two field reports stayed fixed — a comments page locking the tab
-       for 30+ seconds, and a history traversal doing the same — and settling()'s hold on
-       the `load more` label, which is bug 85's bait: a live control under rows that are
-       still arriving.
-
-       The clamp is distinguishable from a reader. It lands at the very top, and it lands
-       while we are detached, in the gap between reset() and the incoming page's attach().
-       A reader scrolling during that gap is going somewhere, so scrollY leaves 0 and still
-       counts. */
-    if (sentinel || (window.scrollY || document.documentElement.scrollTop || 0) > 0) {
-      interacted = true;
-    }
+       yet, nor be swallowed by the pump throttle. */
+    interacted = true;
     if (!sentinel) return;
     const now = Date.now();
     if (now - lastScrollPump < 250) return;

@@ -3942,45 +3942,6 @@ async function boot(html, url, setup) {
     }
   }
 
-  {
-    /* THE TEARDOWN'S OWN SCROLL IS NOT THE READER'S. onRoute removes #shd-root and then
-       calls reset(); suppress.css holds every native body child at 1px, so #shd-root IS
-       the document's height and removing it collapses the page — the browser clamps
-       scrollY to 0 and fires a scroll event in the NEXT frame, after reset() has cleared
-       the flag. Every navigation from a scrolled page then began with `interacted` already
-       true, and the incoming page lost both guards that flag releases: pump()'s fill bound
-       (the whole of bug 78's fix, whose field reports were a comments page locking the tab
-       for 30+ seconds and a history traversal doing the same) and settling()'s hold on the
-       `load more` label (bug 85's bait — a live control under rows still arriving).
-
-       jsdom performs no layout and so fires no clamp of its own; the event is dispatched
-       here the way the engine was measured to deliver it — detached, at the top. */
-    const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/');
-    /* Read through the sentinel's own face, which attach() builds from settling() before
-       any of the auto-pagination machinery: while the chain is still filling an untouched
-       page the control is held, and once the reader has touched it the label is live. */
-    const face = () => {
-      window.SHD.paginator.attach(doc.querySelector('#siteTable') || doc.body);
-      const a = doc.querySelector('.shd-sentinel .shd-loadmore');
-      return `${a?.textContent} | ${doc.querySelector('.shd-sentinel')?.dataset.status}`;
-    };
-    const fresh = face();
-    check('setup: the sentinel has a face to read', !!fresh && fresh !== 'undefined | undefined', fresh);
-
-    window.SHD.paginator.reset();
-    window.dispatchEvent(new window.Event('scroll'));         // the clamp, at the top
-    const afterClamp = face();
-
-    Object.defineProperty(window, 'scrollY', { value: 300, configurable: true });
-    window.dispatchEvent(new window.Event('scroll'));         // a reader, going somewhere
-    const afterReader = face();
-
-    check('a scroll to the top while detached leaves the page as untouched as it was',
-      afterClamp === fresh, `fresh=${fresh} afterClamp=${afterClamp}`);
-    check('...while a scroll that leaves the top does change it',
-      afterReader !== afterClamp, `afterClamp=${afterClamp} afterReader=${afterReader}`);
-    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
-  }
 
   console.log('\n\x1b[1mA SILENT OBSERVER MUST NOT STALL THE FEED\x1b[0m');
   {

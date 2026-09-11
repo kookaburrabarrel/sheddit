@@ -1,6 +1,6 @@
 {
-  "version": "0.43.0",
-  "released": "2026-09-10",
+  "version": "0.44.0",
+  "released": "2026-09-11",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.43.0 comes out of a full read of the source: Sheddit now runs only on the Reddit it rebuilds rather than on every reddit.com subdomain, the startup version check can no longer repeat without limit on a network that blocks GitHub, a reply it could not confirm is no longer offered for posting twice, and old.reddit links to pages it does not draw stay where they are. It also documents, for the first time, that Sheddit answers Reddit's 18+ prompt for you."
+  "notes": "0.44.0 comes out of a second adversarial read of the source, and leads with a security fix: a crafted old.reddit.com link could run script on your Reddit session, because the login wall's dest was checked for the right host but not the right scheme. That was present in every build since 0.33.0. Alongside it: a live post whose title discusses removals is no longer drawn as a removed post, leaving an empty listing no longer paints the page you are arriving at as empty, changing a setting no longer breaks the next sort click on a thread, a comment is no longer reported as posted when somebody else's arrived instead, and two buttons that were unreadable on the night and carbon themes now take the page's own background. One finding of the twenty is recorded rather than fixed \u2014 three attempts at it were reverted, and the measurements are in the engineering log."
 }
