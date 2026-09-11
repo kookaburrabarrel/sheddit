@@ -5175,6 +5175,26 @@ async function boot(html, url, setup) {
     check('...a dest that is itself a login wall does not become one on www',
       wall('https://old.reddit.com/login/?dest=%2F') === 'https://www.reddit.com/',
       wall('https://old.reddit.com/login/?dest=%2F'));
+    /* THE HOST CHECK IS NOT ENOUGH ON ITS OWN, and this is the row that says why.
+       `new URL('javascript://reddit.com/r/aww/?x=%0a…')` parses with hostname
+       `reddit.com`, so isReddit() passes it; the host swap keeps the scheme deliberately;
+       and the caller hands the result to location.replace(), which RUNS a javascript: URL.
+
+       THE PAYLOAD GOES IN THE QUERY, and that is the whole subtlety — classify() gates the
+       PATHNAME, so `/x%0aalert(1)` is refused as a page Sheddit does not render and reads
+       as safe. Put the same payload after a `?` on a path Sheddit DOES render and the
+       pathname check is satisfied while the script rides across untouched: in JS,
+       `//www.reddit.com/r/aww/?x=` is a line comment, the %0a ends it, and what follows
+       executes on the reader's reddit origin from a link alone. A row using the path form
+       would pass without the fix and pin nothing. */
+    const HOSTILE = 'javascript://reddit.com/r/aww/?x=%0aalert(document.domain)';
+    check('a javascript: dest on a path Sheddit renders does not survive into the hop',
+      wall(HOSTILE) === 'https://www.reddit.com/', String(wall(HOSTILE)));
+    check('...and no target this file returns ever carries a non-http(s) scheme',
+      [HOSTILE, 'javascript://reddit.com/x%0aalert(1)', 'data://reddit.com/r/aww/?x=1',
+       'vbscript://reddit.com/r/aww/?x=1', 'https://www.reddit.com/r/x/', '/r/aww/']
+        .map(wall).every((t) => t === null || /^https?:/.test(t)),
+      JSON.stringify([HOSTILE, 'data://reddit.com/r/aww/?x=1'].map(wall)));
 
     check('nothing but old.reddit.com is ever rewritten',
       targetFor('https://www.reddit.com/r/x/') === null &&

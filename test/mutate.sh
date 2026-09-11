@@ -1681,12 +1681,19 @@ mutate "the login wall's dest is ignored and only the host is swapped" run \
 # An open redirect wearing this extension's name: `dest` arrives in a URL anyone can hand
 # a reader, and following it off reddit.com is a security bug, not a layout one.
 mutate "any dest is followed, including one pointing off reddit.com" run \
-  src/core/oldreddit.js '(d && isReddit(d) && !isLogin(d))' '(d && true && !isLogin(d))'
+  src/core/oldreddit.js '(d && isHttp(d) && isReddit(d) && !isLogin(d))' '(d && isHttp(d) && true && !isLogin(d))'
 
 # ...and the nested wall, which is the other half of the same line: a dest that is itself a
 # login page becomes www's login page, so the hop lands on a wall again.
 mutate "a dest that is itself a login wall is followed" run \
-  src/core/oldreddit.js '(d && isReddit(d) && !isLogin(d))' '(d && isReddit(d))'
+  src/core/oldreddit.js '(d && isHttp(d) && isReddit(d) && !isLogin(d))' '(d && isHttp(d) && isReddit(d))'
+
+# The scheme half of the same line, and the reason it is a pair. `new URL()` parses
+# `javascript://reddit.com/x%0a…` with hostname `reddit.com`, so the host check alone passes
+# it; the hostname rewrite keeps the scheme on purpose, and location.replace() runs what it
+# is handed. Dropping isHttp() is a script-execution bug, not a layout one.
+mutate "a javascript: dest passes the host check and is followed" run \
+  src/core/oldreddit.js '(d && isHttp(d) && isReddit(d) && !isLogin(d))' '(d && isReddit(d) && !isLogin(d))'
 
 # NOT `host` instead of `hostname`: that row was written first, SURVIVED, and was the row
 # that was wrong rather than the test. Measured — the WHATWG host setter keeps the existing
