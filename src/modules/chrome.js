@@ -15,15 +15,26 @@ SHD.chrome = (() => {
     if (document.querySelector('#shd-header')) return;
     const sub = SHD.route.subredditOf();
     const user = SHD.route.usernameOf();
+    /* `all` and `popular` ARE subreddits as far as subredditOf() is concerned, and this
+       menu already carries a tab for each — so /r/all/ came up with the static `all` tab
+       unmarked beside a second, selected `r/all`, naming one page twice. The front page had
+       the opposite fault: nothing marked at all, because the only rule that could mark
+       anything was "there is a subreddit". A bar whose whole job is to say where you are
+       has to say it once, and has to say it everywhere it can. */
+    const fixedTab = sub && /^(all|popular)$/i.test(sub) ? sub.toLowerCase() : null;
+    const onFront = !sub && !user;
+    const tab = (name) =>
+      (fixedTab === name || (onFront && name === 'front') ? 'li.selected' : 'li');
     document.body.prepend(
       h('div#shd-header.shd-chrome', null, [
         h('span.pagename', null,
           h('a', { href: '/', text: 'reddit' })),
         h('ul.tabmenu', null, [
-          h('li', null, h('a', { href: '/', text: 'front' })),
-          h('li', null, h('a', { href: '/r/all/', text: 'all' })),
-          h('li', null, h('a', { href: '/r/popular/', text: 'popular' })),
-          sub ? h('li.selected', null, h('a', { href: `/r/${sub}/`, text: `r/${sub}` })) : null,
+          h(tab('front'), null, h('a', { href: '/', text: 'front' })),
+          h(tab('all'), null, h('a', { href: '/r/all/', text: 'all' })),
+          h(tab('popular'), null, h('a', { href: '/r/popular/', text: 'popular' })),
+          sub && !fixedTab
+            ? h('li.selected', null, h('a', { href: `/r/${sub}/`, text: `r/${sub}` })) : null,
           user ? h('li.selected', null, h('a', { href: `/user/${user}/`, text: `u/${user}` })) : null
         ]),
         /* LAST, so it lands at the far right — old reddit's `#header-bottom-right`, where
@@ -77,7 +88,8 @@ SHD.chrome = (() => {
       class: on ? 'selected' : null,
       title: on
         ? 'Sheddit asks GitHub for the current version number once when your browser '
-          + 'starts, at most once a day. Nothing about you is sent, and there is no server '
+          + 'starts, and no more than once every twenty hours. Nothing about you is sent, '
+          + 'and there is no server '
           + 'of Sheddit\'s own — GitHub sees an IP and a timestamp, as any host does. '
           + 'Click to turn it off; the button beside this one still works on a click.'
         : 'The startup check is off — nothing leaves unless you press the button beside '
@@ -108,8 +120,10 @@ SHD.chrome = (() => {
            one, so it is added to that rather than substituted for it. */
         title: `Version ${s.latest} is out.${s.notes ? ' ' + s.notes : ''} `
              + `You are running ${s.installed}. `
-             + 'Download it, replace the folder, then press \u21bb on the Sheddit card in '
-             + 'chrome://extensions — until you do, the old copy keeps running.',
+             + 'A copy installed from the Chrome Web Store or Firefox Add-ons updates '
+             + 'itself. A hand-installed one does not: replace the folder, then reload it '
+             + 'from your browser\'s extensions page — chrome://extensions, or '
+             + 'about:debugging in Firefox — and until you do, the old copy keeps running.',
         text: `update to ${s.latest}`
       });
     }

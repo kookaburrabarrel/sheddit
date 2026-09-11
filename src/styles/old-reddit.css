@@ -175,10 +175,15 @@ html.shd-active body {
   cursor: pointer;
 }
 .shd-nsfw-btn:hover { background: var(--shd-hover-bg); }
+/* The ink is the PAGE's background, not white. Both fills here are theme-owned, and a
+   hardcoded white over them inverts where the palette is dark: measured, white on night's
+   --shd-nsfw (#ff6b6b) is 2.78:1 and on carbon's (#ff4500) 3.44:1, under the 4.5 floor and
+   under even the 3:1 large-text one. --shd-bg is dark exactly where the fill is light, so
+   the pair stays legible in all five without adding a token to five palettes (bug 43). */
 .shd-nsfw-btn.selected {
   background: var(--shd-nsfw);
   border-color: var(--shd-nsfw);
-  color: #fff;
+  color: var(--shd-bg);
   font-weight: bold;
 }
 
@@ -237,7 +242,8 @@ html.shd-active body {
 .shd-update-new {
   background: var(--shd-tab-text);
   border-color: var(--shd-tab-text);
-  color: #ffffff;
+  /* ...and the same pairing here: white on night's --shd-tab-text (#6ea8fe) is 2.42:1. */
+  color: var(--shd-bg);
   font-weight: bold;
 }
 .shd-update-new:hover { background: var(--shd-tab-text); border-color: var(--shd-text); }
