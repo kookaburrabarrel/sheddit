@@ -2018,6 +2018,44 @@ the way a question got settled is usually more useful than the answer.
     only be reached by inferring the source count from row growth, and `shdSources`
     exists now precisely so that inference is not needed a second time.
 
+14. **The teardown's own scroll clamp, and why the obvious guard cannot ship.** Round two
+    of review measured this in a real engine: `onRoute` removes `#shd-root` and then calls
+    `reset()`, and with suppress.css holding every native body child at 1px, `#shd-root` IS
+    the document's height — so removing it collapses the page, the browser clamps scrollY to
+    0, and the scroll event that fires in the NEXT frame arrives AFTER `reset()` has cleared
+    `interacted`. Reproduced at 1280x400 over the real listing fixture: scrolled to 300, a
+    real SPA navigation, and the incoming page reports `shdInteracted "true"` with the
+    control already reading `load more`. An unscrolled navigation reports `"false"`. So
+    every navigation FROM A SCROLLED PAGE begins with both of bug 78's bounds released and
+    bug 85's label live under arriving rows.
+
+    **The finding is real. Three attempts at a fix were reverted, and the reason each failed
+    is the useful part.**
+
+    - *Latch only when a sentinel exists or scrollY > 0.* Geometry's "the reader is still
+      where they were" row began failing on roughly three runs in five, against a baseline
+      of zero in four. `window.scrollY` FORCES A SYNCHRONOUS LAYOUT, and forcing one from
+      inside a scroll handler during the teardown window commits the collapsed document —
+      which clamps the reader's position away. Log 78's lesson in a new place: the
+      expensive thing was the measuring, not the work being measured.
+    - *Keep `interacted` across a settings re-render* (`reset(samePage)`), on the theory
+      that a settings change is the same page and the same reader. It helped — one failure
+      in four rather than three in five — and did not fix it, so the theory was at best
+      incomplete.
+    - *Take intent from `wheel`/`touchstart`/`keydown`/`pointerdown` instead*, which reads
+      no layout at all. That moved the failure rather than removing it: the unprompted-fill
+      row went red instead ("a page that does not fill the window loads without being
+      asked — 14 -> 14 rows, untouched").
+
+    What is NOT yet known is which of those three is closest, because each was judged on
+    four or five runs of a test whose failure rate is itself around 50% — a sample that
+    cannot separate a fix from a coincidence. What would settle it is a rig that runs the
+    scroll-preservation row alone, twenty times, against each candidate; and a decision
+    about whether the settings path should keep the reader's intent at all, which is a
+    product question this log should answer before another patch is written. Anything done
+    here must be measured under `geometry`, not reasoned about — which is what the heartbeat
+    entry above already says, and what three reverts have now cost.
+
 Two settled things, so nobody reopens them: the **staircase indentation report does not
 reproduce** (measured at 10 widths), and **comments being DOM-nested was a non-event**
 (`depth` agreed 25/25) — though it did expose the body-lookup bug, number 25 above.

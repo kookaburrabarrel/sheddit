@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.43.0](https://img.shields.io/badge/version-0.43.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.44.0](https://img.shields.io/badge/version-0.44.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.43.0 is out — everyone is welcome to try it
+### Beta 0.44.0 is out — everyone is welcome to try it
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
@@ -75,6 +75,27 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
+
+**0.44.0 — a second adversarial read, and a security fix**
+- **Fixed:** a crafted `old.reddit.com` link could run script on your Reddit session. The
+  login wall's `dest` was checked for the right host but not the right *scheme*, so a
+  `javascript:` destination passed and was handed to the browser to follow. Present in
+  every build since 0.33.0. If you install from a store your copy updates itself.
+- **Fixed:** a live post whose own title discusses removals — "This post was removed by
+  Reddit, anyone know why?" — was drawn as a removed post, stamp and all.
+- **Fixed:** leaving an empty listing painted "there doesn't seem to be anything here" over
+  the page you were arriving at, and disarmed the failsafe that catches a feed we cannot
+  read.
+- **Fixed:** changing any setting from Sheddit's header broke the next sort click on a
+  thread, leaving it with no submission row and no sort strip.
+- **Fixed:** a comment you posted could be reported as sent when what actually arrived was
+  somebody else's, discarding your draft while Reddit still held the unposted text.
+- **Fixed:** with thumbnails off, an adult picture on a comments page could never be
+  revealed — the button to reveal it was clipped out of existence.
+- **Fixed:** on the night and carbon themes, two buttons drew white text on a light fill at
+  2.4:1 and 2.8:1. They take the page's own background now.
+- ...and a dozen more, including the tab bar naming `/r/all` twice and the front page not
+  at all. Full detail in the [changelog](CHANGELOG.md).
 
 **0.43.0 — a full read of the code, and what it turned up**
 - **Changed:** Sheddit only runs on the Reddit it actually rebuilds. It was loading on
@@ -214,7 +235,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.43.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.44.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

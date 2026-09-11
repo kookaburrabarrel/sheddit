@@ -18,6 +18,153 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.44.0
+
+A second adversarial pass over the source, run as twelve independent readers with every
+finding then attacked by three others whose job was to kill it. Twenty of twenty-five
+survived that and are fixed here; three were killed correctly and are not. Nothing in this
+release came from a user report, and one item is a security fix that shipped in every build
+from 0.33.0 onward.
+
+### Fixed — a crafted old.reddit link could run script on your reddit session
+
+`targetFor()` treated the login wall's `dest` as hostile and checked its host, which is
+half of the pair that makes a destination safe. `new URL('javascript://reddit.com/…')`
+parses with hostname `reddit.com`, so the host check passed it; the hostname rewrite keeps
+the scheme deliberately, for the port the packed suite needs; and the result is handed to
+`location.replace()`, which runs a `javascript:` URL.
+
+The payload goes in the QUERY, and that is what let this survive a reading of the file.
+`classify()` gates the PATHNAME, so `/x%0aalert(1)` is refused as a page Sheddit does not
+render and the whole shape looks safe. Put the same payload after a `?` on a path Sheddit
+DOES render and the pathname check is satisfied while the script rides across untouched:
+
+    javascript://reddit.com/r/aww/?x=%0aalert(document.domain)
+
+In JS the leading `//…?x=` is a line comment, the `%0a` ends it, and what follows executes.
+The scheme is now checked on the one line that decides. The test uses the query form for
+the same reason the bug needed it: a row written with the path form passes without the fix.
+
+### Fixed — a live post that talks about removals was drawn as a removed post
+
+`removalOf()` walks every element under the post testing Reddit's sentence against
+textContent, and a `<shreddit-post>` carries the author's own title and selftext in that
+same light DOM. A live thread titled *"This post was removed by Reddit — anyone know
+why?"* therefore matched itself and came out as a dead end: old reddit's `removed` stamp on
+the listing row, and on the comments page a removal notice whose text is the author's own
+title. r/ModSupport, r/undelete and r/help are made of those titles.
+
+Neither existing guard could catch it — the title anchor IS the innermost node, and a title
+is under the length ceiling rather than over it. The author's regions are skipped before
+the sentence is tested, erring in the direction this project had already chosen twice: a
+tombstone over live content is the worse of the two errors.
+
+### Fixed — four things about leaving a page, and arriving at the next one
+
+- **Navigating away from an empty listing painted "there doesn't seem to be anything here"
+  over the incoming page** — and threw away the deadline that route had just armed, so a
+  feed we could not read left the reader on a false empty notice permanently. onRoute runs
+  pre-commit, so the DOM it reads is the OUTGOING page; the shortcut is now restricted to
+  the document we were served, which is the case its own comment describes.
+- **A failure left the reveal latch set**, so the next navigation skipped the blackout —
+  native Reddit fully visible for the whole incoming load — and mounted the loading line
+  with neither gate class set, which no stylesheet has a rule for.
+- **The teardown's own scroll counted as the reader.** Removing `#shd-root` collapses the
+  document, the browser clamps scrollY, and that scroll event lands after `reset()` cleared
+  the flag — so every navigation from a scrolled page began "already interacted", losing
+  the unprompted-fill bound and the held `load more` label.
+- **A load in flight wrote its verdict into the route that replaced it**, crediting a page
+  that loaded nothing and clearing `busy` for a load the new page never made.
+
+### Fixed — a settings change broke the next comment-sort click
+
+`watchSettings()` re-ran the route with one argument, storing an undefined path where the
+sort-swap latch reads it. The next `?sort=` click on a thread concluded it was not a sort
+swap and skipped the un-stamp that keeps the post row alive — leaving a thread with no
+submission and no sort strip, permanently, from a press on Sheddit's own header.
+
+### Fixed — three ways the account corner spoke to nobody
+
+- A top-level comment was credited to any comment arriving anywhere on the page, and the
+  paginator delivers batches inside the same window. The form closed on somebody else's
+  comment and took the reader's draft with it while Reddit still held unposted text.
+- The log-out fallback revealed Reddit's avatar button instead of the drawer — the contract
+  matches both and the button sorts first — and then hid the panel holding the log-out
+  control behind our own class.
+- Pressing log out closed our menu, because the flow's first act is a programmatic click on
+  Reddit's avatar button and the corner reads any outside click as dismissal. Every message
+  it then wrote went into a hidden element: unreadable, and unannounced.
+
+### Fixed — pictures, and the controls over them
+
+- An image post's comments page drew the picture twice: once open, once behind a listing
+  expando carrying the identical URL, so pressing `[+]` stacked a duplicate and doubled the
+  post's height.
+- With Thumbnails off, an adult picture could never be revealed at all. The gated box held
+  only its absolutely-positioned button, and height 0 with `overflow: hidden` clipped that
+  button out of existence.
+- Every comments page printed a stray listing rank "1" beside the submission.
+
+### Fixed — the update check's two clocks, and one check per browser start
+
+The staleness nudge measured from the last ATTEMPT rather than the last answer. A reader
+whose network cannot reach GitHub attempts on every browser start, so the count never aged
+past a day — and the nudge exists for precisely that reader. It now reads a clock only an
+answer moves. Separately, `onStartup` and `onInstalled` can both fire at one browser start
+and nothing serialised them, so two requests could leave at once.
+
+### Fixed — the night and carbon palettes could not be read on two controls
+
+Both fills are theme-owned and the ink was hardcoded white. Measured: white on night's
+`--shd-nsfw` is 2.78:1 and on its `--shd-tab-text` 2.42:1 — under the 4.5 floor and under
+even the 3:1 large-text one, on the themes chosen by readers most likely to be in a dark
+room. The ink is the page background now, which lands between 5.17:1 and 7.14:1 across all
+five.
+
+### Fixed — the tab bar, and a subreddit named after a sort
+
+`/r/all` and `/r/popular` are subreddits by every test route.js applies, and the bar
+already carries a tab for each — so they were named twice, once unmarked and once selected,
+while the front page was marked not at all. Separately, `sortOf()` matched a sort name
+anywhere at the end of a path, so `/r/top`, `/r/new`, `/r/best`, `/r/rising` and
+`/r/controversial` — all real subreddits — came up with that tab bolded and, for the two
+timed sorts, a `links from` window strip over a listing it cannot change.
+
+### Documented — four places the docs had drifted from the code
+
+The options page said the adult opt-in "does not affect video"; it has gated video since
+0.30.0. ARCHITECTURE §5.2 said `oldreddit.js` ships with "no route"; it ships with route.js
+and depends on it at runtime. The auto-check tooltip promised "at most once a day" for a
+twenty-hour floor. And the update link told Firefox readers to open `chrome://extensions`.
+
+### Not fixed — the teardown's own scroll clamp
+
+One of the twenty is recorded rather than repaired. Removing `#shd-root` collapses the
+document, the browser clamps the scroll to the top, and that scroll event lands after
+`reset()` has cleared the flag that says whether the reader has touched this page — so a
+navigation from a scrolled page starts with the unprompted-fill bounds released. The
+finding was reproduced in a real engine and is not in doubt.
+
+Three fixes were written and all three were reverted: the first forced a synchronous layout
+from inside a scroll handler and made the reader's position vanish on half of all
+navigations, the second helped without fixing, and the third moved the failure to the
+unprompted fill. Each was judged on four or five runs of a test whose own failure rate is
+about half, which is not a sample that can tell a fix from a coincidence. The measurements,
+and what would actually settle it, are in docs/engineering-log.md as open question 14.
+
+### The method, since it is the part worth reusing
+
+Every logic fix here carries a mutation row that was verified to fail the suite before it
+was recorded. That check caught six tests of my own that were green while pinning nothing:
+one seeded a field the merge preserves either way, one seeded it before the build date
+where the floor decides the answer regardless, one asserted a class name that does not
+exist, one skipped the build so the mutation never reached the bundle under test, one read
+diagnostics that only publish on a refusal, and one booted fresh jsdom windows mid-block
+and killed the enclosing test's handles. A passing new test is not evidence of anything
+until the thing it describes has been removed and watched to fail.
+
+---
+
 ## 0.43.0
 
 A full read of the source, the manifest, the packaging and the docs, plus a live run
