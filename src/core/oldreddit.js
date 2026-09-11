@@ -94,11 +94,17 @@ SHD.oldReddit = (() => {
       const dest = url.searchParams.get('dest');
       let d = null;
       /* `dest` arrives in a URL the reader may have been handed by anyone, so it is
-         treated as hostile: only a reddit.com destination is followed, and a nested login
-         wall is dropped. Following it anywhere else would make this an open redirect
-         wearing Sheddit's name. */
+         treated as hostile: only an http(s) reddit.com destination is followed, and a
+         nested login wall is dropped. Following it anywhere else would make this an open
+         redirect wearing Sheddit's name.
+
+         THE SCHEME IS CHECKED HERE AND NOWHERE ELSE, and it has to be. `new URL()` parses
+         `javascript://reddit.com/x%0a…` with hostname `reddit.com`, so isReddit() alone
+         says yes; the hostname rewrite below deliberately leaves the scheme untouched, and
+         `location.replace()` runs a `javascript:` URL it is handed. Host is not enough:
+         what makes a destination safe is the pair. */
       if (dest) { try { d = new URL(dest, url.origin); } catch { d = null; } }
-      url = (d && isReddit(d) && !isLogin(d)) ? d : new URL('/', url.origin);
+      url = (d && isHttp(d) && isReddit(d) && !isLogin(d)) ? d : new URL('/', url.origin);
     }
 
     const out = new URL(url.href);
@@ -133,6 +139,7 @@ SHD.oldReddit = (() => {
   }
 
   const isReddit = (u) => u.hostname === 'reddit.com' || u.hostname.endsWith('.reddit.com');
+  const isHttp = (u) => u.protocol === 'https:' || u.protocol === 'http:';
   const isLogin = (u) => /^\/login\/?$/.test(u.pathname);
 
   /* ------------------------------------------------------------------ *
