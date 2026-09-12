@@ -92,9 +92,18 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
       titleFontSize: title && getComputedStyle(title).fontSize,
       titleColor: title && getComputedStyle(title).color,
       bodyBg: getComputedStyle(document.body).backgroundColor,
-      // proves suppress.css arrived
-      nativeClip: app && getComputedStyle(app).clipPath,
+      // proves suppress.css arrived, and that its two halves are both in force: hidden
+      // four ways, and holding a real viewport-sized box out of flow so that anything
+      // Reddit defers on viewport position can still hydrate on the native tree.
+      nativePos: app && getComputedStyle(app).position,
       nativeOpacity: app && getComputedStyle(app).opacity,
+      nativeVis: app && getComputedStyle(app).visibility,
+      nativeEvents: app && getComputedStyle(app).pointerEvents,
+      nativeBox: app && (({ width, height }) => ({ w: Math.round(width), h: Math.round(height) }))(app.getBoundingClientRect()),
+      viewport: { w: window.innerWidth, h: window.innerHeight },
+      // The failure mode a full-size native tree reintroduces: our own root pushed off
+      // the top of the page by the copy behind it.
+      rootTop: Math.round(document.querySelector('#shd-header').getBoundingClientRect().top),
       injectedStyleTag: !!document.getElementById('shd-style')   // dev-harness marker
     };
   });
@@ -122,8 +131,20 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
   check('the page background comes from the skin',
     listing.bodyBg === 'rgb(218, 224, 230)', listing.bodyBg);
   check('suppress.css is delivered by the manifest and hides the native tree',
-    listing.nativeClip === 'inset(50%)' && listing.nativeOpacity === '0',
-    `clip-path ${listing.nativeClip}, opacity ${listing.nativeOpacity}`);
+    listing.nativeOpacity === '0' && listing.nativeVis === 'hidden' &&
+    listing.nativeEvents === 'none',
+    `opacity ${listing.nativeOpacity}, visibility ${listing.nativeVis}, pointer-events ${listing.nativeEvents}`);
+  /* The other half of the same rule, and the reason comment votes and the reply control
+     can be reached at all: hidden is not the same as geometry-less. The earlier version
+     collapsed the tree to a clipped 1x1 box, so nothing on it could intersect anything and
+     Reddit never hydrated the action row that holds both controls. The box is the
+     viewport's size now, out of flow so it cannot move our own layout. */
+  check('...while leaving it a real, viewport-sized box to hydrate against',
+    listing.nativePos === 'fixed' &&
+    listing.nativeBox.w === listing.viewport.w && listing.nativeBox.h === listing.viewport.h,
+    `${listing.nativePos} ${JSON.stringify(listing.nativeBox)} vs viewport ${JSON.stringify(listing.viewport)}`);
+  check('...and out of flow, so the copy behind ours does not push our layout down',
+    listing.rootTop === 0, `#shd-header top is ${listing.rootTop}px`);
   check('this is the packed extension, not the dev harness', !listing.injectedStyleTag);
   check('no page errors on the listing route', pageErrors.length === 0, pageErrors.join(' | '));
 
@@ -1362,6 +1383,92 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     check('...and our own layout is not caught by the same rule',
       seen.rootVis === 'visible', seen.rootVis);
     await pageA.close();
+  }
+
+  /* ================================================================== *
+   * A COMMENT VOTE REACHES A CONTROL THAT DOES NOT EXIST YET
+   * ================================================================== */
+  console.log('\n\x1b[1mPACKED EXTENSION — COMMENT VOTES HYDRATE THE ROW THEY NEED\x1b[0m');
+  // Reported from a signed-in session: every comment vote was a silent no-op while post
+  // votes on the same page worked. A post's vote buttons sit in the post's own shadow root
+  // and are always there; a comment's sit inside a <shreddit-comment-action-row> Reddit
+  // mounts when the comment nears a viewport — and the suppression rule used to collapse
+  // the native tree to a clipped 1x1 box, so nothing on it could intersect anything and
+  // that row never arrived.
+  //
+  // This is the assertion that can only live here. The rule now leaves the native tree a
+  // real viewport-sized box, and account.js scrolls the native row inside it on the click
+  // that needs it; both halves are layout, and jsdom has none — over there the fixture can
+  // only model a row that turns up on a timer. The fixture's observer has the default root
+  // and is therefore subject to the same ancestor clipping the real page's is.
+  {
+    const pageV = await browser.newPage();
+    await pageV.goto(origin + PATHS.lazyVotes, { waitUntil: 'domcontentloaded' });
+    await until(pageV, () => !!document.querySelector('#shd-root .thing.comment'));
+    await settle(600);
+
+    const target = await pageV.evaluate(() => {
+      const rows = [...document.querySelectorAll('#shd-root .thing.comment')];
+      return rows[rows.length - 1].dataset.fullname;
+    });
+    const before = await pageV.evaluate((id) => ({
+      hydrated: window.__shdVotes.hydrated.includes(id),
+      anyHydrated: window.__shdVotes.hydrated.length,
+      scrollY: window.scrollY
+    }), target);
+    /* The control: this comment's row is NOT mounted while the reader is only looking at
+       our layout. Without it a pass below could mean "Reddit had already hydrated the
+       whole thread", which would prove nothing about the click. */
+    check('a comment nobody has scrolled to has no vote control mounted',
+      !before.hydrated, `${target} already hydrated (${before.anyHydrated} rows up)`);
+    /* The other control: the account layer only runs on a page the extension reads as
+       signed in, so a fixture that lost its session signal would make every assertion
+       below pass by never having had a vote to forward. */
+    const signedIn = await pageV.evaluate(() => ({
+      native: !!document.querySelector('#expand-user-drawer-button'),
+      corner: (document.querySelector('#shd-header .shd-account') || {}).textContent || ''
+    }));
+    check('...on a page the extension reads as signed in',
+      signedIn.native && /tester|logged in/i.test(signedIn.corner), JSON.stringify(signedIn));
+
+    // Clicked programmatically, not through the input pipeline: page.click() scrolls the
+    // element into view itself, which would hide the thing being measured below.
+    await pageV.evaluate(() => window.scrollTo(0, 200));
+    await settle(50);
+    const scrolledTo = await pageV.evaluate(() => window.scrollY);
+    await pageV.evaluate((id) => document.querySelector(
+      `#shd-root .thing[data-fullname="${id}"] > .midcol > .arrow.up`).click(), target);
+
+    const cast = await pageV.evaluate((id) => new Promise((resolve) => {
+      const deadline = Date.now() + 4000;
+      const tick = () => {
+        if (window.__shdVotes.up.includes(id) || Date.now() > deadline) {
+          const col = document.querySelector(`#shd-root .thing[data-fullname="${id}"] > .midcol`);
+          return resolve({
+            forwarded: window.__shdVotes.up.filter(v => v === id).length,
+            hydrated: window.__shdVotes.hydrated.includes(id),
+            lit: col.classList.contains('likes'),
+            miss: col.dataset.shdVoteMiss || null,
+            scrollY: window.scrollY
+          });
+        }
+        setTimeout(tick, 50);
+      };
+      tick();
+    }), target);
+
+    check('clicking our arrow mounts the native row it needs',
+      cast.hydrated, `${target} never hydrated`);
+    check('...and the vote is forwarded to the button that appeared, exactly once',
+      cast.forwarded === 1, `forwarded ${cast.forwarded} times`);
+    check('...and our own column lights up, with no claim of an unavailable control',
+      cast.lit && cast.miss === null, `lit=${cast.lit} miss=${cast.miss}`);
+    /* The native tree is position:fixed, so scrolling it is not in the document's scroll
+       chain — a vote must never move the reader's place in the thread. */
+    check('...and the reader\'s place in the thread does not move',
+      cast.scrollY === scrolledTo, `${scrolledTo} -> ${cast.scrollY}`);
+    check('no page errors while voting on a comment', pageErrors.length === 0, pageErrors.join(' | '));
+    await pageV.close();
   }
 
   /* ================================================================== *

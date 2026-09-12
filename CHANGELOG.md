@@ -1,9 +1,11 @@
 # Changelog
 
-Sheddit is in **beta**: 0.43.0 is the current build, on the
+Sheddit is in **beta**, on the
 [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/). Sections
-are builds, newest first; the top one is the version `manifest.json` carries today. The
+are builds, newest first; the top one is the version `manifest.json` carries today — which
+is why the current build is not named here, since a number written down in this paragraph
+goes stale on the next push and this one did. The
 builds up to and including 0.43.0 shipped as hand-installs, while the listings were in
 review.
 Everything below is pre-1.0 development on `main`. The version in
@@ -15,6 +17,43 @@ Entries lead with what changed for a *user* where there is such a thing, and not
 underlying cause where that is the more useful fact. Several entries describe bugs that
 existed from the first commit and were only found once a test could see them — those are
 marked **never worked**, because "fixed" would imply it once did.
+
+---
+
+## 0.46.0
+
+### Fixed — comment voting works
+
+0.45.0 shipped an arrow that admitted it was dead, and said the feature could not be
+recovered from here. That was wrong, and it is worth being precise about why, because the
+reasoning was almost right.
+
+Reddit builds a comment's vote buttons only when the comment has a position on screen —
+that part was correct, and no change of selector can find a button that does not exist.
+What was wrong was the conclusion that Sheddit therefore cannot have them. Sheddit keeps
+Reddit's own copy of the page in the document, hidden, because votes and replies are
+forwarded to Reddit's own controls. The stylesheet that hides it was also collapsing it to
+a single pixel — one rule, two effects — and only the hiding was ever wanted. The copy is
+hidden the same four ways it was before and now keeps its dimensions, and a click on a
+comment arrow brings the row it needs into view before looking for the button.
+
+Screen readers and find-in-page still get one copy of the page rather than two: the
+declaration that does that never changed, and the test that counts it is unchanged too.
+Your place in a thread does not move when you vote.
+
+### Fixed — replying to a comment no longer sends you to Reddit's page to finish
+
+`Reply` sits in the same part of Reddit's page as the vote buttons and was missing for the
+same reason. When it could not be found, Sheddit revealed Reddit's own comment and carried
+your draft into its box — a real fallback, and still there, but it took you off the layout
+you were reading. That control is now resolved in place, so an ordinary reply is posted
+from Sheddit's own box.
+
+### Unchanged
+
+Voting on posts, which never had this problem. An arrow that still cannot reach a control
+after waiting for it says so, exactly as 0.45.0 did — and stops saying it if the control
+turns up.
 
 ---
 

@@ -1949,7 +1949,7 @@ mutate "the account setting is ignored" run \
                       'function active() { return loggedIn(); }'
 
 mutate "vote arrows stop forwarding to Reddit's button" run \
-  src/modules/account.js '    native.click();
+  src/modules/account.js '    (dir === 1 ? btns.up : btns.down).click();
     // Optimistic' '    // Optimistic'
 
 mutate "clicking the lit arrow no longer un-votes" run \
@@ -1964,6 +1964,14 @@ mutate "the page's own vote state is no longer read back after a click" run \
 
 mutate "the score no longer discounts the reader's standing vote" run \
   src/modules/account.js 'const n = m.score + (state - initial);' 'const n = m.score + state;'
+
+# ...and the standing vote has to be READ BEFORE the click flips the button it is read
+# from. Ordering, not arithmetic. It matters most on a COMMENT, whose state is not learned
+# at render time at all (the row is not hydrated then), so the click is the only chance.
+mutate "the standing vote is read after the click that flips it" run \
+  src/modules/account.js '    learnInitial(col, m, kind, btns);
+    (dir === 1 ? btns.up : btns.down).click();' '    (dir === 1 ? btns.up : btns.down).click();
+    learnInitial(col, m, kind, btns);'
 
 # Logged out the control is KNOWN not to exist (ARCHITECTURE §7d); a warning there is
 # noise about a settled decision, and the row that removed the guard reintroduces it.
@@ -2424,6 +2432,67 @@ mutate "the key guard swallows every key on the page" run \
 # release it said nothing at all — log 62's sin, delivered to the reader as a dead click.
 mutate "a comment vote goes back to failing silently" run \
   src/modules/account.js "      markUnavailable(col, kind);" "      ;"
+
+# THE SUPPRESSION RULE'S TWO JOBS (log 107). It hides the native tree, and it leaves that
+# tree a real box to be laid out in. The first half had six declarations doing it and the
+# second half had none: a clipped 1x1 box cannot intersect anything, so Reddit never
+# mounted the action row holding a comment's vote buttons and `Reply`, and every comment
+# vote was a silent no-op. These rows are in the BROWSER suite because both halves are
+# layout, and jsdom has none.
+mutate "the native tree is a clipped 1x1 box again" extension \
+  src/styles/suppress.css "  position: fixed !important;
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  overflow: hidden !important;" "  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;"
+
+# `position: fixed` is what keeps a now-full-size native tree from pushing #shd-root down
+# the page — bug 2's failure mode, which this rule has already had once.
+mutate "the full-size native tree is back in flow" extension \
+  src/styles/suppress.css "  position: fixed !important;
+  inset: 0 !important;" "  position: static !important;"
+
+# `pointer-events: none` was belt-and-braces on a 1x1 box. On a box that covers the
+# viewport it is the only thing stopping the hidden copy of Reddit eating every click.
+mutate "the suppressed tree eats clicks meant for us" extension \
+  src/styles/suppress.css "  overflow: hidden !important;
+  pointer-events: none !important;" "  overflow: hidden !important;"
+
+# The box still clips its own content, so geometry alone is not enough: the native row has
+# to be scrolled INSIDE it, on the click that needs it, because the reader only ever
+# scrolls our rows.
+mutate "a vote never brings the native row into the box" extension \
+  src/modules/account.js "  function resolveLate(source, find) {
+    nudge(source);" "  function resolveLate(source, find) {"
+
+# ...and having given Reddit the chance, the click has to wait for it rather than
+# reporting a miss on the first look.
+mutate "a vote gives up on the first look" run \
+  src/modules/account.js "    if (dir === 1 ? btns.up : btns.down) return cast(col, m, kind, dir, btns);" \
+                         "    if (!(dir === 1 ? btns.up : btns.down)) { markUnavailable(col, kind); return; }
+    return cast(col, m, kind, dir, btns);"
+
+# A reader treats an arrow that appears to have done nothing by clicking it again. If each
+# click started its own deadline both would land when the row hydrated, the second
+# un-voting the first, and two attempts to upvote would net zero.
+mutate "a second click starts a second deadline" run \
+  src/modules/account.js "    if (col.dataset.shdVoteWait) return;" ""
+
+# "Not yet" is not a verdict: a row that hydrates after the mark must stop telling the
+# reader its arrows are dead.
+mutate "the unavailable mark is never taken off" run \
+  src/modules/account.js "    clearUnavailable(col);" "    ;"
+
+# `Reply` shares that same action row, so it misses for the same reason and takes the same
+# answer. Without the wait the reader is sent to Reddit's own page — the 0.45.0 report.
+mutate "reply no longer waits for its own action row" run \
+  src/modules/account.js "      const btn = replyControl(target) || await resolveLate(target, () => replyControl(target));" \
+                         "      const btn = replyControl(target);"
 
 # The accounting. DECLARED is read from this file itself rather than maintained by hand —
 # a count that has to be kept in step with the rows is the same trap as the hand-maintained

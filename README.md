@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.45.0](https://img.shields.io/badge/version-0.45.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.46.0](https://img.shields.io/badge/version-0.46.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.45.0 is out — everyone is welcome to try it
+### Beta 0.46.0 is out — everyone is welcome to try it
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
@@ -75,6 +75,20 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
+
+**0.46.0 — comment voting works**
+- **Fixed:** voting on a comment. 0.45.0 said this could not be done from here; that was
+  wrong. Reddit builds a comment's vote buttons only when the comment has a position on
+  screen, and the stylesheet that hides Reddit's own copy of the page — kept in the
+  document because votes and replies go to Reddit's own controls — was also flattening it
+  to a single pixel. One rule, two effects, and only the hiding was wanted. The copy is
+  hidden the same four ways and keeps its dimensions now, and clicking a comment arrow
+  brings the row it needs into view first. Screen readers still get one copy of the page,
+  not two, and your place in a thread does not move when you vote.
+- **Fixed:** replying to a comment no longer takes you to Reddit's own page to finish.
+  `Reply` sits in the same part of Reddit's page and was missing for the same reason; it is
+  resolved in place now, so an ordinary reply is posted from Sheddit's box. Carrying your
+  draft into Reddit's composer is still the fallback if something else goes wrong.
 
 **0.45.0 — the reply box takes typing, and a dead arrow admits it**
 - **Fixed:** you could not type into Sheddit's reply box, and the keystrokes went to
@@ -226,7 +240,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.45.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.46.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

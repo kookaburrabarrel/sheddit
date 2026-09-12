@@ -1,6 +1,6 @@
 {
-  "version": "0.45.0",
+  "version": "0.46.0",
   "released": "2026-09-12",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.45.0 fixes two things a signed-in session turned up. You could not type into Sheddit's reply box, and the keystrokes went to Reddit as keyboard shortcuts instead — one of them hid the post being replied to, another navigated away and took the draft with it. And voting on a comment was a silent no-op: it still does not work, because Reddit only builds a comment's vote buttons when the comment is on screen in its own layout, so the arrow now says so instead of pretending. Voting on posts is unaffected."
+  "notes": "0.46.0 makes comment voting work. 0.45.0 said it could not be done from here, and that was wrong: Reddit builds a comment's vote buttons only when the comment has a position on screen, and the stylesheet that hides Reddit's own copy of the page was also flattening it to a single pixel, so that moment never came. It now hides the page without taking away its dimensions, and a click on a comment arrow brings the row it needs into view first. Replying to a comment is resolved the same way, so it no longer sends you to Reddit's own page to finish. Screen readers still get one copy of the page, not two."
 }
