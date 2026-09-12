@@ -6099,13 +6099,25 @@ async function boot(html, url, setup) {
         b.setAttribute('aria-pressed', was ? 'false' : 'true');
         other.setAttribute('aria-pressed', 'false');
       });
-      shadow.appendChild(b);
+      if (opts.voteLate == null) shadow.appendChild(b);
       return b;
     };
     state.up = mk('upvote', 'up');
     state.down = mk('downvote', 'down');
     if (!opts.noState && opts.initial === 1) state.up.setAttribute('aria-pressed', 'true');
     if (!opts.noState && opts.initial === -1) state.down.setAttribute('aria-pressed', 'true');
+    /* `voteLate` is the LIVE delivery for a COMMENT's vote buttons, and the whole of the
+       reported bug. Reddit mounts the action row that holds them off the native tree's
+       viewport position, so at click time they are simply not in the shadow root, and they
+       turn up a moment after something gives that row a viewport to be near. A fixture
+       that has them up front cannot tell a click that waits for hydration from one that
+       gives up on the first look — which is what made the silent no-op ship green. */
+    if (opts.voteLate != null) {
+      setTimeout(() => {
+        shadow.appendChild(state.up);
+        shadow.appendChild(state.down);
+      }, opts.voteLate);
+    }
     if (opts.reply) {
       const r = doc.createElement('button');
       // The live shape (2026-09-05) carries no naming attribute at all — the text is the
@@ -6117,15 +6129,21 @@ async function boot(html, url, setup) {
         if (opts.composer === 'none') return;
         setTimeout(() => mountComposer(doc, source, opts, state), 30);
       });
-      /* `hydrateOnReveal` is the LIVE delivery, and the reason the reported bug existed.
-         Reddit builds a comment's action row lazily off the native tree's viewport
-         position, and suppress.css collapses that tree to a clipped 1x1 box — so while our
-         layout is up the row never hydrates and the Reply button is simply not there.
-         Revealing the comment restores its geometry and the row appears. A fixture that
-         mounts the button up front cannot tell a handoff that re-runs the chain from one
-         that gives up, which is exactly the gap the reported failure fell through: the
-         suite was green with the composer opening EMPTY on a real thread. */
-      if (opts.hydrateOnReveal) {
+      /* Two late deliveries, because the same lazily-hydrated action row is now reached
+         two different ways and the difference is the whole outcome for the reader.
+
+         `replyLate` is the ordinary case: compose() scrolls the native comment inside the
+         suppressed tree's box and the row mounts a moment later, so the reader finishes in
+         OUR reply box and never leaves the layout.
+
+         `hydrateOnReveal` is the floor under that: the row that does not mount for the box
+         and does mount once passthrough() takes the whole body child out of suppression.
+         That is the shape the reported failure fell through — a fixture that mounts the
+         button up front cannot tell a handoff that re-runs the chain from one that gives
+         up, and the suite was green with the composer opening EMPTY on a real thread. */
+      if (opts.replyLate != null) {
+        setTimeout(() => { shadow.appendChild(r); state.replyBtn = r; }, opts.replyLate);
+      } else if (opts.hydrateOnReveal) {
         const obs = new window.MutationObserver(() => {
           if (!source.classList.contains('shd-passthrough')) return;
           obs.disconnect();
@@ -6190,7 +6208,7 @@ async function boot(html, url, setup) {
 
   /** The suite does not wait 1.5s per row for a hydrated vote bar, nor 8s for a lost reply. */
   const fastAccount = (window) => Object.assign(window.SHD.account.timings,
-    { settleMs: 30, pollMs: 10, composeWaitMs: 400, arriveWaitMs: 800 });
+    { settleMs: 30, pollMs: 10, composeWaitMs: 400, arriveWaitMs: 800, hydrateWaitMs: 300 });
 
   const loggedInSettings = (extra = {}) => (win) => {
     win.chrome = { storage: {
@@ -6627,11 +6645,20 @@ async function boot(html, url, setup) {
     check('...and the score returns to what was delivered', rcol.querySelector('.score').textContent === delivered,
       `${rcol.querySelector('.score').textContent} vs ${delivered}`);
 
-    // --- a miss on a session where the control is EXPECTED is reported, once ---
+    /* --- a miss on a session where the control is EXPECTED is reported, once ---
+     * Reported only after the click has scrolled the native row into the suppressed
+     * tree's box and waited for hydration, so this is a miss that survived the retry.
+     * The second click lands while the first deadline is still running and must not
+     * start a second one — which is also why the wait below is one deadline long,
+     * not two. */
     const vcol = voteCol(doc, 't3_video1');
     click(window, vcol.querySelector('.arrow.up'));
     click(window, vcol.querySelector('.arrow.up'));
-    await hold(30);
+    check('a dead arrow clicked twice runs one hydration deadline, not two',
+      vcol.dataset.shdVoteWait === '1', JSON.stringify(vcol.dataset));
+    await waitFor(() => logs.some(l => /no upvote control/.test(l)), { timeout: 1000 });
+    check('...and the wait is cleared once it has answered', vcol.dataset.shdVoteWait == null,
+      JSON.stringify(vcol.dataset));
     const warns = logs.filter(l => /no upvote control/.test(l));
     check('a missing control on a logged-in session warns once, naming the evidence',
       warns.length === 1 && /logged-in session/.test(warns[0]) && /open shadow roots searched/.test(warns[0]), warns.join(' | '));
@@ -6766,6 +6793,27 @@ async function boot(html, url, setup) {
       doc.documentElement.classList.contains('shd-passthrough-active'));
     window.SHD.dom.passthroughClear();
 
+    /* --- the ordinary late control: the reader never leaves our layout ---
+       `Reply` shares the lazily-hydrated action row with a comment's vote buttons, so it
+       is absent for the same reason and takes the same answer: scroll the native comment
+       inside the suppressed tree's box and look again. The reader's reply is posted from
+       OUR box, and the handoff below stays what it should be — a floor, not the path. */
+    const c6 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c6"]'),
+      { reply: true, replyLate: 80, composer: 'textarea' });
+    click(window, row('t1_c6').querySelector('a.reply'));
+    formOf('t1_c6').querySelector('textarea').value = 'Posted without leaving.';
+    check('the control really is absent at the moment save is pressed', c6.replyBtn === null);
+    formOf('t1_c6').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a reply control that hydrates late is waited for, not reported as missing',
+      await waitFor(() => c6.clicks.reply === 1, { timeout: 2000 }) && c6.replyBtn !== null,
+      `reply clicks=${c6.clicks.reply}`);
+    check('...and the reply posts from our own box',
+      await waitFor(() => c6.clicks.submit === 1, { timeout: 2000 }) &&
+      c6.received[0] === 'Posted without leaving.', JSON.stringify(c6.received));
+    check('...and the reader is never taken off the layout to do it',
+      await waitFor(() => !formOf('t1_c6'), { timeout: 1500 }) &&
+      !doc.documentElement.classList.contains('shd-passthrough-active'));
+
     /* --- the reported failure: the control exists only ONCE REDDIT'S SIDE IS REVEALED ---
        Reported from a signed-in session and reproduced with data-shd-step=reply-control:
        save failed, the layout swapped to Reddit's comment, and its composer opened EMPTY,
@@ -6883,18 +6931,86 @@ async function boot(html, url, setup) {
       doc.querySelector('shreddit-comment[thingid="t1_stranger"]')?.remove();
     }
 
-    /* --- A COMMENT VOTE THAT CANNOT WORK SAYS SO ---
+    /* --- A COMMENT VOTE WAITS FOR THE CONTROL RATHER THAN GIVING UP ON IT ---
        Reported from a signed-in session: every comment vote was a silent no-op. Arrow
        dead, score still, nothing on screen — while post votes on the same page worked
        fine. The console carried a warning, once per page, and the reader never sees that.
 
-       It is not a stale selector and cannot be fixed by changing one. A post's vote
-       buttons sit in the POST'S OWN open shadow root and need no hydration; a comment's
-       sit one level down inside its lazily-hydrated <shreddit-comment-action-row>, and
-       suppress.css collapses the native body child to a 1x1 clipped box — so the native
-       comment has no geometry, Reddit never hydrates that row, and the button does not
-       exist to be found. This fixture models exactly that: an account layer with NO
-       native action row on the comment at all. */
+       It was never a stale selector. A post's vote buttons sit in the POST'S OWN open
+       shadow root and need no hydration; a comment's sit one level down inside its
+       lazily-hydrated <shreddit-comment-action-row>, which Reddit mounts off the native
+       tree's viewport position — and the reader scrolls OUR rows, never Reddit's, so that
+       row is never near a viewport of its own accord. Measured on a signed-in page: give
+       the suppressed tree real dimensions and scroll the row inside them and the action
+       rows mount, with `visibility: hidden` still applied.
+
+       So a click that finds nothing brings the native row into that box and waits. This
+       fixture models the delivery: the buttons are absent when the arrow is clicked and
+       appear on a later tick. Only the browser suites can assert the geometry that causes
+       it — jsdom does no layout, so nudge() is a no-op here and the wait is the thing
+       under test. */
+    {
+      const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+      fastAccount(window);
+      const myRow = (id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"]`);
+      const src = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+      const late = installNativeAccount(window, doc, src, { voteLate: 80 });
+      const col = myRow('t1_c0').querySelector(':scope > .midcol');
+      const tagline = myRow('t1_c0').querySelector(':scope > .entry > .tagline > .score');
+      const delivered = tagline.textContent;
+
+      check('setup: the comment has no vote control at the moment the arrow is clicked',
+        window.SHD.dom.deepQuery(src, window.SHD.C.NATIVE.upvote) === null);
+      /* Clicked TWICE, the way a reader treats an arrow that appears to have done
+         nothing. Both clicks must collapse into one vote: if each started its own
+         deadline, both would land the moment the row hydrated, the second would un-vote
+         the first, and the reader's two attempts to upvote would net zero. */
+      click(window, col.querySelector('.arrow.up'));
+      click(window, col.querySelector('.arrow.up'));
+      check('...so nothing is forwarded on the first look', late.clicks.up === 0);
+      check('...and nothing is painted yet either — the vote has not been cast',
+        col.dataset.shdVote === '0' && !col.classList.contains('likes'), col.className);
+
+      check('a comment vote waits for the action row and then forwards to it',
+        await waitFor(() => late.clicks.up === 1, { timeout: 1000 }), `clicks=${late.clicks.up}`);
+      await hold(200);
+      check('...once, however many times the reader clicked the arrow that looked dead',
+        late.clicks.up === 1, `clicks=${late.clicks.up}`);
+      check('...and the column lights up, once the vote is actually cast',
+        await waitFor(() => col.classList.contains('likes'), { timeout: 1000 }) &&
+        col.querySelector('.arrow.up').classList.contains('upmod'), col.className);
+      check('...and the tagline score moves with it',
+        tagline.textContent === '101 points', `${tagline.textContent} (was ${delivered})`);
+      check('...and the row never said the control was unavailable',
+        col.dataset.shdVoteMiss == null, JSON.stringify(col.dataset));
+
+      /* A comment the reader ALREADY voted on does not come up lit, because its state
+         lives on the same unhydrated row as its buttons and reading it early would mean
+         scrolling the native tree once per rendered comment. So the standing vote is
+         learned on the click, and the arithmetic has to survive that: the delivered score
+         already counts it, so un-voting must take one OFF rather than leaving it. */
+      const stood = installNativeAccount(window, doc,
+        doc.querySelector('shreddit-comment[thingid="t1_c1"]'), { voteLate: 80, initial: 1 });
+      const scol = myRow('t1_c1').querySelector(':scope > .midcol');
+      const stag = myRow('t1_c1').querySelector(':scope > .entry > .tagline > .score');
+      check('a comment the reader already voted on comes up unlit, by design',
+        !scol.classList.contains('likes') && stag.textContent === '97 points',
+        `${scol.className} ${stag.textContent}`);
+      click(window, scol.querySelector('.arrow.up'));
+      check('clicking its lit-in-Reddit arrow un-votes once the row arrives',
+        await waitFor(() => stood.clicks.up === 1, { timeout: 1000 }) &&
+        await waitFor(() => scol.classList.contains('unvoted'), { timeout: 1000 }),
+        scol.className);
+      check('...and the score comes DOWN, because the delivered number counted that vote',
+        stag.textContent === '96 points', stag.textContent);
+      window.close();
+    }
+
+    /* --- AND WHEN THE CONTROL NEVER ARRIVES, THE ROW SAYS SO ---
+       The floor under the wait above. `t1_c2` gets no account layer at all, so nothing
+       ever hydrates and the deadline expires — which is what a stale contract or a control
+       that moved into a closed shadow root looks like from here. A control that ignores a
+       click is worse than no control, so the arrow has to stop looking live. */
     {
       const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
       fastAccount(window);
@@ -6909,7 +7025,8 @@ async function boot(html, url, setup) {
 
       click(window, col.querySelector('.arrow.up'));
       check('a comment vote with no control to reach says so on the row',
-        col.dataset.shdVoteMiss === 'unavailable', JSON.stringify(col.dataset));
+        await waitFor(() => col.dataset.shdVoteMiss === 'unavailable', { timeout: 1000 }),
+        JSON.stringify(col.dataset));
       check('...on the arrows themselves, for a reader who hovers or uses a screen reader',
         [...col.querySelectorAll('.arrow')].every(a =>
           a.getAttribute('aria-disabled') === 'true' && /cannot do anything/.test(a.getAttribute('title') || '')),
@@ -6920,6 +7037,18 @@ async function boot(html, url, setup) {
         !col.classList.contains('likes') && col.dataset.shdVote === '0' &&
         tagline.textContent === before,
         `${col.className} vote=${col.dataset.shdVote} score=${tagline.textContent}`);
+
+      /* The mark is a "not yet", not a verdict: a row that hydrates after it was set has
+         to stop telling the reader its arrows are dead. */
+      const arrived = installNativeAccount(window, doc,
+        doc.querySelector('shreddit-comment[thingid="t1_c2"]'));
+      click(window, col.querySelector('.arrow.up'));
+      check('a row that hydrates after the mark stops claiming the control is unavailable',
+        arrived.clicks.up === 1 && col.dataset.shdVoteMiss == null, JSON.stringify(col.dataset));
+      check('...and the arrows drop the disabled state with it',
+        [...col.querySelectorAll('.arrow')].every(a =>
+          !a.hasAttribute('aria-disabled') && !a.hasAttribute('title')),
+        col.innerHTML.slice(0, 120));
       window.close();
     }
 

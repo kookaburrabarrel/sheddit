@@ -1689,6 +1689,65 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      to the one control still breaking it. Whether the feature itself can be recovered is
      open question 15, which names the experiment.
 
+     **The experiment was run and the feature is recovered — see 107.** The claim "no
+     selector can fix it" is still true and still the useful half of this entry. The claim
+     that a vote cannot have what Reply has was wrong, and wrong in a way worth naming: it
+     treated "restore geometry" and "reveal the page" as one act because `passthrough()`
+     does both at once.
+
+107. **Hidden and geometry-less were the same declaration, and only one of them was
+     wanted.** The fix to 106 was honest about a dead control; it was not a fix. Voting on
+     a comment still did nothing, and the reason was four words of CSS.
+
+     `suppress.css` collapsed each native body child to `position: absolute; width: 1px;
+     height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+     pointer-events: none; opacity: 0; visibility: hidden` — the standard visually-hidden
+     recipe with log 42's `visibility: hidden` bolted on. Six of those declarations hide
+     the tree. Three of them also destroy its geometry, and Reddit defers work on viewport
+     position: nothing in a clipped 1x1 box intersects anything, so the
+     `<shreddit-comment-action-row>` holding both `Reply` and the vote buttons never
+     mounted. One rule, two effects, and nobody had asked whether the second was a
+     requirement or a side effect.
+
+     It was a side effect. **An IntersectionObserver reports geometry and does not consult
+     `visibility` or `opacity`** — that asymmetry is what lets both halves be had at once.
+     Measured on a signed-in comments page, overriding the rule in DevTools to
+     `position: fixed; inset: 0; width: auto; height: auto; overflow: hidden;
+     pointer-events: none; opacity: 0` with `visibility: hidden` STILL APPLIED:
+     `shreddit-comment-action-row` count went 0 → 2 and
+     `SHD.dom.deepQuery(comment, C.NATIVE.upvote)` went null → a button. The accessibility
+     count in `test/extension.js` still reads one link, not two, so log 42 is not traded
+     away — which was the thing worth being careful about, and the reason this was an
+     experiment rather than a patch.
+
+     The rule is that geometry now, and `account.js` scrolls a native row inside the box
+     on the click that needs it (`nudge()`), because `overflow: hidden` means the box still
+     clips its own content and the reader never scrolls Reddit's copy of the thread. A
+     comment vote that finds nothing waits for the row instead of reporting a miss;
+     `markUnavailable()` survives as the floor for a wait that expires, and is now cleared
+     when a control does turn up. `compose()` waits the same way, so the Reply control that
+     sent a reader to Reddit's own page with an empty box in 105's report is resolved in
+     place. `nudge()` restores `window.scrollX/scrollY` if the document moved — it does not,
+     because a fixed box is not in the document's scroll chain, but a vote that moves the
+     reader's place in a thread would be worse than a vote that misses.
+
+     Two declarations in the new rule are load-bearing rather than tidy, both against
+     failures this rule has already had. `position: fixed` keeps a full-size native tree
+     out of flow so it cannot push `#shd-root` down, which is bug 2's failure mode exactly.
+     `pointer-events: none` was previously belt-and-braces on a 1x1 box and is now the only
+     thing stopping a viewport-covering element from eating every click meant for us.
+     There is a mutation row for each.
+
+     **What the suites could and could not say.** jsdom does no layout, so over there the
+     fixture can model the delivery — buttons absent at click time, present on a later
+     tick — and assert that the click waits, but never that the wait is answered. The
+     assertion that matters is in `test/extension.js` against the packed extension in
+     Chromium: a fixture thread whose action rows mount from a real `IntersectionObserver`
+     with the default root, so it is subject to exactly the ancestor clipping the live page
+     is. Its control is that the target comment is NOT hydrated before the click. That
+     control is the whole test: without it a pass could mean Reddit had hydrated the thread
+     anyway.
+
 
 
 ## The popup policy — supersedes bugs 30, 33 and 38
@@ -2145,9 +2204,18 @@ the way a question got settled is usually more useful than the answer.
     here must be measured under `geometry`, not reasoned about — which is what the heartbeat
     entry above already says, and what three reverts have now cost.
 
-15. **Whether the native tree can be given geometry without being seen — and with it,
-    every lazily-hydrated control on it.** This is log 106's unfixed half, and it is worth
-    one experiment rather than a redesign.
+15. ~~**Whether the native tree can be given geometry without being seen — and with it,
+    every lazily-hydrated control on it.**~~ **ANSWERED: yes. See log 107.** The reading
+    below was taken, it came back positive, and the rule ships that way. What is left of
+    this entry is the *shape* of the question, kept because the same trade is going to come
+    up again: an IntersectionObserver consults geometry and not `visibility`, so "hidden"
+    and "geometry-less" are separable, and a rule that does both is worth asking about.
+    One thing the reading did NOT settle is the paginator — whether Reddit's own feed
+    partials now fire on their own is unmeasured, and nothing depends on it either way.
+
+    The original entry follows, unedited.
+
+    This is log 106's unfixed half, and it is worth one experiment rather than a redesign.
 
     suppress.css collapses each native body child to `position: absolute; width: 1px;
     height: 1px; overflow: hidden; clip; clip-path: inset(50%); visibility: hidden`. The

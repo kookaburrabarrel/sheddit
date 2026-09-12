@@ -25,6 +25,13 @@
  * the evidence (the contract is stale, or the control moved into a closed root); logged
  * out, nothing to report — that is the documented state.
  *
+ * "At click time" is not enough on its own for a comment, and this is the one place the
+ * extension reaches into the page's own layout rather than only its DOM. Reddit mounts a
+ * comment's action row — both `Reply` and its vote buttons — when the comment is near a
+ * viewport, and nothing in this layout ever scrolls Reddit's copy of the thread. So a miss
+ * scrolls the native row inside the box suppress.css leaves it and asks again (nudge(),
+ * resolveLate()), and only a miss that survives that is reported as one.
+ *
  * WHAT IS UNVERIFIED
  * The composer protocol (C.COMPOSER) and the per-comment reply control (C.NATIVE.reply)
  * are candidates: shaped from ordinary use of the site, driven end to end only against
@@ -47,10 +54,12 @@ SHD.account = (() => {
              that updates its button on the response rather than optimistically.
      composeWaitMs / pollMs: how long to wait for Reddit to mount its editor after the
              reply control is clicked.
+     hydrateWaitMs: how long to wait for Reddit to mount a comment's action row after the
+             row has been scrolled inside the suppressed tree's box (nudge()).
      arriveWaitMs: how long to wait for the posted comment to appear before calling the
              submit lost and revealing the native composer. */
   const timings = { syncMs: 1500, settleMs: 400, composeWaitMs: 4000, pollMs: 100, arriveWaitMs: 8000,
-                    drawerWaitMs: 4000, logoutWaitMs: 6000 };
+                    drawerWaitMs: 4000, logoutWaitMs: 6000, hydrateWaitMs: 3000 };
 
   const active = () => SHD.session.active();
 
@@ -74,25 +83,25 @@ SHD.account = (() => {
   }
 
   /**
-   * Say so on the row when the control cannot be reached.
+   * Say so on the row when the control still cannot be reached — the FLOOR, after the
+   * click has already given Reddit the chance it was waiting for (see nudge()).
    *
    * Reported from a signed-in session: every comment vote was a silent no-op — arrow
    * dead, score still, nothing said — while post votes on the same page worked. That is
    * log 62's sin exactly ("a control that ignores a click is worse than no control"),
    * and reportMiss() only ever reached the console, once per page.
    *
-   * WHY IT CANNOT SIMPLY BE FIXED, which is why this marks rather than retries. A post's
-   * vote buttons live in the POST'S OWN open shadow root and need no hydration, so they
-   * are there whenever we look. A comment's live one level down, inside the open shadow
-   * root of its lazily-hydrated <shreddit-comment-action-row> — and suppress.css
-   * collapses the native body child to a 1x1 clipped box, so every native comment has no
-   * usable geometry and Reddit never hydrates that row. The reader scrolls OUR rows,
-   * never Reddit's. It is the same mechanism handoff() documents for the Reply control,
-   * one control over, and no selector can fix it: the button does not exist to be found.
+   * WHY A COMMENT MISSES AND A POST DOES NOT. A post's vote buttons live in the POST'S OWN
+   * open shadow root and need no hydration, so they are there whenever we look. A
+   * comment's live one level down, inside the open shadow root of its lazily-hydrated
+   * <shreddit-comment-action-row>, which Reddit mounts on viewport position — and THE
+   * READER SCROLLS OUR ROWS, NEVER REDDIT'S, so that row is never near a viewport of its
+   * own accord. That is the part the click now handles. What is left for this function is
+   * everything else: hydration that did not finish inside the deadline, a stale contract,
+   * or a control that moved into a closed root.
    *
-   * So the row says the control is unavailable and the arrow stops looking live. The
-   * engineering log carries the experiment that would settle whether the native tree can
-   * be given geometry without being seen.
+   * The mark is not permanent. clearUnavailable() takes it off the moment a control does
+   * resolve, because a row that said "not yet" and then hydrates has to stop saying it.
    */
   function markUnavailable(col, kind) {
     col.dataset.shdVoteMiss = 'unavailable';
@@ -103,6 +112,51 @@ SHD.account = (() => {
       a.setAttribute('title', why);
       a.setAttribute('aria-disabled', 'true');
     }
+  }
+
+  /** Undo markUnavailable(): the control turned up after all. */
+  function clearUnavailable(col) {
+    if (col.dataset.shdVoteMiss == null) return;
+    delete col.dataset.shdVoteMiss;
+    for (const a of col.querySelectorAll('.arrow')) {
+      a.removeAttribute('title');
+      a.removeAttribute('aria-disabled');
+    }
+  }
+
+  /**
+   * Bring a native node inside the suppressed tree's box, so Reddit's own observer can
+   * see it and mount whatever it defers on viewport position.
+   *
+   * suppress.css gives each native body child the viewport's dimensions with its own
+   * overflow clipped — which is what lets anything on the native tree hydrate at all —
+   * but a row past that box's first screen is still clipped out of it, and nothing in this
+   * layout ever scrolls Reddit's copy. This does, on the click that needs it, and only
+   * then: walking the native tree into view once per rendered row would be a page's worth
+   * of layout for a reader who may never vote.
+   *
+   * A vote that moved the reader's place in a thread would be worse than a vote that
+   * misses, and the thing that prevents it is the suppression rule rather than anything
+   * here: the box is `position: fixed`, so the document is not in the containing-block
+   * chain scrollIntoView walks and cannot be scrolled by this call. That was written first
+   * as a save-and-restore of window.scrollX/scrollY — measured against the packed
+   * extension in Chromium, the restore never fired once, because there was never anything
+   * to restore. It is gone, and the guarantee is asserted where it actually lives:
+   * test/extension.js checks the reader's scroll position across a comment vote, and the
+   * mutation row that puts the native tree back in flow fails that assertion.
+   */
+  function nudge(source) {
+    try { source.scrollIntoView?.({ block: 'center' }); }
+    catch { /* geometry is the bonus here, never the requirement */ }
+  }
+
+  /**
+   * A control that was not there when we first looked: give Reddit the one thing it is
+   * waiting for, and keep looking until the deadline. Resolves to the control or null.
+   */
+  function resolveLate(source, find) {
+    nudge(source);
+    return waitFor(find, timings.hydrateWaitMs);
   }
 
   const nativeButtons = (source) => ({
@@ -167,16 +221,11 @@ SHD.account = (() => {
     if (s !== null) paint(col, m, kind, s);
   }
 
-  function vote(col, m, kind, dir) {
-    const btns = nativeButtons(m.source);
-    const native = dir === 1 ? btns.up : btns.down;
-    if (!native) {
-      reportMiss(dir === 1 ? 'upvote' : 'downvote', m);
-      markUnavailable(col, kind);
-      return;
-    }
+  /** Forward the click to the button we resolved, and mirror it on our own arrows. */
+  function cast(col, m, kind, dir, btns) {
+    clearUnavailable(col);
     learnInitial(col, m, kind, btns);
-    native.click();
+    (dir === 1 ? btns.up : btns.down).click();
     // Optimistic, like old reddit: clicking the lit arrow un-votes, the other one flips.
     const before = Number(col.dataset.shdVote || 0);
     paint(col, m, kind, before === dir ? 0 : dir);
@@ -185,11 +234,40 @@ SHD.account = (() => {
     setTimeout(() => col.isConnected && settle(col, m, kind, btns), timings.settleMs);
   }
 
+  function vote(col, m, kind, dir) {
+    const btns = nativeButtons(m.source);
+    if (dir === 1 ? btns.up : btns.down) return cast(col, m, kind, dir, btns);
+    /* Nothing to forward to YET, which on a comment is the expected first answer rather
+       than the final one: Reddit has not mounted the action row that holds the button.
+       Bring the native row into view, wait for it, and only then call it unavailable.
+       The wait is kept to one at a time — a reader clicking a dead arrow twice should not
+       start a second deadline, and the first one is already doing the work. */
+    if (col.dataset.shdVoteWait) return;
+    col.dataset.shdVoteWait = '1';
+    resolveLate(m.source, () => {
+      const late = nativeButtons(m.source);
+      return (dir === 1 ? late.up : late.down) ? late : null;
+    }).then((late) => {
+      delete col.dataset.shdVoteWait;
+      if (!col.isConnected) return;
+      if (late) return cast(col, m, kind, dir, late);
+      reportMiss(dir === 1 ? 'upvote' : 'downvote', m);
+      markUnavailable(col, kind);
+    });
+  }
+
   /**
    * The vote column for a post row (arrows around the score) or a comment (arrows only —
    * old reddit puts a comment's score in its tagline). Clicks delegate; see the header.
    * On an active session the column also looks for the hydrated state once, after
    * render, so a post the reader already voted on comes up lit.
+   *
+   * A COMMENT the reader already voted on does not, and that is deliberate rather than
+   * missed. Its state lives on the same action row the buttons do, so reading it would
+   * mean scrolling the native tree once per rendered comment — a page's worth of layout
+   * to light some arrows. The state is learned on the click instead (cast() calls
+   * learnInitial() before forwarding), which is the moment it is needed: un-voting a
+   * standing vote still moves the score the right way.
    */
   function midcol(m, kind = 'post') {
     const arrow = (dir, label) => {
@@ -373,9 +451,15 @@ SHD.account = (() => {
     let host = findHost(target, kind);
     if (!host) {
       if (kind !== 'comment') return { ok: false, step: 'composer', host: null };
-      const before = hostsNow();
-      const btn = replyControl(target);
+      /* `Reply` shares the lazily-hydrated action row with the vote buttons, so it misses
+         for the same reason and takes the same answer: bring the native comment into the
+         suppressed tree's box and look again. This is the step that used to fail on a real
+         thread and send the reader to Reddit's own page with an empty box. */
+      const btn = replyControl(target) || await resolveLate(target, () => replyControl(target));
       if (!btn) return { ok: false, step: 'reply-control', host: null };
+      // Snapshotted after the wait, so a host that appeared during hydration is not
+      // mistaken for one that was already open before we asked for anything.
+      const before = hostsNow();
       btn.click();
       host = await waitFor(() => findHost(target, kind, before) || findHost(target, kind), timings.composeWaitMs);
       if (!host) return { ok: false, step: 'composer', host: null };
@@ -406,16 +490,16 @@ SHD.account = (() => {
    * #shd-root, so both the text and the sentence promising it were on the side of the page
    * the reader had just been taken off. A message nobody can read is not a fallback.
    *
-   * Why re-running the chain works when the first attempt did not, and this is the whole
-   * mechanism: suppress.css collapses the native body child to a 1x1 absolutely-positioned
-   * box with `overflow: hidden` and `clip: rect(0 0 0 0)`, so every comment inside it has
-   * no usable geometry and Reddit never hydrates the lazy <shreddit-comment-action-row>
-   * that holds `Reply`. THE READER SCROLLS OUR ROWS, NEVER REDDIT'S — so "resolved at
-   * click time, when the reader has necessarily scrolled it into view" was never true
-   * inside this layout. passthrough() restores position/width/height/clip on that same
-   * body child; the row hydrates against real geometry, and the control that was
-   * unreachable a moment ago is reachable now. Same shape as the paginator's programmatic
-   * partial, which also never fires while the native tree is hidden.
+   * Why re-running the chain can work when the first attempt did not. The control this
+   * misses on is usually `Reply`, inside the lazily-hydrated
+   * <shreddit-comment-action-row>; compose() already scrolls the native comment into the
+   * suppressed tree's box and waits for that row, so by the time anything reaches here the
+   * cheap answer has been tried. passthrough() is the expensive one: it takes the body
+   * child out of suppression altogether — full size, in flow, visible, hit-testable — which
+   * is a different set of conditions from a clipped fixed box, and a row Reddit declined
+   * to mount in the second can still mount in the first. It is also the only version of
+   * this that puts the reader in front of Reddit's own UI, which is the actual promise:
+   * finish the reply somewhere, with your words already in the box.
    *
    * Never the submit: this hands the reader Reddit's box with their words in it and stops.
    * Posting stays a deliberate press of Reddit's own button.

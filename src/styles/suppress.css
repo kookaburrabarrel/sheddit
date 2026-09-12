@@ -59,28 +59,57 @@ html.shd-gate #shd-loading p { margin: 0; }
  * delegated vote clicks and for cloning comment bodies.
  *
  * `visibility: hidden` is doing a job the rest of this rule cannot, and it is not
- * redundant with `opacity: 0`. Everything else here is the standard "visually hidden"
- * recipe — absolute + 1px + clip + opacity — which is the recipe deliberately used to keep
- * content available to SCREEN READERS while hiding it from sighted users. That is the exact
- * opposite of what we want: it left the whole native page in the accessibility tree and in
- * find-in-page, so a screen reader read every post twice, once from our layout and once
- * from Reddit's. Reported from a real session: a page-text extraction returned a native
- * <article> with `u/username • 2 days ago` metadata that is nowhere in our rendered list.
+ * redundant with `opacity: 0`. The earlier version of this rule was otherwise the standard
+ * "visually hidden" recipe — absolute + 1px + clip + opacity — which is the recipe
+ * deliberately used to keep content available to SCREEN READERS while hiding it from
+ * sighted users. That is the exact opposite of what we want: it left the whole native page
+ * in the accessibility tree and in find-in-page, so a screen reader read every post twice,
+ * once from our layout and once from Reddit's. Reported from a real session: a page-text
+ * extraction returned a native <article> with `u/username • 2 days ago` metadata that is
+ * nowhere in our rendered list.
  *
  * `visibility: hidden` removes a subtree from the accessibility tree and from find-in-page
  * per spec, while keeping it in the DOM, keeping its attributes readable, and still
  * dispatching a programmatic .click() — so delegation and comment-body cloning are
  * unaffected. `display: none` would also work for a11y but drops the layout box entirely,
  * which is why it is not used here.
+ *
+ * WHY THE BOX IS VIEWPORT-SIZED AND NOT 1x1, which is the other half of the same problem.
+ * The 1x1 clipped box hid the tree successfully and also destroyed its geometry, and
+ * Reddit defers work on viewport position: the lazily-hydrated
+ * <shreddit-comment-action-row> that holds both `Reply` and a comment's vote buttons never
+ * mounted, because nothing in a 1x1 clipped box can intersect anything. Every comment vote
+ * was a silent no-op for a signed-in reader while post votes on the same page worked (a
+ * post's buttons live in the post's own shadow root and need no hydration), and the reply
+ * handoff had to un-clip the tree and take the reader off our layout to find a control.
+ *
+ * So the box is given real dimensions — out of flow, filling the viewport, its own overflow
+ * clipped so nothing inside it can extend the page — while keeping every one of the four
+ * declarations that hide it. Measured on a signed-in comments page: with this geometry and
+ * `visibility: hidden` still applied, the action rows hydrate and the upvote button
+ * resolves; the accessibility count in test/extension.js still reads one.
+ *
+ * An IntersectionObserver reports geometry and does not consult visibility or opacity —
+ * that asymmetry is the whole reason both halves can be had at once. It does honour an
+ * ancestor's overflow clip, which is why `overflow: hidden` here means a native row still
+ * has to be scrolled INSIDE this box before it hydrates; SHD.account does that on the
+ * click that needs it, and nothing scrolls the document, because a fixed box is not in the
+ * document's scroll chain.
+ *
+ * Three known bugs have lived in this rule — hiding an ancestor of our own root, the
+ * cascade that made the passthrough hatch below a silent no-op, and hiding from sighted
+ * readers only — so: `position: fixed` is what keeps a full-size native tree from
+ * disturbing our layout at all (it is out of flow, so it cannot push #shd-root), and
+ * `pointer-events: none` on a box that now covers the viewport is what keeps it from
+ * eating every click meant for us. Both are load-bearing, not tidiness.
  */
 html.shd-active body > *:not(#shd-root):not(#shd-header):not(#shd-loading):not(#shd-passthrough-exit):not(.shd-native-passthrough),
 html.shd-failed body > *:not(#shd-error) {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
+  position: fixed !important;
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
   overflow: hidden !important;
-  clip: rect(0 0 0 0) !important;
-  clip-path: inset(50%) !important;
   pointer-events: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
@@ -100,8 +129,10 @@ html.shd-failed body > *:not(#shd-error) {
  * !important. The original hatch lost that cascade silently. */
 html.shd-active .shd-native-passthrough {
   position: static !important;
+  inset: auto !important;
   width: auto !important;
   height: auto !important;
+  overflow: visible !important;
   clip: auto !important;
   clip-path: none !important;
   pointer-events: auto !important;

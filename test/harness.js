@@ -209,6 +209,11 @@ function serveFixtures() {
        own box is a layout question by definition — whether it scrolls THERE or pushes the
        whole document sideways is the entire difference, and jsdom does no layout. */
     const wantsGallery = /\/gallery1\//.test(pathname);
+    /* A SIGNED-IN thread whose comment action rows mount on INTERSECTION, which is how the
+       real page ships them and the only place the vote path can be proved: jsdom does no
+       layout, so it has no intersection to observe and its version of this can only assert
+       that we wait, never that the wait is ever answered. */
+    const wantsLazyVotes = /\/lazyvotes\//.test(pathname);
     let body = /\/comments\//.test(pathname)
       // A thread that ships a slice and lazy-loads the rest, which is what a real one does.
       ? commentsPage(wantsBranches ? { deliver: COMMENT_SLICE, branchPager: true }
@@ -216,7 +221,8 @@ function serveFixtures() {
         : wantsImage ? { imagePost: true }
           : wantsNsfwVideo ? { deadLinkPost: true }
             : wantsNsfwImage ? { imagePost: true }
-              : wantsPager ? { deliver: COMMENT_SLICE, pager: true } : {})
+              : wantsLazyVotes ? { loggedIn: true }
+                : wantsPager ? { deliver: COMMENT_SLICE, pager: true } : {})
       : listingPage({ pager: wantsPager });
     // /r/paintprobe/ samples the page's computed state at the EARLIEST moment body
     // content exists — a parser-inserted script right after <body> opens, which runs
@@ -228,6 +234,47 @@ function serveFixtures() {
     // blur gate keys on.
     if (wantsNsfwVideo) body = body.replace('post-type="video"', 'post-type="video" nsfw=""');
     if (wantsNsfwImage) body = body.replace('post-type="image"', 'post-type="image" nsfw=""');
+    /* The vote control a signed-in reader actually misses, delivered the way Reddit
+       delivers it. A comment's vote buttons are not in the page's HTML: Reddit mounts the
+       <shreddit-comment-action-row> that holds them when the comment comes near a
+       viewport, and suppress.css used to collapse the native tree to a clipped 1x1 box, so
+       that moment never came and every comment vote was a silent no-op.
+       The observer here has the default root — the viewport — so it is subject to the
+       ancestor clipping the suppression rule applies, which is the whole point: this page
+       hydrates only if the box the native tree lives in has real dimensions AND the row has
+       been scrolled inside it. A fixture that mounted the buttons up front, or that
+       observed with an explicit root, would pass either way and prove nothing. */
+    if (wantsLazyVotes) {
+      body = body.replace('</body>', `
+        <script>
+          window.__shdVotes = { hydrated: [], up: [], down: [] };
+          addEventListener('DOMContentLoaded', () => {
+            for (const c of document.querySelectorAll('shreddit-comment')) {
+              const row = document.createElement('shreddit-comment-action-row');
+              const shadow = row.attachShadow({ mode: 'open' });
+              c.appendChild(row);
+              const io = new IntersectionObserver((entries) => {
+                if (!entries.some((e) => e.isIntersecting)) return;
+                io.disconnect();
+                window.__shdVotes.hydrated.push(c.getAttribute('thingid'));
+                for (const pair of [['upvote', 'up'], ['downvote', 'down']]) {
+                  const b = document.createElement('button');
+                  b.setAttribute(pair[0], '');
+                  b.setAttribute('aria-pressed', 'false');
+                  b.addEventListener('click', () => {
+                    window.__shdVotes[pair[1]].push(c.getAttribute('thingid'));
+                    b.setAttribute('aria-pressed',
+                      b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+                  });
+                  shadow.appendChild(b);
+                }
+              });
+              io.observe(c);
+            }
+          });
+        </script>
+      </body>`);
+    }
     if (/\/r\/paintprobe\//.test(pathname)) {
       body = body.replace('<body>', `<body><script>
         window.__shdPaint = {
@@ -556,6 +603,7 @@ const PATHS = {
   slowStream: '/r/slowstream/', // a LISTING delivered the way real Reddit delivers: streamed
   slowStreamOther: '/search/slowstream/',  // the same delivery on a route nobody takes
   commentPager: '/r/programming/comments/link1/pager/',   // a thread that lazy-loads
+  lazyVotes: '/r/programming/comments/link1/lazyvotes/',  // signed in; vote rows mount on intersection
   commentBranches: '/r/programming/comments/link1/branches/',  // per-branch surviving partials
   gated: '/r/gated/',           // age gate: a real page with no feed at all
   gatedFeed: '/r/gated-feed/',  // ...and the same gate carrying an EMPTY shreddit-feed
