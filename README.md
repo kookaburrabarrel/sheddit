@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.44.0](https://img.shields.io/badge/version-0.44.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.45.0](https://img.shields.io/badge/version-0.45.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.44.0 is out — everyone is welcome to try it
+### Beta 0.45.0 is out — everyone is welcome to try it
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
@@ -76,6 +76,18 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
 
+**0.45.0 — the reply box takes typing, and a dead arrow admits it**
+- **Fixed:** you could not type into Sheddit's reply box, and the keystrokes went to
+  Reddit as keyboard shortcuts instead — `h` hid the post you were replying to, and one
+  key navigated away and took the draft with it. Reddit's shortcut handler did not
+  recognise our box as somewhere text goes, so it treated every key as a command and
+  cancelled the typing. Keys inside Sheddit's own boxes no longer reach it.
+- **Fixed:** voting on a *comment* was a silent no-op — the arrow did not light, the score
+  did not move, and nothing said why. It still does not work, and it cannot be made to
+  from here: Reddit builds a comment's vote buttons only once the comment is on screen in
+  its own layout, and Sheddit's layout is what you are looking at instead. So the arrow
+  now says so rather than pretending. Voting on *posts* is unaffected and works.
+
 **0.44.0 — a second adversarial read, and a security fix**
 - **Fixed:** a crafted `old.reddit.com` link could run script on your Reddit session. The
   login wall's `dest` was checked for the right host but not the right *scheme*, so a
@@ -114,27 +126,6 @@ Full detail in the [changelog](CHANGELOG.md). The most recent builds:
   does now, including what it means if you are signed in. The same release made it much
   harder to fire on anything that is not the age gate — an "Open in app" prompt offering
   *Yes* / *Not now* previously matched.
-
-**0.42.0 — the account corner opens**
-- **Added:** the avatar and your name are a button now, opening a menu of Reddit's own
-  account pages — *my profile*, *saved*, *messages*, *preferences* — ending in **log out**.
-  Logging out presses Reddit's own control rather than building a request; if it cannot
-  find it, Reddit's menu is shown instead so the button is one visible click away.
-- **Added:** logged out, the corner says *logged out* and links to Reddit's login page. It
-  is the only login affordance in the extension, it never nags, and the whole corner
-  disappears if you turn the account setting off.
-
-**0.41.0 — the header says who you are**
-- **Added:** an account corner at the far right of the header, where old reddit kept it.
-  Sheddit used to say "logged in" beside the theme buttons, which read as a caption on the
-  theme bar; this is the answer to *does it know I'm signed in?* in the place people have
-  looked for a decade.
-
-**0.40.0 — galleries read one picture at a time**
-- **Changed:** a gallery is a slideshow — one frame on screen with a `‹ 2 of 6 ›` control
-  under it, in place of the sideways-scrolling row. The box stays the size of one picture
-  however many frames the post has, so a long gallery no longer pushes the comments off the
-  bottom of the page, and only the frame you are looking at is downloaded.
 
 ---
 
@@ -235,7 +226,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.44.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.45.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

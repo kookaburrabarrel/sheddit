@@ -1627,6 +1627,69 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      without it, finding it in the zip, and calling it a removed file. The package check
      could only pass where the problem was.
 
+105. **Reddit's keyboard shortcuts fired instead of typing, and one of them hid the post
+     being replied to.** Reported from a signed-in session, and it did damage rather than
+     merely failing. The reply box focused correctly —
+     `document.activeElement.className === "shd-reply-text"` — and then every keystroke
+     went to Reddit as a SHORTCUT: `h` hid the post under reply, another key navigated to
+     `/submit/` and took a long draft with it. Not one character reached the textarea.
+     Reddit's own composer on the same page typed normally, which is what located the
+     fault on our side.
+
+     Two halves, and the second is the one that explains the silence. Reddit runs a
+     document-level key handler that decides whether the event came from something
+     editable; our box is a plain `<textarea>` but it sits outside `shreddit-app`
+     entirely, a body child beside it, so whatever that check reads it does not recognise
+     it. Having decided the key is a shortcut, the handler calls `preventDefault()` — and
+     text insertion is keydown's DEFAULT ACTION. So the shortcut firing and the character
+     not landing are the same event, not two bugs.
+
+     The fix is to stop the event reaching that handler, and NOT to `preventDefault()`
+     ourselves, which would suppress the typing being restored. It goes **on `window`, in
+     capture**, which is the only placement that works whichever way Reddit listens:
+     capture runs outermost node first, so a window-capture listener precedes a
+     document-level one in both phases regardless of which script registered first — and
+     registration order is not ours to win, since Reddit's bundle runs long before a
+     document_idle content script. Propagation belongs to the DOM node rather than to the
+     JavaScript realm, so stopping it in the isolated world stops the page's own listeners
+     too.
+
+     Scoped to our own text surfaces, with its own mutation row, because a guard that
+     swallowed keys page-wide would be a worse bug than the one it fixes — Reddit's
+     shortcuts outside our boxes are Reddit's business. Three rows in all: the guard
+     missing, the guard cancelling the key it was protecting, and the guard unscoped.
+     Both listener placements are modelled in the fixture, because which one Reddit uses
+     is not something we get to know.
+
+106. **Comment voting was a dead click, and no selector can fix it.** Reported from a
+     signed-in session: every comment vote a silent no-op — arrow dead, score still,
+     nothing on screen — while post votes on the same page worked and persisted
+     server-side across a cold reload. The console carried
+     `no upvote control found on t1_… (logged-in session). async-loader present: false;
+     open shadow roots searched: 12`, once per page, which no reader sees.
+
+     The obvious reading is a stale `C.NATIVE.upvote`, and it is wrong. A POST's vote
+     buttons sit in the post's OWN open shadow root and need no hydration, so they are
+     there whenever we look — which is why posts work. A COMMENT's sit one level down,
+     inside the open shadow root of its lazily-hydrated
+     `<shreddit-comment-action-row>`, and suppress.css collapses the native body child to
+     a 1x1 absolutely-positioned clipped box. Every native comment therefore has no usable
+     geometry, Reddit never hydrates that row, and the button does not exist to be found.
+     `async-loader present: false` is the measurement saying so.
+
+     This is the mechanism `handoff()` has documented since 0.34.0 for the Reply control,
+     one control over: "the reader scrolls OUR rows, never Reddit's". Reply survives it by
+     revealing the native comment first, which restores geometry and lets the row hydrate.
+     A vote cannot borrow that — revealing the layout to cast a vote is a worse outcome
+     than the vote not being cast.
+
+     So what is fixed here is the LIE, not the feature. A failed vote now marks the row,
+     disables both arrows with a title saying why, and stops the hover colour pretending
+     otherwise; nothing is painted as though the vote had been cast. Log 62's rule applied
+     to the one control still breaking it. Whether the feature itself can be recovered is
+     open question 15, which names the experiment.
+
+
 
 ## The popup policy — supersedes bugs 30, 33 and 38
 
@@ -2081,6 +2144,41 @@ the way a question got settled is usually more useful than the answer.
     product question this log should answer before another patch is written. Anything done
     here must be measured under `geometry`, not reasoned about — which is what the heartbeat
     entry above already says, and what three reverts have now cost.
+
+15. **Whether the native tree can be given geometry without being seen — and with it,
+    every lazily-hydrated control on it.** This is log 106's unfixed half, and it is worth
+    one experiment rather than a redesign.
+
+    suppress.css collapses each native body child to `position: absolute; width: 1px;
+    height: 1px; overflow: hidden; clip; clip-path: inset(50%); visibility: hidden`. The
+    `visibility: hidden` is load-bearing and settled — log 42 put it there so the native
+    page leaves the accessibility tree and find-in-page. The 1x1 CLIP is the part that
+    kills geometry, and it is what stops Reddit hydrating anything it defers on viewport
+    position: the comment action row that holds both Reply and the vote buttons, and by
+    the same argument the feed partials the paginator has to drive by hand.
+
+    The candidate is to keep `visibility: hidden` and give the subtree real dimensions
+    parked off-screen — something like `position: fixed; top: 0; left: -20000px` at full
+    size — on the theory that an IntersectionObserver reports geometry and does not care
+    about visibility. If that is right, the action row hydrates, comment votes and Reply
+    resolve without a reveal, and `handoff()`'s whole raison d'être shrinks.
+
+    WHAT MAKES IT AN EXPERIMENT AND NOT A PATCH. Three separate bugs live in this rule —
+    log 2 (hiding an ancestor of our own root), log 11 (the cascade that made the
+    passthrough escape hatch a no-op for two releases) and log 42 (hiding from sighted
+    readers only) — and a full-size native tree behind ours is exactly the shape that
+    reintroduces the first. It also may simply not work: Reddit may gate hydration on
+    something stricter than intersection, and an off-screen element at `left: -20000px`
+    is not intersecting anything. Both outcomes need measuring on a signed-in page, not
+    reasoning about.
+
+    The reading that settles it, in one sitting on a real machine: on a signed-in comments
+    page with the layout up, override the suppression rule in DevTools to the off-screen
+    form, wait, and check whether `shreddit-comment-action-row` has appeared and whether
+    `SHD.dom.deepQuery(comment, SHD.C.NATIVE.upvote)` returns a button. If it does, the
+    accessibility assertion in `extension.js` is the guard that has to pass before any of
+    it ships.
+
 
 Two settled things, so nobody reopens them: the **staircase indentation report does not
 reproduce** (measured at 10 widths), and **comments being DOM-nested was a non-event**
