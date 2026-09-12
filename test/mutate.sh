@@ -169,9 +169,9 @@ mutate "reset() leaves the stale header behind" run \
   src/modules/chrome.js "    document.querySelector('#shd-header')?.remove();" ''
 
 mutate "failure leaves our unstyled DOM on the page" run \
-  src/core/gate.js "    document.documentElement.classList.remove('shd-gate', SHD.C.BODY_CLASS);
-    document.documentElement.removeAttribute('data-shd-empty');   // our listing is gone with it
-    document.getElementById(SHD.C.ROOT_ID)?.remove();" "    document.documentElement.classList.remove('shd-gate', SHD.C.BODY_CLASS);"
+  src/core/gate.js "    document.documentElement.removeAttribute('data-shd-empty');   // our listing is gone with it
+    document.getElementById(SHD.C.ROOT_ID)?.remove();
+    document.getElementById('shd-header')?.remove();" "    ;"
 
 mutate "nothing guards an in-flight flush (guard + queue clear)" run \
   src/core/pipeline.js '    if (SHD.gate.stopped) { queue.clear(); return; }
@@ -838,11 +838,7 @@ mutate "an empty feed goes back to waiting for ever" run \
 # can see the difference: both paths reach the same rendered page, so only the CLOCK
 # separates them.
 mutate "the empty page waits for the tick instead of the render pass" extension \
-  src/core/pipeline.js "    // ...unless Reddit has already said there is nothing coming, in which case the answer
-    // is in the document we were served and there is no reason to make the reader look at
-    // native Reddit for a deadline tick first. Declines unless it is certain — see
-    // gate.emptyFeedReason.
-    renderEmpty();" ''
+  src/core/pipeline.js "    if (served) renderEmpty();" '    ;'
 
 # The settle test is a CONTRACT, not a count, and this is why: without Reddit's own
 # no-content panel to go on, "a feed with no posts in it" also describes an age gate that
@@ -2401,6 +2397,33 @@ mutate "the packager ships dotfiles again" run \
   package-extension.js "const isPacked = (rel) =>
   !rel.endsWith('.md') && !rel.split('/').some(seg => seg.startsWith('.'));" \
                        "const isPacked = (rel) => !rel.endsWith('.md');"
+
+# ------------------------------------- the signed-in field report (0.45.0) ---
+
+# Reddit's hotkey handler treats a key it sees as a shortcut and cancels the default, so
+# the characters never landed AND `h` hid the post being replied to. Removing the guard
+# is the reported bug exactly.
+mutate "Reddit's hotkeys reach our reply box again" run \
+  src/modules/account.js "  function replyForm(m, { kind = 'comment', onClose } = {}) {
+    guardOwnKeys();" \
+                         "  function replyForm(m, { kind = 'comment', onClose } = {}) {"
+
+# The other half, and it is the half that makes typing work rather than merely stop
+# Reddit: the guard stops the event travelling and must never cancel it itself.
+mutate "the key guard cancels the keystroke it was protecting" run \
+  src/modules/account.js "      try { if (e.target?.closest?.(OWN_TEXT)) e.stopPropagation(); }" \
+                         "      try { if (e.target?.closest?.(OWN_TEXT)) { e.stopPropagation(); e.preventDefault(); } }"
+
+# ...and it must stay scoped to our own boxes. A guard that swallowed keys page-wide
+# would be a worse bug than the one it fixes.
+mutate "the key guard swallows every key on the page" run \
+  src/modules/account.js "      try { if (e.target?.closest?.(OWN_TEXT)) e.stopPropagation(); }" \
+                         "      try { e.stopPropagation(); }"
+
+# A comment vote cannot reach a control that Reddit never hydrated, and for a whole
+# release it said nothing at all — log 62's sin, delivered to the reader as a dead click.
+mutate "a comment vote goes back to failing silently" run \
+  src/modules/account.js "      markUnavailable(col, kind);" "      ;"
 
 # The accounting. DECLARED is read from this file itself rather than maintained by hand —
 # a count that has to be kept in step with the rows is the same trap as the hand-maintained

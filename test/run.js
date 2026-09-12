@@ -6883,6 +6883,87 @@ async function boot(html, url, setup) {
       doc.querySelector('shreddit-comment[thingid="t1_stranger"]')?.remove();
     }
 
+    /* --- A COMMENT VOTE THAT CANNOT WORK SAYS SO ---
+       Reported from a signed-in session: every comment vote was a silent no-op. Arrow
+       dead, score still, nothing on screen — while post votes on the same page worked
+       fine. The console carried a warning, once per page, and the reader never sees that.
+
+       It is not a stale selector and cannot be fixed by changing one. A post's vote
+       buttons sit in the POST'S OWN open shadow root and need no hydration; a comment's
+       sit one level down inside its lazily-hydrated <shreddit-comment-action-row>, and
+       suppress.css collapses the native body child to a 1x1 clipped box — so the native
+       comment has no geometry, Reddit never hydrates that row, and the button does not
+       exist to be found. This fixture models exactly that: an account layer with NO
+       native action row on the comment at all. */
+    {
+      const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+      fastAccount(window);
+      const myRow = (id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"]`);
+      const col = myRow('t1_c2').querySelector(':scope > .midcol');
+      const tagline = myRow('t1_c2').querySelector(':scope > .entry > .tagline > .score');
+      const before = tagline.textContent;
+
+      check('setup: the comment really has no native vote control to forward to',
+        window.SHD.dom.deepQuery(doc.querySelector('shreddit-comment[thingid="t1_c2"]'),
+          window.SHD.C.NATIVE.upvote) === null);
+
+      click(window, col.querySelector('.arrow.up'));
+      check('a comment vote with no control to reach says so on the row',
+        col.dataset.shdVoteMiss === 'unavailable', JSON.stringify(col.dataset));
+      check('...on the arrows themselves, for a reader who hovers or uses a screen reader',
+        [...col.querySelectorAll('.arrow')].every(a =>
+          a.getAttribute('aria-disabled') === 'true' && /cannot do anything/.test(a.getAttribute('title') || '')),
+        col.innerHTML.slice(0, 120));
+      /* And it must not pretend: no optimistic paint, no score movement. A lit arrow over
+         a vote that was never cast is the dead click wearing a costume. */
+      check('...and nothing is painted as though the vote had been cast',
+        !col.classList.contains('likes') && col.dataset.shdVote === '0' &&
+        tagline.textContent === before,
+        `${col.className} vote=${col.dataset.shdVote} score=${tagline.textContent}`);
+      window.close();
+    }
+
+    /* --- REDDIT'S HOTKEYS MUST NOT REACH OUR OWN TEXT BOX ---
+       Reported from a signed-in session, and it did damage rather than merely failing:
+       typing into the reply box inserted nothing while every keystroke reached Reddit as
+       a SHORTCUT — `h` hid the post being replied to, and one keystroke navigated to the
+       submit page and took the draft with it. The characters never landed because
+       Reddit's handler calls preventDefault(), and text insertion is keydown's default
+       action.
+
+       Modelled the way the page actually behaves: a listener on `document` that treats
+       any key it sees as a hotkey and cancels the default. Both phases are covered,
+       because which one Reddit uses is not something we get to know. */
+    for (const phase of [false, true]) {
+      const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+      fastAccount(window);
+      /* Own helpers: this block boots its own document, and the section's `row`/`formOf`
+         close over the one above it. */
+      const myRow = (id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"]`);
+      const hotkeys = [];
+      doc.addEventListener('keydown', (e) => { hotkeys.push(e.key); e.preventDefault(); }, phase);
+
+      click(window, myRow('t1_c1').querySelector('a.reply'));
+      const ta = myRow('t1_c1').querySelector(':scope > .entry > .shd-reply-form textarea');
+      const ev = () => new window.KeyboardEvent('keydown',
+        { key: 'h', bubbles: true, cancelable: true });
+
+      const ours = ev();
+      ta.dispatchEvent(ours);
+      check(`a keystroke in our reply box never reaches Reddit's handler (capture=${phase})`,
+        hotkeys.length === 0, hotkeys.join(','));
+      /* The other half, and the one that makes typing work at all: we stop the event
+         travelling, we must never cancel it ourselves. */
+      check('...and the keystroke is not cancelled, so the character still lands',
+        ours.defaultPrevented === false);
+
+      // The counterweight: outside our own boxes, Reddit's shortcuts are its business.
+      doc.body.dispatchEvent(ev());
+      check('...while a keystroke anywhere else still reaches it',
+        hotkeys.length === 1, hotkeys.join(','));
+      window.close();
+    }
+
     check('no console errors while replying',
       logs.filter(l => l.startsWith('error') || l.startsWith('jsdomError')).length === 0, logs.join(' | '));
   }

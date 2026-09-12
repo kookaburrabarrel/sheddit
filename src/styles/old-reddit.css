@@ -438,6 +438,15 @@ html.shd-active body {
 .midcol .arrow.down::before  { content: '▼'; display: block; line-height: 14px; color: var(--shd-dim); }
 .midcol .arrow.up:hover::before   { color: var(--shd-upvote); }
 .midcol .arrow.down:hover::before { color: var(--shd-downvote); }
+
+/* A CONTROL THAT CANNOT ACT MUST NOT LOOK LIKE ONE THAT CAN.
+   Set when a click found no native button to forward to — see account.js
+   markUnavailable(). Reported from a signed-in session as a dead click: the arrow did
+   not light, the score did not move, and nothing on screen said why. The hover colour
+   goes with it, because a hover that still lights up is the same promise in miniature. */
+.midcol[data-shd-vote-miss] .arrow { cursor: not-allowed; opacity: 0.45; }
+.midcol[data-shd-vote-miss] .arrow.up:hover::before   { color: var(--shd-dim); }
+.midcol[data-shd-vote-miss] .arrow.down:hover::before { color: var(--shd-dim); }
 .midcol .score { padding: 1px 0; white-space: nowrap; }
 /* The reader's own vote, in old reddit's classes: the lit arrow and the score take the
    vote's colour. account.js paints these from Reddit's own button state (or its local

@@ -18,6 +18,50 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.45.0
+
+Both of these came from one signed-in session on a real thread, and both are about a
+control that looked live and was not.
+
+### Fixed — you could not type into the reply box, and the keystrokes did damage
+
+The box focused correctly and then swallowed everything: not one character landed, while
+every keystroke reached Reddit as a keyboard SHORTCUT. `h` hid the post being replied to,
+and one key navigated to the submit page and took a long draft with it. Reddit's own
+composer on the same page typed normally, which is what put the fault on this side.
+
+It is one fault, not two. Reddit runs a document-level key handler that decides whether a
+key came from somewhere text goes. Sheddit's box is a plain `<textarea>`, but it sits
+outside Reddit's app entirely — a sibling of it — so whatever that check reads, it does
+not recognise it. Having decided the key is a command, the handler cancels the event, and
+inserting the character is the thing being cancelled. The shortcut firing and the text not
+appearing are the same moment.
+
+Keys aimed at Sheddit's own boxes no longer reach that handler. They are also not
+cancelled by Sheddit, which is the half that makes typing work rather than merely stopping
+Reddit — and the guard is scoped to those boxes alone, because swallowing keys across the
+page would be a worse bug than the one it fixes. Three separate checks hold those three
+properties apart.
+
+### Fixed — a comment vote said nothing when it could not work
+
+Voting on a comment was a silent no-op: arrow dead, score still, nothing on screen. Post
+votes on the same page worked and persisted. The only record was one console warning per
+page, which nobody sees.
+
+The cause is not a renamed selector, and this is worth stating plainly because it looks
+exactly like one. Reddit builds a post's vote buttons into the post itself, so they are
+there whenever Sheddit looks — which is why posts work. A comment's buttons are built only
+when the comment is on screen **in Reddit's own layout**, and Sheddit's layout is what you
+are looking at instead: the native page is collapsed to a one-pixel box, so no comment is
+ever on screen there and the buttons are never built. There is nothing to click.
+
+So what this release fixes is the pretence. A comment arrow that cannot reach a control
+now says so — dimmed, not clickable, with an explanation on hover and for screen readers —
+and nothing is drawn as though the vote had been cast. Comment voting remains unavailable.
+Whether it can be recovered is written down as an open question with the experiment that
+would answer it, rather than guessed at.
+
 ## 0.44.0
 
 A second adversarial pass over the source, run as twelve independent readers with every

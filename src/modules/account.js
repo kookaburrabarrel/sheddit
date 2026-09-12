@@ -73,6 +73,38 @@ SHD.account = (() => {
       `is stale, or the control sits in a CLOSED shadow root and cannot be delegated to.`);
   }
 
+  /**
+   * Say so on the row when the control cannot be reached.
+   *
+   * Reported from a signed-in session: every comment vote was a silent no-op — arrow
+   * dead, score still, nothing said — while post votes on the same page worked. That is
+   * log 62's sin exactly ("a control that ignores a click is worse than no control"),
+   * and reportMiss() only ever reached the console, once per page.
+   *
+   * WHY IT CANNOT SIMPLY BE FIXED, which is why this marks rather than retries. A post's
+   * vote buttons live in the POST'S OWN open shadow root and need no hydration, so they
+   * are there whenever we look. A comment's live one level down, inside the open shadow
+   * root of its lazily-hydrated <shreddit-comment-action-row> — and suppress.css
+   * collapses the native body child to a 1x1 clipped box, so every native comment has no
+   * usable geometry and Reddit never hydrates that row. The reader scrolls OUR rows,
+   * never Reddit's. It is the same mechanism handoff() documents for the Reply control,
+   * one control over, and no selector can fix it: the button does not exist to be found.
+   *
+   * So the row says the control is unavailable and the arrow stops looking live. The
+   * engineering log carries the experiment that would settle whether the native tree can
+   * be given geometry without being seen.
+   */
+  function markUnavailable(col, kind) {
+    col.dataset.shdVoteMiss = 'unavailable';
+    const why = kind === 'comment'
+      ? 'Reddit has not loaded this comment\u2019s vote control, so this arrow cannot do anything yet'
+      : 'Reddit has not loaded this post\u2019s vote control, so this arrow cannot do anything yet';
+    for (const a of col.querySelectorAll('.arrow')) {
+      a.setAttribute('title', why);
+      a.setAttribute('aria-disabled', 'true');
+    }
+  }
+
   const nativeButtons = (source) => ({
     up: SHD.dom.deepQuery(source, C.NATIVE.upvote),
     down: SHD.dom.deepQuery(source, C.NATIVE.downvote)
@@ -138,7 +170,11 @@ SHD.account = (() => {
   function vote(col, m, kind, dir) {
     const btns = nativeButtons(m.source);
     const native = dir === 1 ? btns.up : btns.down;
-    if (!native) { reportMiss(dir === 1 ? 'upvote' : 'downvote', m); return; }
+    if (!native) {
+      reportMiss(dir === 1 ? 'upvote' : 'downvote', m);
+      markUnavailable(col, kind);
+      return;
+    }
     learnInitial(col, m, kind, btns);
     native.click();
     // Optimistic, like old reddit: clicking the lit arrow un-votes, the other one flips.
@@ -423,7 +459,52 @@ SHD.account = (() => {
    * Reddit put it. On any miss the form STAYS, draft intact, the status says which step
    * failed, and Reddit's own composer is revealed in place so the reader can finish there.
    */
+  /**
+   * Our own text surfaces. Not a Reddit contract — these are our classes, which is why
+   * they are here and not in contracts.js.
+   */
+  const OWN_TEXT = '.shd-reply-text, #shd-root textarea, #shd-root input';
+
+  /**
+   * Keep Reddit's keyboard shortcuts out of our own text boxes.
+   *
+   * Reported from a signed-in session, and it did real damage: typing into the reply box
+   * inserted nothing, while every keystroke reached Reddit as a HOTKEY instead. `h` hid
+   * the post being replied to, and one keystroke navigated to the submit page and took
+   * the draft with it. Reddit's own composer on the same page typed fine, so this is
+   * ours: Reddit's handler decides whether a key came from something editable, our box
+   * is not something it recognises, and it treats the key as a shortcut.
+   *
+   * The characters never landed because that handler calls preventDefault(), and text
+   * insertion is keydown's DEFAULT ACTION. So the fix is to stop the event reaching it —
+   * and emphatically NOT to preventDefault ourselves, which would suppress the very
+   * typing this restores.
+   *
+   * ON WINDOW, IN CAPTURE, which is the only placement that works whichever way Reddit
+   * listens. Capture runs outermost node first, so a window-capture listener precedes a
+   * document-level listener in both phases no matter which script registered first —
+   * and registration order is not ours to win, because Reddit's bundle runs long before
+   * a document_idle content script. Propagation belongs to the DOM node rather than to
+   * the JavaScript realm, so stopping it here stops the page's own listeners too.
+   *
+   * Scoped to our surfaces. Everything outside them is Reddit's business, hotkeys
+   * included — a guard that swallowed keys page-wide would be a worse bug than this one.
+   */
+  let keysGuarded = false;
+  function guardOwnKeys() {
+    if (keysGuarded) return;
+    keysGuarded = true;
+    const stop = (e) => {
+      try { if (e.target?.closest?.(OWN_TEXT)) e.stopPropagation(); }
+      catch { /* a guard must never be the thing that breaks typing */ }
+    };
+    for (const type of ['keydown', 'keypress', 'keyup']) {
+      window.addEventListener(type, stop, true);
+    }
+  }
+
   function replyForm(m, { kind = 'comment', onClose } = {}) {
+    guardOwnKeys();
     const ta = h('textarea.shd-reply-text', { rows: '6', 'aria-label': kind === 'post' ? 'comment' : 'reply' });
     const status = h('span.shd-reply-status', { role: 'status', 'aria-live': 'polite' });
     const save = h('button.shd-reply-save', { type: 'submit', text: 'save' });
