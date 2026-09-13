@@ -352,14 +352,40 @@ SHD.model = (() => {
     } catch { return null; }
   }
 
+  /**
+   * WHERE THE URL ACTUALLY IS, which is not always `src`.
+   *
+   * This used to read `currentSrc || src` and nothing else, and dropped the thumbnail for
+   * any post that keeps its URL somewhere else — a responsive `srcset` with no usable
+   * `src`, or the attribute a gallery parks its unshown frames in. Reported from a live
+   * `/controversial/` listing as several rows with no picture and a ragged empty column
+   * beside them, while the same sort's other rows were fine. `currentSrc` is empty until
+   * an image has actually loaded, which on a suppressed native tree is its own lottery,
+   * so leaning on it made the set of affected rows look arbitrary.
+   *
+   * imageCandidates() a few lines down has consulted all three sources since galleries
+   * landed; this is the same list, in the same order of preference, which is the point —
+   * one function knowing about a place URLs live and its neighbour not knowing is how the
+   * two drifted apart in the first place. The host allowlist and the ancestor exclusion
+   * are unchanged and still do the work that keeps subreddit icons and flair emoji out.
+   */
+  const thumbUrls = (img) => [
+    img.currentSrc,
+    img.getAttribute('src'),
+    ...(img.getAttribute('srcset') || '').split(',').map(p => p.trim().split(/\s+/)[0]),
+    img.getAttribute(C.GALLERY_LAZY_SRC)
+  ];
+
   function thumbnailFor(el, type) {
     if (!SHD.settings.showThumbnails) return null;
     if (type === 'text') return null;
     for (const img of el.querySelectorAll('img')) {
-      const host = (img.currentSrc || img.src || '').split('/')[2] || '';
-      if (!C.THUMB_HOSTS.test(host)) continue;
       if (img.closest(C.THUMB_EXCLUDE)) continue;
-      return img.currentSrc || img.src;
+      for (const url of thumbUrls(img)) {
+        if (!url) continue;
+        const host = String(url).split('/')[2] || '';
+        if (C.THUMB_HOSTS.test(host)) return url;
+      }
     }
     return null;
   }

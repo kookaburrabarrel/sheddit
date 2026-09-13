@@ -335,7 +335,11 @@ html.shd-active body {
 }
 
 /* ---------- page frame ---------- */
-#shd-root {
+/* #shd-outgoing is the PREVIOUS page, held on screen while the next one is fetched
+   (gate.parkOutgoing()). It needs the same frame because it is the same markup — it has
+   only lost its id, which is what keeps every "what have we rendered" query off it. */
+#shd-root,
+#shd-outgoing {
   background: var(--shd-bg);
   /* Contains the right-floating #shd-sidebar. Without this the sidebar float escapes
      the root and overlaps whatever follows. Found by test/css-lint.js. */
@@ -343,7 +347,23 @@ html.shd-active body {
   min-height: 100vh;
   padding-bottom: 40px;
 }
-#shd-root .shd-sitetable { padding: 6px 0 0 6px; margin-right: var(--shd-gutter); }
+#shd-root .shd-sitetable,
+#shd-outgoing .shd-sitetable { padding: 6px 0 0 6px; margin-right: var(--shd-gutter); }
+
+/* The loading line, WITH the outgoing page still under it. Its ordinary form is an in-flow
+   block, which below a full listing is off the bottom of the document and invisible — the
+   reader would get the old rows and no sign that a new page was on its way. A strip at the
+   top is the one place it is certain to be seen without covering what it sits over. */
+html.shd-active #shd-loading.shd-loading-over {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;                   /* above the header's open menu, which claims 20 */
+  padding: 6px 0;
+  background: var(--shd-header-bg);
+  border-bottom: 1px solid var(--shd-header-border);
+}
 #shd-sidebar {
   float: right;
   box-sizing: border-box;          /* keeps the margin box exactly --shd-gutter */
@@ -384,6 +404,31 @@ html.shd-active body {
 }
 .thing.link.compact { margin-bottom: calc(var(--shd-row-gap) - 4px); }
 .thing.link.shd-hidden { display: none; }
+
+/* The share box: old reddit expanded one under the row rather than navigating, which is
+   also the only shape that works on a comments page — there, following the permalink is
+   following a link to the page you are already on. Sized so the whole URL is readable
+   without scrolling the field at the widths this layout is built for, and capped so a long
+   permalink cannot widen the row and push the document sideways. */
+.shd-sharebox {
+  display: flex;
+  flex-wrap: wrap;         /* bug 31: every flex row in this stylesheet wraps */
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 2px;
+  font-size: 11px;
+  color: var(--shd-meta);
+}
+.shd-share-url {
+  font: 11px var(--shd-font);
+  color: var(--shd-text);
+  background: var(--shd-bg);
+  border: 1px solid var(--shd-border);
+  border-radius: var(--shd-radius);
+  padding: 2px 4px;
+  width: 100%;
+  max-width: 420px;
+}
 
 /* Arial, not the row's Verdana: old reddit sets the rank in 16px arial and it is one of the
    few places it deviates from the body face on purpose — the digits are narrower, which is
@@ -441,7 +486,7 @@ html.shd-active body {
 
 /* A CONTROL THAT CANNOT ACT MUST NOT LOOK LIKE ONE THAT CAN.
    Set when a click found no native button to forward to — see account.js
-   markUnavailable(). Reported from a signed-in session as a dead click: the arrow did
+   markMiss(). Reported from a signed-in session as a dead click: the arrow did
    not light, the score did not move, and nothing on screen said why. The hover colour
    goes with it, because a hover that still lights up is the same promise in miniature. */
 .midcol[data-shd-vote-miss] .arrow { cursor: not-allowed; opacity: 0.45; }
@@ -667,11 +712,25 @@ html.shd-active body {
   padding: 4px 8px;
   cursor: pointer;
 }
+/* THE HEIGHT CAP BELONGS ON EVERY INLINE PICTURE, not only on a gallery's frames.
+ *
+ * It lived one selector down, under `.shd-gallery .shd-image-el`, on the reasoning that a
+ * deck of mismatched frames needs a steady box. True, and not the only case: a SINGLE
+ * portrait image had nothing but the 640px width cap on its container, so it drew at its
+ * full natural height. Reported from a live comments page at over 700px, which puts the
+ * entire comment tree below the fold — the reader arrives at a thread and has to scroll
+ * past a picture to find out anyone replied.
+ *
+ * old reddit does not inline images at all, so there is no original behaviour to match
+ * here; the cap is the thing that keeps "expanded" from meaning "instead of the page".
+ * Against the VIEWPORT rather than the column, because the fold is what is being
+ * protected and the column does not know where that is. */
 .shd-selfpost .shd-image-el {
   display: block;          /* an <img> is inline: without this it sits on a text baseline */
   width: auto;
   max-width: 100%;
   height: auto;
+  max-height: 70vh;
 }
 /* The counterpart the line above forces. A gallery holds its whole deck in the DOM and
    shows one frame by hiding the rest, and ANY author display declaration beats the UA
@@ -695,10 +754,10 @@ html.shd-active body {
  * the column: a frame the reader has to scroll to see the bottom of is not a slide, and the
  * frames of one gallery are rarely the same shape, so a portrait frame capped only on width
  * would be several times the height of the landscape one beside it and the box would jump
- * as the reader stepped through. */
-.shd-selfpost .shd-gallery .shd-image-el {
-  max-height: 70vh;
-}
+ * as the reader stepped through. That cap now lives on `.shd-image-el` itself, a few rules
+ * up — every inline picture needs it, and a gallery frame is one of those. This note stays
+ * because the REASON differs: on a single image the cap protects the fold, and on a deck it
+ * also keeps the box from resizing under the reader between frames. */
 .shd-selfpost .shd-gallery-nav {
   display: flex;
   flex-wrap: wrap;         /* bug 31: every flex row in this stylesheet wraps */

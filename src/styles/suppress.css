@@ -103,7 +103,7 @@ html.shd-gate #shd-loading p { margin: 0; }
  * `pointer-events: none` on a box that now covers the viewport is what keeps it from
  * eating every click meant for us. Both are load-bearing, not tidiness.
  */
-html.shd-active body > *:not(#shd-root):not(#shd-header):not(#shd-loading):not(#shd-passthrough-exit):not(.shd-native-passthrough),
+html.shd-active body > *:not(#shd-root):not(#shd-outgoing):not(#shd-header):not(#shd-loading):not(#shd-passthrough-exit):not(.shd-native-passthrough),
 html.shd-failed body > *:not(#shd-error) {
   position: fixed !important;
   inset: 0 !important;
@@ -143,6 +143,7 @@ html.shd-active .shd-passthrough-hide { display: none !important; }
 
 /* Our own layout steps aside while a native handoff is on screen. */
 html.shd-passthrough-active #shd-root,
+html.shd-passthrough-active #shd-outgoing,
 html.shd-passthrough-active #shd-header { display: none !important; }
 
 /* Themed, unlike the failure screen below: a handoff keeps .shd-active on (it only hides

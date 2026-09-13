@@ -78,7 +78,7 @@ function crc32(buf) {
 const TEST_PNG = png(1000, 750);
 
 /** Load a fixture over a real URL, run the bundle on it, wait for our layout to exist. */
-async function open(browser, origin, urlPath, waitFor, viewport, { images = false } = {}) {
+async function open(browser, origin, urlPath, waitFor, viewport, { images = false, imageBody = TEST_PNG } = {}) {
   const page = await browser.newPage();
   // Settable before the bundle runs, because the paginator measures the page against the
   // viewport the moment it attaches — resizing afterwards would be measuring the wrong one.
@@ -91,7 +91,7 @@ async function open(browser, origin, urlPath, waitFor, viewport, { images = fals
   page.on('request', (req) => {
     if (req.isNavigationRequest()) return req.continue();
     if (images && req.resourceType() === 'image') {
-      return req.respond({ status: 200, contentType: 'image/png', body: TEST_PNG });
+      return req.respond({ status: 200, contentType: 'image/png', body: imageBody });
     }
     return req.abort();
   });
@@ -978,6 +978,43 @@ const overlaps = (a, b) =>
        picture, or every image post changes shape to fix a gallery. */
     check('...and a lone picture is not turned into a slideshow',
       !(await page.$('.shd-selfpost .shd-gallery')));
+
+    /* A TALL PICTURE IS CAPPED TOO, and the width cap above cannot do it.
+       Reported from a live comments page: a portrait image drew at over 700px, which puts
+       the whole comment tree below the fold — the reader arrives at a thread and has to
+       scroll past a picture to find out whether anyone replied. The height cap was scoped
+       to a gallery's frames, so a single image had nothing but the 640px width.
+       A separate page with a PORTRAIT image, because the landscape one above renders 480px
+       tall at that width and would satisfy any cap, binding or not. */
+    {
+      const tall = png(900, 2000);
+      const { page: pageT } = await open(browser, origin, PATHS.imageComments,
+        '#shd-root .shd-selfpost', { width: 1280, height: 900 },
+        { images: true, imageBody: tall });
+      await pageT.evaluate(() => Promise.all(
+        [...document.images].map(i => i.complete ? null : new Promise(r => {
+          i.addEventListener('load', r); i.addEventListener('error', r);
+        }))));
+      const g = await pageT.$eval('.shd-selfpost .shd-image img', (n) => {
+        const r = n.getBoundingClientRect();
+        return { h: r.height, natural: n.naturalHeight, vh: window.innerHeight };
+      });
+      // The control: uncapped, this image wants to be far taller than the cap, so the
+      // assertion below is measuring a cap that actually binds.
+      check('control: the picture is tall enough for a height cap to matter',
+        g.natural > g.vh, `natural ${g.natural}px against a ${g.vh}px viewport`);
+      check('a tall picture is capped against the viewport, not left to fill it',
+        g.h > 0 && g.h <= g.vh * 0.7 + 1, `${Math.round(g.h)}px against ${Math.round(g.vh * 0.7)}px`);
+      /* And the thread has to still be reachable: the point of the cap is that something
+         other than the picture is on screen. */
+      const below = await pageT.$eval('#shd-root', (root) => {
+        const first = root.querySelector('.thing.comment');
+        return first ? Math.round(first.getBoundingClientRect().top) : -1;
+      });
+      check('...so the first comment is within a screen of the top of the thread',
+        below > 0 && below < 900 * 1.5, `first comment at ${below}px`);
+      await pageT.close();
+    }
 
     /* A GALLERY DRAWS ONE FRAME AT A TIME, and only a real engine can say whether that is
        true. jsdom checks the `hidden` ATTRIBUTE and does no layout, so a deck that is

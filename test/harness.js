@@ -294,6 +294,25 @@ function serveFixtures() {
     if (/\/r\/spa\//.test(pathname)) {
       body = body.replace('</body>', `<script>
         window.__spaSwaps = 0;
+        /* THE WINDOW WITH NOTHING IN IT, recorded by the page because no poll can see it.
+           The teardown used to remove our root the instant a route changed, so from then
+           until the next render the viewport held a loading line and nothing else —
+           measured on a live username click as five seconds of blank, with the main thread
+           too busy to paint whatever we put there instead. A parked copy of the outgoing
+           page is the fix, and what has to be asserted is the ABSENCE of a gap: at no
+           point may the body hold neither our rows nor a parked copy of them. Sampling
+           cannot establish that, because the gap it is looking for is exactly the interval
+           a sample can fall either side of. */
+        window.__shdGap = 0;
+        window.__shdParked = 0;
+        new MutationObserver(() => {
+          if (!document.documentElement.classList.contains('shd-active')) return;
+          if (document.querySelector('#shd-outgoing .thing.link')) window.__shdParked++;
+          if (!document.querySelector('#shd-root .thing.link') &&
+              !document.querySelector('#shd-outgoing .thing.link')) window.__shdGap++;
+        }).observe(document.documentElement,
+                   { childList: true, subtree: true, attributes: true,
+                     attributeFilter: ['id', 'class'] });
         // Reddit's router REUSES cached DOM on history traversals — measured live in
         // testing, where every back/forward re-inserted the same nodes, data-shd stamps
         // and all, and the extension's sweep skipped every one of them. The cache below

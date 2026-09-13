@@ -20,6 +20,75 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.47.0
+
+All of this came out of one logged-out session on live Reddit — which is the session this
+extension is actually for, and the one least represented in its own testing.
+
+### Fixed — a logged-out vote moved the score without casting anything
+
+Clicking a post's up arrow while logged out bumped the score by one and lit the arrow. No
+request was made and no login prompt appeared. The number then stayed wrong until the page
+was reloaded, and disagreed with the real score the whole time.
+
+Two things had to be true at once for this. Sheddit forwards a vote to Reddit's own button
+rather than making a request itself, on the rule that Reddit shows that button only to
+someone who can use it — so its presence was treated as proof of a session. Reddit now
+shows those buttons to everyone. And the arrow is lit optimistically the moment you click,
+on the understanding that Reddit's answer overrules it a moment later; but a button served
+to a logged-out reader carries no state to read back, so there was no answer, and the guess
+stood.
+
+A vote is now only shown as cast where something can answer for it: a button that reports
+its own state, or a session Sheddit recognises. With neither, nothing is forwarded, nothing
+is painted, and the arrow says you are not logged in — rather than the previous message
+about a control that had not loaded yet, which invited you to try again at something that
+was never going to work.
+
+### Fixed — changing pages no longer empties the screen
+
+Clicking a username or a sort tab cleared the page and left the window holding a loading
+line until the next one arrived. Measured on a live click: five seconds of nothing, with
+the browser too busy to draw anything else — so whatever went up in place of the old page
+could not be seen either. The page you were reading now stays on screen until the new one
+is ready, which is the only thing that shows through a window like that.
+
+### Fixed — a tall image no longer buries the comments
+
+An image opened on a comments page drew at its full height, so a portrait photo put the
+entire comment tree below the fold. It is capped against the window now, as gallery frames
+already were.
+
+### Fixed — share
+
+It was a link to the post's own page, so on a listing it navigated away and on a comments
+page it went to the page you were already on, which looks like a button that does nothing.
+It opens a box with the link in it, ready to copy, as old reddit did.
+
+### Fixed — a profile Reddit hides now says so
+
+An account that keeps its posts hidden serves no posts at all, which is indistinguishable
+from an account that has never posted if you only count rows. Sheddit said "u/X has nothing
+on this tab", which to anyone who knew better read as Sheddit failing to load them.
+
+### Fixed — missing thumbnails
+
+A post keeping its picture URL in a responsive image set rather than in the usual place got
+no thumbnail, leaving gaps down the left of a listing. Two functions in the same file
+disagreed about where those URLs live; they agree now.
+
+### Known, not fixed
+
+**`load more` can stick on some listings.** Reported on r/mildlyinfuriating's hot sort:
+the control flips to "loading more…" and the list stays put, while the same control works
+on other sorts. Every exit from the load path restores the label, so a label that stays
+means it did not exit — and the candidates leave identical markup behind. The control
+already publishes the numbers that separate them; this is waiting on a reading from a page
+that is actually stuck, rather than a guess at a component that has been reverted three
+times for exactly that.
+
+---
+
 ## 0.46.0
 
 ### Fixed — comment voting works

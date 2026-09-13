@@ -1724,7 +1724,7 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      on the click that needs it (`nudge()`), because `overflow: hidden` means the box still
      clips its own content and the reader never scrolls Reddit's copy of the thread. A
      comment vote that finds nothing waits for the row instead of reporting a miss;
-     `markUnavailable()` survives as the floor for a wait that expires, and is now cleared
+     `markMiss()` survives as the floor for a wait that expires, and is now cleared
      when a control does turn up. `compose()` waits the same way, so the Reply control that
      sent a reader to Reddit's own page with an empty box in 105's report is resolved in
      place. `nudge()` restores `window.scrollX/scrollY` if the document moved — it does not,
@@ -1748,6 +1748,100 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      control is the whole test: without it a pass could mean Reddit had hydrated the thread
      anyway.
 
+108. **A logged-out vote moved the score, and nothing could take it back.** Reported from a
+     logged-out session on a live listing: clicking a post's up arrow moved 5411 to 5412
+     and lit `.upmod`, with no request made and no login prompt shown. This is the worst
+     shape a bug in `account.js` can take — the extension invented a number and attributed
+     it to the reader — and the logged-out session is the one this extension is *for*.
+
+     TWO THINGS HAD TO BE TRUE AT ONCE, and each was defensible on its own. The first is
+     that `account.js` trusted the CONTROL over the detector, on the documented rule that
+     Reddit renders a vote button only for a session that can use one (ARCHITECTURE §7d,
+     "logged out, nothing — measured"). That measurement has gone stale: Reddit ships those
+     buttons to everyone now. The rule was good reasoning from a fact that stopped being
+     one, which is the failure mode a "measured" annotation invites — it records that
+     someone checked, not that it is still true.
+
+     The second is why it STUCK rather than flickering. `settle()` exists precisely so the
+     page overrules our optimistic paint, and it reads `aria-pressed`. A button served to a
+     logged-out reader carries no state at all, so `nativeState()` returned null, `settle()`
+     returned without repainting, and the invented score stayed until reload. The
+     self-correcting mechanism was silently inapplicable in exactly the case that needed it.
+
+     The fix is EITHER signal, not the button and not the detector: a readable native state,
+     or a session the detector recognises. Either one makes the vote answerable for — the
+     first because `settle()` can then overrule us, the second because the click has
+     somewhere to land. Keeping the second clause is what stops this becoming the opposite
+     bug, a logged-in reader with an unfamiliar header locked out of voting, which was the
+     whole reason for distrusting the detector in the first place. With neither, nothing is
+     forwarded (Reddit's login prompt is a body child and therefore suppressed, so
+     forwarding would be a click into silence) and the column is marked `logged-out` with
+     copy about the session rather than about a control that has not arrived yet — the
+     0.45.0 copy, which invited the reader to try again at something that could never work.
+
+109. **The teardown emptied the viewport and left it empty for as long as the next page
+     took.** Reported with timings, which is what made it diagnosable: a username click,
+     URL unchanged for 2.6s, render at 5.2s, the whole viewport — our own header included —
+     blank throughout. The DOM was present and geometrically correct the entire time, and a
+     100ms interval running across the window fired about once a second. That last number
+     is the finding. The main thread was saturated by Reddit's route change and our
+     re-render, so the browser could not paint.
+
+     WHICH INVERTS THE OBVIOUS FIX. The instinct is to put something in the window — a
+     skeleton, a spinner, the header drawn early. None of them can appear: they need a
+     paint, and there is no paint to be had. But the same is true of the REMOVAL. Dropping
+     `#shd-root` only reaches the screen when the browser next paints, so if it never
+     paints, the reader goes on seeing whatever was there before. Keeping the outgoing page
+     is the only occupant of that window that costs nothing, because it is already on
+     screen. The reporter proposed it and the mechanism is why it is right.
+
+     So the teardown parks the outgoing root instead of removing it: it loses the
+     `#shd-root` id (which is what keeps `sourceCount()`, the paginator and every other
+     "what have we rendered" query off it) and gains `inert` and `aria-hidden` (because it
+     is a picture of a page the reader has left, and its rows must not be clickable). Every
+     exit retires it alongside the loading line — they describe the same window, and a
+     parked page under a failure screen would be a previous route's rows beneath a card
+     saying something else. The loading line becomes a fixed strip when it has a page to sit
+     over, because its in-flow form is below a full listing and therefore off-screen.
+
+     Asserted by the PAGE, not by sampling: the `/r/spa/` fixture counts, across both hops,
+     how many times the document held neither our rows nor a parked copy. The interval
+     being asserted about is exactly the one a poll can fall either side of. Without the
+     fix that counter reads 4.
+
+110. **Three smaller ones from the same session, each a case the code had a rule for and
+     did not apply.**
+
+     **A tall inline image buried the thread.** `max-height: 70vh` was scoped to
+     `.shd-gallery .shd-image-el`, reasoning about a deck of mismatched frames needing a
+     steady box. True, and not the only case: a single portrait image had nothing but the
+     640px width cap on its container and drew at over 700px, putting the whole comment tree
+     below the fold. The cap moved to `.shd-image-el` itself.
+
+     **`share` was a link to the page you were on.** It shipped as `href: permalink`, which
+     on a listing navigates away from the feed and on a comments page navigates to the
+     current URL — a control that visibly does nothing. This is the same trap `watch` is
+     explicitly excluded from four lines above it, and the same one that took `save` and
+     `report` off that row entirely. It opens a box with the absolute URL in it now, which
+     is both old reddit's shape and the only one that works on both routes.
+
+     **A gated profile was described as an empty one.** An account Reddit hides serves zero
+     posts, which is indistinguishable from an account with nothing on the tab if all you
+     count is rows — so the notice read "u/X has nothing on this tab", which to a reader who
+     knows that account has posted is Sheddit failing. Reddit's own line is the only thing
+     that separates the two cases, so `C.PROFILE_HIDDEN` reads it. A text test, English-only
+     and unverified, documented as both: no capture of the markup exists, and if one ever
+     turns up a stable attribute it should replace this. The blast radius is deliberately
+     tiny — it is consulted only where the answer is already "no posts" and the sole
+     remaining question is why.
+
+     **And a thumbnail, which is the one with a moral.** `thumbnailFor()` read
+     `currentSrc || src`; `imageCandidates()`, forty lines below it in the same file, has
+     read `srcset` and the gallery lazy attribute since galleries landed. A post keeping its
+     URL only in a responsive set got no thumbnail, which on a live `/controversial/` read
+     as several rows missing their picture beside a ragged empty column. Two functions in
+     one file disagreeing about where a URL lives, with the newer one right and the older
+     one never revisited.
 
 
 ## The popup policy — supersedes bugs 30, 33 and 38
@@ -2246,6 +2340,28 @@ the way a question got settled is usually more useful than the answer.
     `SHD.dom.deepQuery(comment, SHD.C.NATIVE.upvote)` returns a button. If it does, the
     accessibility assertion in `extension.js` is the guard that has to pass before any of
     it ships.
+
+
+16. **Why `load more` sticks on some listings and not others.** Reported on
+    r/mildlyinfuriating's hot sort: the control flips to `loading more…`, the list stays at
+    27 rows indefinitely, and scrolling to the bottom changes nothing — while the same
+    control on `/controversial/` works. Conditional, therefore diagnosable, and not yet
+    diagnosed.
+
+    What is known from the code alone: every exit from `loadNext()` calls `setStatus()`, so
+    a label stuck on `loading more…` means it did not exit. The candidates — `busy` latched
+    by a `settle()` that never resolved, an epoch change that returns without touching a
+    field, the unproductive limit, a partial that resolves and yields nothing — leave
+    identical DOM behind, which is exactly what `diag()` was built for.
+
+    THE READING, on the stuck page, one line:
+    `document.querySelector('.shd-sentinel').dataset` — `shdRefusal`, `shdBusy`,
+    `shdBusyFor`, `shdFresh`, `shdSources`, `shdUnproductive`, `shdExhausted`, `shdPages`
+    and `shdInRange` between them separate every candidate above.
+
+    It is listed here rather than fixed on the best hypothesis deliberately. `paginator.js`
+    carries three reverts that came from reasoning about it instead of measuring it, and
+    question 14 above is the standing note saying so.
 
 
 Two settled things, so nobody reopens them: the **staircase indentation report does not

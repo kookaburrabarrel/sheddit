@@ -17,13 +17,19 @@
  * no submit buttons. That is asserted, not assumed: test/run.js boots the same fixtures
  * logged out and checks nothing new appears.
  *
- * VOTING TRUSTS THE CONTROL, NOT THE DETECTOR
- * A click resolves the native button at click time (the action bar hydrates late, §1.3)
- * and forwards to it if it exists — whether or not session.js thinks the reader is logged
- * in. The button's presence IS the ground truth: Reddit renders it only for a session
- * that can use it. The detector decides only what a MISS means: logged in, warn once with
- * the evidence (the contract is stale, or the control moved into a closed root); logged
- * out, nothing to report — that is the documented state.
+ * VOTING TRUSTS WHAT IT CAN VERIFY
+ * A click resolves the native button at click time (the action bar hydrates late, §1.3).
+ * It used to forward to whatever it found, on the rule that the button's presence IS
+ * ground truth because Reddit renders it only for a session that can use one. That rule
+ * is false now — Reddit ships vote buttons to logged-out readers too — and it produced a
+ * fake vote: a score that moved, an arrow that lit, and no request behind either.
+ *
+ * The rule is now EITHER of two signals, because either one makes the vote answerable
+ * for. A button exposing its own state (`aria-pressed`) lets settle() read the page's
+ * verdict back and overrule our optimistic paint; a session the detector recognises means
+ * the click has somewhere to land even if the state is not exposed yet. Neither, and the
+ * click casts nothing and the row says why. The detector is still not trusted ALONE, which
+ * is what keeps a logged-in reader with an unfamiliar header able to vote.
  *
  * "At click time" is not enough on its own for a comment, and this is the one place the
  * extension reaches into the page's own layout rather than only its DOM. Reddit mounts a
@@ -100,21 +106,32 @@ SHD.account = (() => {
    * everything else: hydration that did not finish inside the deadline, a stale contract,
    * or a control that moved into a closed root.
    *
+   * TWO REASONS, because they are not the same news and the earlier copy gave the wrong
+   * one to the reader most likely to see it. `unavailable` says the control has not
+   * arrived \u2014 true on a signed-in page, and it invites another try. Said to a LOGGED-OUT
+   * reader it is a straight falsehood: nothing is loading, and no amount of waiting will
+   * produce a vote. That reader is this extension's primary audience, so they get
+   * `logged-out` and a sentence that is actually about them.
+   *
    * The mark is not permanent. clearUnavailable() takes it off the moment a control does
    * resolve, because a row that said "not yet" and then hydrates has to stop saying it.
    */
-  function markUnavailable(col, kind) {
-    col.dataset.shdVoteMiss = 'unavailable';
-    const why = kind === 'comment'
-      ? 'Reddit has not loaded this comment\u2019s vote control, so this arrow cannot do anything yet'
-      : 'Reddit has not loaded this post\u2019s vote control, so this arrow cannot do anything yet';
+  const MISS_COPY = {
+    'logged-out': 'You are not logged in to Reddit, so this arrow cannot cast a vote',
+    comment: 'Reddit has not loaded this comment\u2019s vote control, so this arrow cannot do anything yet',
+    post: 'Reddit has not loaded this post\u2019s vote control, so this arrow cannot do anything yet'
+  };
+
+  function markMiss(col, kind, reason = 'unavailable') {
+    col.dataset.shdVoteMiss = reason;
+    const why = reason === 'logged-out' ? MISS_COPY['logged-out'] : MISS_COPY[kind];
     for (const a of col.querySelectorAll('.arrow')) {
       a.setAttribute('title', why);
       a.setAttribute('aria-disabled', 'true');
     }
   }
 
-  /** Undo markUnavailable(): the control turned up after all. */
+  /** Undo markMiss(): the control turned up after all. */
   function clearUnavailable(col) {
     if (col.dataset.shdVoteMiss == null) return;
     delete col.dataset.shdVoteMiss;
@@ -234,14 +251,51 @@ SHD.account = (() => {
     setTimeout(() => col.isConnected && settle(col, m, kind, btns), timings.settleMs);
   }
 
+  /**
+   * Can a click on this column become a real vote?
+   *
+   * THE BUTTON'S PRESENCE USED TO BE THE ANSWER AND NO LONGER IS. This file's header
+   * argued that Reddit renders a vote control only for a session that can use one, so the
+   * control was ground truth and the session detector was only consulted about what a MISS
+   * meant (ARCHITECTURE §7d: "logged out, nothing"). Reported from a logged-out session on
+   * a live listing, and it is the worst kind of bug this code can have: clicking a post's
+   * up arrow moved the score 5411 -> 5412 and lit `.upmod`, with no request made and no
+   * login prompt. Reddit now ships those buttons to everyone.
+   *
+   * The optimistic paint could not be corrected either, which is what made it stick. It is
+   * settle() that normally lets the page overrule our guess — but it reads `aria-pressed`,
+   * and buttons served to a logged-out reader carry no state at all, so nativeState()
+   * returns null, settle() returns without repainting, and the invented number stays on
+   * screen until the page is reloaded. A vote the reader never cast, shown as cast, and
+   * guaranteed to disagree with the real score.
+   *
+   * So the test is now EITHER signal, not the button alone: a readable native state (which
+   * is the page telling us where the vote stands, and the thing settle() needs to be able
+   * to correct us) or a session the detector recognises. Keeping the second clause is what
+   * stops this from becoming the opposite bug — a logged-in reader whose header shape we
+   * fail to recognise can still vote, which was the whole reason for distrusting the
+   * detector in the first place.
+   */
+  const votable = (btns) => nativeState(btns) !== null || active();
+
   function vote(col, m, kind, dir) {
     const btns = nativeButtons(m.source);
-    if (dir === 1 ? btns.up : btns.down) return cast(col, m, kind, dir, btns);
-    /* Nothing to forward to YET, which on a comment is the expected first answer rather
-       than the final one: Reddit has not mounted the action row that holds the button.
-       Bring the native row into view, wait for it, and only then call it unavailable.
-       The wait is kept to one at a time — a reader clicking a dead arrow twice should not
-       start a second deadline, and the first one is already doing the work. */
+    if (dir === 1 ? btns.up : btns.down) {
+      if (votable(btns)) return cast(col, m, kind, dir, btns);
+      /* Reddit's button is right there and pressing it achieves nothing: logged out it
+         opens a login prompt, which is a body child and therefore suppressed, so the
+         reader would see precisely nothing happen. Say so instead of forwarding into
+         silence — and never paint, because there is no vote to paint. */
+      return markMiss(col, kind, 'logged-out');
+    }
+    /* No button at all. Logged out that is the end of it — the answer is known and no
+       amount of hydration changes it, so do not spend a deadline finding out. */
+    if (!active()) return markMiss(col, kind, 'logged-out');
+    /* Signed in, this is the expected FIRST answer on a comment rather than the final
+       one: Reddit has not mounted the action row that holds the button. Bring the native
+       row into view, wait for it, and only then call it unavailable. The wait is kept to
+       one at a time — a reader clicking a dead arrow twice should not start a second
+       deadline, and the first one is already doing the work. */
     if (col.dataset.shdVoteWait) return;
     col.dataset.shdVoteWait = '1';
     resolveLate(m.source, () => {
@@ -252,7 +306,7 @@ SHD.account = (() => {
       if (!col.isConnected) return;
       if (late) return cast(col, m, kind, dir, late);
       reportMiss(dir === 1 ? 'upvote' : 'downvote', m);
-      markUnavailable(col, kind);
+      markMiss(col, kind);
     });
   }
 

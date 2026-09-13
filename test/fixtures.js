@@ -623,17 +623,44 @@ function profilePage(opts = {}) {
   const c = (i) => profileCommentHtml(i,
     opts.badIndex === i ? { ...opts, unreadable: true }
       : opts.lateIndex === i ? { ...opts, lateTime: true } : opts);
-  return `<!DOCTYPE html><html><head><title>u/tester</title>${REDDIT_PAGE_CSS}</head><body>
-  <shreddit-app>
-    <reddit-header-large></reddit-header-large>
-    <div><div id="subgrid-container"><div><main id="main-content">
-      <shreddit-feed>
+  /* `hidden` is a profile Reddit GATES, reported from a live session on two accounts:
+     zero post elements served, and Reddit's own line about the account keeping its posts
+     hidden in their place. The feed element is still there and still empty, which is what
+     makes it indistinguishable from an account with nothing on the tab if all you do is
+     count rows — the line is the only thing that tells them apart. Text taken from the
+     report; no markup capture exists, which is why the contract reads the words. */
+  /* `empty` is the CONTROL for `hidden`: the same zero-post page WITHOUT Reddit's line,
+     which is an account that genuinely has nothing on this tab. A detector that cannot
+     tell these two apart would pass the hidden case and be wrong on every ordinary one.
+
+     BOTH carry Reddit's no-content panel, and they have to: the live report is that a
+     gated profile rendered OUR empty notice, so the page must reach the same empty path an
+     ordinary one does — that panel is what tells gate.js "this is an answer" rather than a
+     feed still arriving (bug 94). A fixture without it never renders the notice at all and
+     the assertions about its copy would be measuring nothing. The only difference between
+     these two pages is the words inside the panel, which is exactly the difference the
+     contract has to read. */
+  const feed = opts.hidden
+    ? `<shreddit-feed>
+         <div id="empty-feed-content">
+           <h1 data-testid="no-content">u/tester likes to keep their posts hidden</h1>
+           <p>Nothing to see here.</p>
+         </div>
+       </shreddit-feed>`
+    : opts.empty
+    ? `<shreddit-feed>${EMPTY_FEED_PANEL}</shreddit-feed>`
+    : `<shreddit-feed>
         ${postHtml(POSTS[0])}
         ${c(0)}${c(1)}
         ${postHtml(POSTS[1])}
         ${c(2)}${c(3)}
         <faceplate-partial loading="programmatic" src="/profile/next"></faceplate-partial>
-      </shreddit-feed>
+      </shreddit-feed>`;
+  return `<!DOCTYPE html><html><head><title>u/tester</title>${REDDIT_PAGE_CSS}</head><body>
+  <shreddit-app>
+    <reddit-header-large></reddit-header-large>
+    <div><div id="subgrid-container"><div><main id="main-content">
+      ${feed}
     </main></div></div></div>
     <div id="right-sidebar-container"></div>
   </shreddit-app></body></html>`;

@@ -2849,6 +2849,12 @@ async function boot(html, url, setup) {
     const shadow = post.querySelector('shreddit-async-loader').attachShadow({ mode: 'open' });
     const btn = doc.createElement('button');
     btn.setAttribute('upvote', '');
+    /* The state attribute is not decoration here. This page carries no session signal, and
+       a vote is only forwarded when something says it can land — a session the detector
+       recognises, or a button exposing its own state so the page can overrule our guess.
+       Reddit's real buttons carry it on any session that can vote; a button WITHOUT it is
+       the logged-out shape, and refusing that one is a separate test below. */
+    btn.setAttribute('aria-pressed', 'false');
     let clicks = 0;
     btn.addEventListener('click', () => clicks++);
     shadow.appendChild(btn);
@@ -3057,6 +3063,48 @@ async function boot(html, url, setup) {
       !!doc.querySelector('shreddit-feed #empty-feed-content'));
   }
 
+  /* --- A GATED PROFILE IS AN ANSWER, NOT AN EMPTY ONE ---
+     Reported from a live session on two accounts Reddit hides: it serves zero post
+     elements and renders its own line about the account keeping its posts hidden. We drew
+     the ordinary notice over that — "there doesn't seem to be anything here / u/tester has
+     nothing on this tab" — which describes an account that never posted, and reads to
+     anyone who knows better as Sheddit failing to load. The render was not wrong; the copy
+     was. Counting rows cannot tell the two cases apart, which is why this reads Reddit's
+     own words. */
+  console.log('\n\x1b[1mA HIDDEN PROFILE SAYS SO\x1b[0m');
+  {
+    const { doc } = await boot(profilePage({ hidden: true }),
+      'https://www.reddit.com/user/tester/');
+    const notice = doc.querySelector('#siteTable .shd-empty');
+    const line = notice?.querySelector('.shd-empty-line')?.textContent || '';
+    const why = notice?.querySelector('.shd-empty-why')?.textContent || '';
+    check('setup: Reddit served no posts at all', doc.querySelectorAll('#shd-root .thing').length === 0,
+      `${doc.querySelectorAll('#shd-root .thing').length} rows`);
+    check('the headline stops suggesting something went wrong',
+      line === 'this profile is hidden', line);
+    check('...and the reason names the gate rather than an empty account',
+      /keeps their posts hidden/.test(why) && !/nothing on this tab/.test(why), why);
+    check('...and still names whose profile it is',
+      /u\/tester/.test(why), why);
+  }
+  {
+    /* The control, and the half that makes the test mean anything: an ordinary profile
+       with nothing on the tab must keep the old copy. A detector that fires on every
+       empty profile would pass the block above and be wrong everywhere else. */
+    const { doc } = await boot(profilePage({ empty: true }),
+      'https://www.reddit.com/user/tester/');
+    const notice = doc.querySelector('#siteTable .shd-empty');
+    if (notice) {
+      check('an ordinary empty profile is still described as empty, not as hidden',
+        /nothing on this tab/.test(notice.querySelector('.shd-empty-why')?.textContent || '') &&
+        notice.querySelector('.shd-empty-line')?.textContent !== 'this profile is hidden',
+        notice.textContent);
+    } else {
+      check('an ordinary empty profile is still described as empty, not as hidden',
+        false, 'no empty notice rendered — the control fixture served rows');
+    }
+  }
+
   {
     /* The shape that was actually reported: the feed is empty because of a TIME WINDOW,
        and the URL does not mention it. Naming the window is the difference between "your
@@ -3227,6 +3275,80 @@ async function boot(html, url, setup) {
     check('the buttons that remain still work',
       labels.includes('share') && labels.includes('hide') &&
       labels.some(l => /comment/.test(l)), labels.join(', '));
+  }
+
+  /* --- A THUMBNAIL URL DOES NOT ALWAYS LIVE IN `src` ---
+     Reported from a live /controversial/ listing: several rows drew no picture and left a
+     ragged empty thumbnail column beside them, while other rows on the same sort were
+     fine. thumbnailFor() read `currentSrc || src` and nothing else, so a post keeping its
+     URL in a responsive `srcset` — or in the attribute a gallery parks unshown frames in —
+     resolved to nothing. `currentSrc` is empty until an image has actually loaded, which
+     under a suppressed native tree is its own lottery, and that is what made the affected
+     rows look arbitrary. imageCandidates() one function down has read all three places
+     since galleries landed; this is the drift between the two closing. */
+  {
+    const page = listingPage().replace(
+      '<img src="https://i.redd.it/gooddog.jpg" srcset=',
+      '<img src="" srcset=');
+    const { doc, window } = await boot(page, 'https://www.reddit.com/');
+    const thumb = doc.querySelector(
+      '#shd-root .thing[data-fullname="t3_image1"] a.thumbnail img');
+    check('setup: the post really offers no usable src, only a srcset',
+      doc.querySelector('shreddit-post[id="t3_image1"] img[srcset]')
+        ?.getAttribute('src') === '');
+    check('a post whose URL is only in its srcset still gets a thumbnail', !!thumb,
+      'no thumbnail rendered');
+    check('...taken from the srcset rather than invented',
+      /preview\.redd\.it\/gooddog-/.test(thumb?.getAttribute('src') || ''),
+      thumb?.getAttribute('src'));
+    /* The guard that made the old code narrow in the first place: subreddit icons and
+       flair emoji are images inside a post too, and an earlier, looser rule gave every
+       text post a bogus thumbnail off one of them. Reading more PLACES must not mean
+       reading more HOSTS. */
+    check('...while a text post with only decoy images still gets none',
+      !doc.querySelector('#shd-root .thing[data-fullname="t3_text1"] a.thumbnail img'));
+    window.close();
+  }
+
+  /* --- SHARE SHOWS THE LINK INSTEAD OF FOLLOWING IT ---
+     It shipped as a plain anchor onto the permalink, which navigates away from the feed on
+     a listing and, on a comments page, navigates to the page you are already on. Reported
+     from a live session as "share does nothing" — which is exactly what a link to the
+     current page looks like. Same trap `watch` is already excluded from on that row, and
+     the same one that took save and report off it. */
+  {
+    const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/');
+    const link = doc.querySelector('#shd-root .thing.link a.share');
+    const entry = link.closest('.thing').querySelector(':scope > .entry');
+    const ev = new window.MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(ev);
+    check('share does not navigate', ev.defaultPrevented);
+    const box = entry.querySelector(':scope > .shd-sharebox');
+    check('...it opens a box under the row', !!box);
+    /* ABSOLUTE, because the only thing anyone does with this is paste it somewhere that is
+       not reddit.com. A bare `/r/x/comments/y/z/` looks like it worked and is useless. */
+    const url = box?.querySelector('.shd-share-url');
+    check('...carrying the post\'s own URL, absolute',
+      /^https?:\/\/[^/]+\/r\/[^/]+\/comments\//.test(url?.value || ''), url?.value);
+    check('...in a field the reader cannot edit into something else',
+      url?.hasAttribute('readonly'));
+    link.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    check('...and a second click closes it rather than stacking another',
+      !entry.querySelector(':scope > .shd-sharebox'));
+    window.close();
+  }
+  {
+    /* The page the bug was reported on: here the permalink IS the current URL, so the old
+       behaviour was a control that visibly did nothing at all. */
+    const { doc, window } = await boot(commentsPage(),
+      'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    const link = doc.querySelector('#shd-root .thing.link a.share');
+    const ev = new window.MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(ev);
+    check('share on a comments page does something visible rather than reloading the page',
+      ev.defaultPrevented &&
+      !!link.closest('.thing').querySelector(':scope > .entry > .shd-sharebox'));
+    window.close();
   }
 
   console.log('\n\x1b[1mMAIN-WORLD BRIDGE\x1b[0m');
@@ -6272,11 +6394,83 @@ async function boot(html, url, setup) {
         out?.querySelector('a.shd-account-login')?.getAttribute('href') === '/login/' &&
         !out.querySelector('.shd-account-toggle') && !out.querySelector('.shd-account-menu'));
       check('the sidebar offers no submit doors', !doc.querySelector('.shd-submit'));
-      click(window, voteCol(doc, 't3_link1').querySelector('.arrow.up'));
+      const lcol = voteCol(doc, 't3_link1');
+      click(window, lcol.querySelector('.arrow.up'));
       await hold(50);
-      check('a vote with no native control is a silent no-op — the documented logged-out state',
-        !logs.some(l => /no upvote control/.test(l)) &&
-        !voteCol(doc, 't3_link1').classList.contains('likes'), logs.join(' | '));
+      check('a vote with no native control casts nothing, and says nothing to the console',
+        !logs.some(l => /no upvote control/.test(l)) && !lcol.classList.contains('likes'),
+        logs.join(' | '));
+      /* It is not silent to the READER any more, and the reason it gives is the one that
+         is true for them. "Reddit has not loaded this control" invites another try; logged
+         out there is nothing to wait for. The console stays quiet because a missing
+         control on this session is the documented state, not a finding. */
+      check('...and tells the reader it is the session, not a control that has not arrived',
+        lcol.dataset.shdVoteMiss === 'logged-out' &&
+        /not logged in/i.test(lcol.querySelector('.arrow.up').getAttribute('title') || ''),
+        `${lcol.dataset.shdVoteMiss}: ${lcol.querySelector('.arrow.up').getAttribute('title')}`);
+      check('...and does not spend a hydration deadline finding out what it already knows',
+        lcol.dataset.shdVoteWait == null, JSON.stringify(lcol.dataset));
+    }
+
+    /* --- THE FAKE VOTE: A BUTTON IS NOT A SESSION ---
+       Reported from a logged-out session on a live listing, and it is the worst shape a
+       bug in this file can take. Clicking a post's up arrow moved the score 5411 -> 5412
+       and lit `.upmod`, with no request made and no login prompt shown. ARCHITECTURE §7d
+       said Reddit renders no vote control to a logged-out reader, and that measurement has
+       gone stale: it ships those buttons to everyone now.
+
+       The optimistic paint then could not be undone, which is what made it stick rather
+       than flicker. settle() is what lets the page overrule our guess, and it reads
+       `aria-pressed` — which a button served to a logged-out reader does not carry. So
+       nativeState() returned null, settle() returned without repainting, and an invented
+       score stayed on screen until reload, guaranteed to disagree with the real one.
+
+       This fixture is that page exactly: no session signal, and a native upvote button
+       with NO state attribute. */
+    {
+      const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/', noAuto);
+      const post = doc.querySelector('shreddit-post[id="t3_link1"]');
+      let forwarded = 0;
+      const btn = doc.createElement('button');
+      btn.setAttribute('upvote', '');
+      btn.addEventListener('click', () => forwarded++);
+      post.querySelector('shreddit-async-loader').appendChild(btn);
+
+      const col = voteCol(doc, 't3_link1');
+      const delivered = col.querySelector('.score').textContent;
+      check('setup: the page offers a real upvote button and no session signal',
+        window.SHD.dom.deepQuery(post, window.SHD.C.NATIVE.upvote) === btn &&
+        window.SHD.session.active() === false);
+
+      click(window, col.querySelector('.arrow.up'));
+      await hold(50);
+      check('a button with no state on a session we cannot verify is not treated as a vote',
+        !col.classList.contains('likes') &&
+        !col.querySelector('.arrow.up').classList.contains('upmod'), col.className);
+      check('...the score does not move to a number nobody cast',
+        col.querySelector('.score').textContent === delivered,
+        `${col.querySelector('.score').textContent} vs ${delivered}`);
+      check('...and the click is not forwarded into a login prompt suppress.css would hide',
+        forwarded === 0, `forwarded ${forwarded}`);
+      check('...the reader is told why instead',
+        col.dataset.shdVoteMiss === 'logged-out', JSON.stringify(col.dataset));
+
+      /* The counterweight, and the reason the rule is EITHER signal rather than the
+         session alone: a button that exposes its state can be verified by settle(), so a
+         reader whose header shape we failed to recognise is not locked out of voting.
+         That was the whole point of trusting the control over the detector, and it
+         survives. */
+      btn.setAttribute('aria-pressed', 'false');
+      const col2 = voteCol(doc, 't3_image1');
+      const b2 = doc.createElement('button');
+      b2.setAttribute('upvote', '');
+      b2.setAttribute('aria-pressed', 'false');
+      let sent = 0;
+      b2.addEventListener('click', () => sent++);
+      doc.querySelector('shreddit-post[id="t3_image1"] shreddit-async-loader').appendChild(b2);
+      click(window, col2.querySelector('.arrow.up'));
+      check('a button that exposes its state is still voted through, session or no session',
+        sent === 1 && col2.classList.contains('likes'), `sent=${sent} ${col2.className}`);
     }
     {
       const { doc, window, logs } = await boot(commentsPage(), COMMENTS_URL, noAuto);
@@ -6285,8 +6479,11 @@ async function boot(html, url, setup) {
       check('comment rows still carry their arrows', !!col?.querySelector('.arrow.up') && !!col?.querySelector('.arrow.down'));
       click(window, col.querySelector('.arrow.up'));
       await hold(50);
-      check('a comment arrow with no native control is the same silent no-op',
+      check('a comment arrow with no native control casts nothing and stays off the console',
         !logs.some(l => /no upvote control/.test(l)) && !col.classList.contains('likes'));
+      check('...and gives the same session reason a post arrow does',
+        col.dataset.shdVoteMiss === 'logged-out' && col.dataset.shdVoteWait == null,
+        JSON.stringify(col.dataset));
       click(window, doc.querySelector('#shd-root .thing[data-fullname="t1_c0"] a.reply'));
       check('reply hands off to Reddit\'s own comment (passthrough), as before',
         doc.documentElement.classList.contains('shd-passthrough-active') &&

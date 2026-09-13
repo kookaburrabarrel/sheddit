@@ -1,6 +1,6 @@
 {
-  "version": "0.46.0",
-  "released": "2026-09-12",
+  "version": "0.47.0",
+  "released": "2026-09-13",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.46.0 makes comment voting work. 0.45.0 said it could not be done from here, and that was wrong: Reddit builds a comment's vote buttons only when the comment has a position on screen, and the stylesheet that hides Reddit's own copy of the page was also flattening it to a single pixel, so that moment never came. It now hides the page without taking away its dimensions, and a click on a comment arrow brings the row it needs into view first. Replying to a comment is resolved the same way, so it no longer sends you to Reddit's own page to finish. Screen readers still get one copy of the page, not two."
+  "notes": "0.47.0 comes from one logged-out session on live Reddit. The serious one: clicking an arrow while logged out moved the score and lit the arrow without casting anything. Reddit now shows vote buttons to everyone, so their presence had stopped proving a vote could land, and nothing could take the invented number back. A vote is only shown as cast when something can answer for it, and otherwise the arrow says you are not logged in. Also: changing pages no longer empties the screen while the next one loads — the page you were reading stays put; a tall image no longer pushes the whole comment thread below the fold; share opens the link instead of navigating to the page you are already on; a profile Reddit hides says so rather than looking like nothing loaded; and posts whose picture URL lives in a responsive image set get their thumbnails back."
 }
