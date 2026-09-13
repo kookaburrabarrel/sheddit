@@ -329,7 +329,14 @@ globalThis.SHD = globalThis.SHD || {};
     // A new page is a fresh attempt: clear the previous one's failure screen and re-arm
     // the deadline. No-ops if the user has released the page to native Reddit.
     SHD.gate.resetForRoute();
-    document.querySelector('#' + C.ROOT_ID)?.remove();
+    /* PARKED, not removed. This used to drop our rows the instant a route changed, which
+       left the reader with a loading line over an empty viewport for as long as the next
+       page took — measured at five seconds on a live username click, with the main thread
+       too busy to paint anything we put up in their place. gate.parkOutgoing() explains
+       why holding the last painted frame is the only occupant of that window that does
+       not itself need a paint. Every exit retires it (gate.endTransition()), so it cannot
+       outlive the transition or sit under a failure screen. */
+    SHD.gate.parkOutgoing();
     SHD.listing.reset();
     SHD.comments.reset();
     /* Media resolutions are memoised per asset and the URLs behind them expire (~12h with

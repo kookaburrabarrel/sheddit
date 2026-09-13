@@ -360,6 +360,11 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     const btn = document.createElement('button');
     btn.setAttribute('upvote', '');
     btn.setAttribute('aria-label', 'upvote');
+    // The state attribute is what makes this a votable control: this fixture carries no
+    // session signal, and a vote is forwarded only where something can answer for it —
+    // either a session the detector recognises, or a button exposing its own state so the
+    // page can overrule our optimistic paint. The stateless case is the block below.
+    btn.setAttribute('aria-pressed', 'false');
     btn.addEventListener('click', () => { window.__nativeUpvotes = (window.__nativeUpvotes || 0) + 1; });
     shadow.appendChild(btn);
   });
@@ -367,6 +372,44 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
   check('an upvote click reaches a native button inside an OPEN shadow root',
     await page.evaluate(() => window.__nativeUpvotes === 1),
     `__nativeUpvotes = ${await page.evaluate(() => window.__nativeUpvotes)}`);
+
+  /* THE FAKE VOTE, in the engine it was reported from.
+     Logged out on a live listing, clicking a post's up arrow moved the score 5411 -> 5412
+     and lit `.upmod` with no request made and no login prompt. Reddit ships vote buttons
+     to everyone now, so the button's presence stopped being proof of a session — and the
+     optimistic paint could not be walked back, because a button served to a logged-out
+     reader carries no `aria-pressed` for settle() to read. The invented number stayed up
+     until reload, guaranteed to disagree with the real score. */
+  {
+    const before = await page.$eval(
+      '#shd-root .thing[data-fullname="t3_image1"] .midcol .score', n => n.textContent);
+    await page.evaluate(() => {
+      const post = document.querySelector('shreddit-post[id="t3_image1"]');
+      const shadow = post.querySelector('shreddit-async-loader').attachShadow({ mode: 'open' });
+      const btn = document.createElement('button');
+      btn.setAttribute('upvote', '');
+      window.__statelessUpvotes = 0;
+      btn.addEventListener('click', () => { window.__statelessUpvotes++; });
+      shadow.appendChild(btn);            // no aria-pressed: the logged-out shape
+    });
+    await page.click('#shd-root .thing[data-fullname="t3_image1"] .midcol .arrow.up');
+    await settle(200);
+    const after = await page.evaluate(() => {
+      const col = document.querySelector('#shd-root .thing[data-fullname="t3_image1"] .midcol');
+      return {
+        score: col.querySelector('.score').textContent,
+        lit: col.classList.contains('likes'),
+        miss: col.dataset.shdVoteMiss || null,
+        forwarded: window.__statelessUpvotes
+      };
+    });
+    check('a stateless button on a session we cannot verify does not become a vote',
+      !after.lit && after.forwarded === 0, JSON.stringify(after));
+    check('...and the score stays the number Reddit delivered',
+      after.score === before, `${after.score} vs ${before}`);
+    check('...and the reader is told it is the session, not a missing control',
+      after.miss === 'logged-out', JSON.stringify(after));
+  }
 
   // A post with no vote bar at all must stay silent-but-safe, not throw.
   const beforeErrs = pageErrors.length;
@@ -963,6 +1006,22 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
       `${s2.rows} rows, ${new Set(s2.titles).size} unique`);
     check('both swaps actually ran in the page world', s2.swaps === 2, String(s2.swaps));
     check('still exactly one root across the whole sequence', s2.roots === 1, String(s2.roots));
+
+    /* THE READER IS NEVER LEFT LOOKING AT NOTHING.
+       Reported from a live username click: the URL did not move for 2.6s, the render
+       landed at 5.2, and the whole viewport — our header included — was blank for the
+       entire window. The DOM was correct throughout; the main thread was saturated, so
+       nothing could paint. Which is exactly why removing our rows is the part that hurts:
+       a removal needs a paint to reach the screen and so does anything we put up instead,
+       so with the thread blocked the reader sits looking at whatever was painted LAST.
+       Holding the outgoing page is the only occupant of that window that costs no paint.
+       Recorded by the page across both hops, because the interval being asserted about is
+       precisely the one a poll can straddle. */
+    const held = await pageS.evaluate(() => ({ gap: window.__shdGap, parked: window.__shdParked }));
+    check('control: a parked copy of the outgoing page really was mounted',
+      held.parked > 0, `parked observed ${held.parked} times`);
+    check('...and the viewport never held neither our rows nor that copy',
+      held.gap === 0, `${held.gap} frames with nothing of ours on screen`);
 
     /* -------- history traversals: Reddit restores the SAME nodes, stamps and all --------
        Live testing, on a verified build: every back/forward landed on the error card,

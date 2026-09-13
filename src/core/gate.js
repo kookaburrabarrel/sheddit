@@ -34,6 +34,10 @@ SHD.gate = (() => {
 
   const ERROR_ID = 'shd-error';
   const LOADING_ID = 'shd-loading';
+  /* The outgoing page, held on screen while the next one is fetched — see parkOutgoing().
+     A separate id rather than a class, because losing #shd-root is half the point. */
+  const OUTGOING_ID = 'shd-outgoing';
+  const OVER_CLASS = 'shd-loading-over';
 
   let revealed = false;
   let failed = false;
@@ -430,7 +434,7 @@ SHD.gate = (() => {
     if (SHD.route.classify() !== SHD.route.OTHER) {
       document.documentElement.setAttribute('data-shd-waiting', why);
     }
-    hideLoading();
+    endTransition();
   }
 
   /* ------------------------------------------------------------------ *
@@ -451,13 +455,67 @@ SHD.gate = (() => {
   function showLoading() {
     if (!document.body || stopped()) return;
     document.getElementById(LOADING_ID)?.remove();
-    document.body.appendChild(
-      el('div', { id: LOADING_ID, role: 'status' },
-        el('p', { textContent: 'loading…' })));
+    const line = el('div', { id: LOADING_ID, role: 'status' },
+      el('p', { textContent: 'loading…' }));
+    /* Asked here as well as in parkOutgoing(), so the two are order-independent: the
+       teardown parks the page and re-arms the deadline in the same tick, and which of
+       them runs first has changed once already. */
+    if (document.getElementById(OUTGOING_ID)) line.classList.add(OVER_CLASS);
+    document.body.appendChild(line);
   }
 
-  function hideLoading() {
+  /* ------------------------------------------------------------------
+   * HOLD THE PAGE THE READER IS LOOKING AT WHILE THE NEXT ONE ARRIVES.
+   *
+   * The teardown used to remove #shd-root the moment a route changed, which left the
+   * window holding a loading line and nothing else for as long as the incoming page took.
+   * Measured on a live username click: the URL did not change for 2.6 seconds and the
+   * render landed at 5.2, with the whole viewport — our header included — blank for the
+   * entire window, while a 100ms interval fired only about once a second. That last
+   * number is the important one. The main thread was saturated by Reddit's own route
+   * change and our re-render, so the browser could not paint; the DOM was correct
+   * throughout and nobody could see it.
+   *
+   * WHICH IS WHY REMOVING THE ROWS IS THE PART THAT HURTS. A removal only reaches the
+   * screen on a paint, and so does everything we might put up instead. With the thread
+   * blocked, whatever was painted LAST is what the reader sits looking at — so if the
+   * last paint still has the outgoing page in it, the wait costs them nothing but time.
+   * Parking it is therefore not a nicety over a spinner; it is the only occupant of that
+   * window that does not need a paint to appear.
+   *
+   * The parked copy is a PICTURE of the last page, not the page: `inert` and
+   * `aria-hidden` keep it out of the tab order and out of a screen reader, because a
+   * reader must not be able to click a row belonging to a page they have already left.
+   * It loses the #shd-root id with the same move, which is what stops sourceCount(),
+   * the paginator and every other "what have we rendered" question from counting it.
+   * ------------------------------------------------------------------ */
+  function parkOutgoing() {
+    retireOutgoing();                       // never two, however fast the reader clicks
+    const live = document.getElementById(SHD.C.ROOT_ID);
+    if (!live) return false;
+    live.id = OUTGOING_ID;
+    live.setAttribute('aria-hidden', 'true');
+    live.setAttribute('inert', '');
+    /* The line has to move when it has something to sit over. Under .shd-active it is an
+       in-flow block, which below a full listing is off the bottom of the page and
+       invisible — the reader would get the old rows and no sign anything was happening. */
+    document.getElementById(LOADING_ID)?.classList.add(OVER_CLASS);
+    return true;
+  }
+
+  const retireOutgoing = () => document.getElementById(OUTGOING_ID)?.remove();
+
+  /**
+   * Clear the transition's occupants: the loading line, and the outgoing page under it.
+   *
+   * Both together, at every exit, because they describe the same window. reveal() ends it
+   * with the new render, unblank() and standDown() by handing the page back, fail() with
+   * the error card — and a parked page left standing behind any of those would be a
+   * previous route's rows under a screen that says something else entirely.
+   */
+  function endTransition() {
     document.getElementById(LOADING_ID)?.remove();
+    retireOutgoing();
   }
 
   /**
@@ -533,7 +591,7 @@ SHD.gate = (() => {
     if (revealed || stopped()) return;
     revealed = true;
     clearTimeout(timer);
-    hideLoading();
+    endTransition();
     document.documentElement.classList.remove('shd-gate');
     document.documentElement.removeAttribute('data-shd-waiting');
     document.documentElement.classList.add(SHD.C.BODY_CLASS);
@@ -733,7 +791,7 @@ SHD.gate = (() => {
     document.documentElement.removeAttribute('data-shd-empty');   // our listing is gone with it
     document.getElementById(SHD.C.ROOT_ID)?.remove();
     document.getElementById('shd-header')?.remove();
-    hideLoading();
+    endTransition();
 
     /* Soft engagement (see its declaration): the pipeline is stopped and our DOM is gone —
        everything above — but the page goes back to native Reddit with no card over it.
@@ -767,7 +825,7 @@ SHD.gate = (() => {
     document.getElementById(ERROR_ID)?.remove();
     document.getElementById(SHD.C.ROOT_ID)?.remove();
     document.getElementById('shd-header')?.remove();
-    hideLoading();
+    endTransition();
   }
 
   /** Called by render sites on caught exceptions. Fails the page past a budget. */
@@ -811,7 +869,7 @@ SHD.gate = (() => {
     document.documentElement.removeAttribute('data-shd-waiting');
     document.documentElement.removeAttribute('data-shd-empty');
     document.getElementById(ERROR_ID)?.remove();
-    hideLoading();
+    endTransition();
   }
 
   /* ------------------------------------------------------------------ *
@@ -937,6 +995,7 @@ SHD.gate = (() => {
 
   return {
     arm, reveal, fail, release, reportError, standDown, onStop, resetForRoute, unblank,
+    parkOutgoing,
     syncNativeModal, engage, empty, notEmpty, emptyFeedReason,
     get revealed() { return revealed; },
     get failed() { return failed; },

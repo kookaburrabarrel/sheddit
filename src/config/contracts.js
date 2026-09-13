@@ -39,6 +39,27 @@ SHD.C = {
      so the copy is exactly the thing we replace. */
   FEED_EMPTY: '[data-testid="no-content"]',
 
+  /* A profile Reddit is GATING, as opposed to one that simply has nothing on the tab.
+     Reported from a live session on two accounts: Reddit serves zero post elements and
+     renders its own line saying the account keeps its posts hidden. We drew the ordinary
+     empty notice over that — "there doesn't seem to be anything here / u/X has nothing on
+     this tab" — which describes an account that has never posted and reads, to anyone who
+     knows the account HAS posted, as Sheddit failing to load them.
+
+     A TEXT test, and an UNVERIFIED one. Nobody has captured the markup around that line,
+     so there is no element or testid to key on and this reads Reddit's own words; if a
+     capture ever turns up a stable attribute, that is strictly better and should replace
+     this. English-only, like MORE_REPLIES_TEXT and the age gate, and documented as such
+     rather than pretended otherwise — a reader on another locale gets the generic notice,
+     which is the same thing they get today.
+
+     SCOPED BY THE CALLER to the empty case on a profile route, which is what keeps the
+     blast radius small: the only way to be wrong is to give a "hidden" explanation instead
+     of a "nothing here" one on a page that has no posts either way. Matching loosely
+     around `hidden` rather than pinning Reddit's exact sentence, because the sentence is
+     theirs to change and the failure mode of a near-miss is the old copy. */
+  PROFILE_HIDDEN: /\blikes to keep\b[\s\S]{0,40}?\bhidden\b/i,
+
   /* Pagination. The trailing partial carries loading="programmatic" — it does NOT
      self-trigger on scroll; Reddit's feed JS calls it. We call it ourselves via its
      public loadContent(). Verified live: 3 posts -> 28 posts in one call. */

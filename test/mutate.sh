@@ -288,8 +288,9 @@ mutate "an empty feed is written off as not-our-page" run \
                    "    if (true) return 'no-feed-container';"
 
 mutate "login-only buttons come back" run \
-  src/modules/listing.js "      h('li', null, h('a.share', { href: m.permalink, text: 'share' }))," \
-    "      h('li', null, h('a.share', { href: m.permalink, text: 'share' })),
+  src/modules/listing.js "        onclick: (e) => { e.preventDefault(); toggleShare(m); }
+      })),"  "        onclick: (e) => { e.preventDefault(); toggleShare(m); }
+      })),
       h('li', null, h('a.save', { href: m.permalink, text: 'save' })),
       h('li', null, h('a.report', { href: m.permalink, text: 'report' }))," 
 
@@ -851,11 +852,11 @@ mutate "any feed with no posts in it is called empty" run \
 # The copy. Saying "there is nothing here" without saying which question was asked is
 # Reddit's own mistake in our own markup.
 mutate "the empty line stops naming the time window" run \
-  src/modules/listing.js "    const why = onProfile ? \`\${where} has nothing on this tab.\`
-      : period ? \`\${where} has no posts from \${period.phrase}.\`
-        : timed ? \`\${where} has no posts in the time window this sort ranks over.\`
-          : \`\${where} has no posts.\`;" \
-                         "    const why = \`\${where} has no posts.\`;"
+  src/modules/listing.js "      : onProfile ? \`\${where} has nothing on this tab.\`
+        : period ? \`\${where} has no posts from \${period.phrase}.\`
+          : timed ? \`\${where} has no posts in the time window this sort ranks over.\`
+            : \`\${where} has no posts.\`;" \
+                         "      : \`\${where} has no posts.\`;"
 
 # ...and the other direction, which is the decision the window strip already defends one
 # file over: with no `t=` in the URL, Reddit's window is UNVERIFIED and neither the strip
@@ -2431,7 +2432,60 @@ mutate "the key guard swallows every key on the page" run \
 # A comment vote cannot reach a control that Reddit never hydrated, and for a whole
 # release it said nothing at all — log 62's sin, delivered to the reader as a dead click.
 mutate "a comment vote goes back to failing silently" run \
-  src/modules/account.js "      markUnavailable(col, kind);" "      ;"
+  src/modules/account.js "      markMiss(col, kind);" "      ;"
+
+# A post keeping its picture URL in a responsive srcset rather than in `src` got no
+# thumbnail at all, which on a live listing read as several rows missing their picture and
+# a ragged empty column beside them. The sibling resolver had read all three places since
+# galleries landed; this one had not.
+mutate "a thumbnail is only ever looked for in src" run \
+  src/core/model.js "    ...(img.getAttribute('srcset') || '').split(',').map(p => p.trim().split(/\s+/)[0]),
+    img.getAttribute(C.GALLERY_LAZY_SRC)
+  ];" "  ];"
+
+# ...and reading more PLACES must not mean reading more HOSTS: an earlier, looser rule gave
+# every text post a bogus thumbnail off a subreddit icon or a flair emoji.
+mutate "the thumbnail host allowlist stops applying" run \
+  src/core/model.js "        if (C.THUMB_HOSTS.test(host)) return url;" \
+                    "        if (host) return url;"
+
+# The teardown used to drop our rows the instant a route changed, leaving the viewport
+# empty until the next render — five seconds on a live username click, with the main thread
+# too busy to paint whatever we put up instead. A removal needs a paint to reach the screen
+# and so does its replacement, so holding the outgoing page is the only occupant of that
+# window that costs nothing.
+mutate "a route change empties the viewport again" extension \
+  src/core/pipeline.js "    SHD.gate.parkOutgoing();" \
+                       "    document.querySelector('#' + C.ROOT_ID)?.remove();"
+
+# ...and the parked copy must not outlive the transition, or a failure screen ends up over
+# the previous route's rows.
+mutate "the parked page is never retired" extension \
+  src/core/gate.js "    document.getElementById(LOADING_ID)?.remove();
+    retireOutgoing();" "    document.getElementById(LOADING_ID)?.remove();"
+
+# A profile Reddit GATES serves zero posts, exactly like one with nothing on the tab, so
+# the generic notice told a reader whose account demonstrably has posts that it has none —
+# which reads as the extension failing rather than as Reddit's answer.
+mutate "a hidden profile is described as an empty one again" run \
+  src/modules/listing.js "    const hidden = onProfile && C.PROFILE_HIDDEN.test(
+      (document.querySelector(C.MAIN) || document.body).textContent || '');" \
+                         "    const hidden = false;"
+
+# ...and the detector must not fire on every empty profile, which would be the same lie
+# pointed the other way.
+mutate "every empty profile is called hidden" run \
+  src/config/contracts.js '  PROFILE_HIDDEN: /\blikes to keep\b[\s\S]{0,40}?\bhidden\b/i,' \
+                          '  PROFILE_HIDDEN: /(?:)/,'
+
+# An inline picture with no height cap draws at its natural height, and a portrait shot
+# then puts the whole comment tree below the fold. The cap used to be scoped to a gallery's
+# frames, so a single image had nothing but the 640px width cap on its container.
+mutate "a tall inline picture fills the screen again" geometry \
+  src/styles/old-reddit.css "  height: auto;
+  max-height: 70vh;
+}" "  height: auto;
+}"
 
 # THE SUPPRESSION RULE'S TWO JOBS (log 107). It hides the native tree, and it leaves that
 # tree a real box to be laid out in. The first half had six declarations doing it and the
@@ -2473,9 +2527,9 @@ mutate "a vote never brings the native row into the box" extension \
 # ...and having given Reddit the chance, the click has to wait for it rather than
 # reporting a miss on the first look.
 mutate "a vote gives up on the first look" run \
-  src/modules/account.js "    if (dir === 1 ? btns.up : btns.down) return cast(col, m, kind, dir, btns);" \
-                         "    if (!(dir === 1 ? btns.up : btns.down)) { markUnavailable(col, kind); return; }
-    return cast(col, m, kind, dir, btns);"
+  src/modules/account.js "    if (!active()) return markMiss(col, kind, 'logged-out');" \
+                         "    if (!active()) return markMiss(col, kind, 'logged-out');
+    markMiss(col, kind); return;"
 
 # A reader treats an arrow that appears to have done nothing by clicking it again. If each
 # click started its own deadline both would land when the row hydrated, the second

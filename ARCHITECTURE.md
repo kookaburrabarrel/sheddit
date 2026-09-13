@@ -319,15 +319,26 @@ can still reach through Reddit's controls. **Every entry is a candidate as of 0.
 the settle is one signed-in `verify:live -- --headed` run (its LOGGED-IN SESSION section
 reports which clauses match), which needs a desk, not a container.
 
-**Vote** trusts the control, not the detector. A click resolves `C.NATIVE.upvote/downvote`
-from the hidden source at click time (the bar hydrates late, §1.3) and forwards if found —
-logged in or not, because the button's presence is Reddit's own statement that the session
-can use it. The detector only decides what a *miss* means: logged in, warn once with the
-evidence; logged out, nothing (§7d's documented state). The state is mirrored back in old
-reddit's classes (`likes`/`dislikes`, `upmod`/`downmod`) from Reddit's button
-(`aria-pressed`, `C.NATIVE.voteState`) when it exposes one — read after the click, now and
+**Vote** trusts what it can verify. A click resolves `C.NATIVE.upvote/downvote` from the
+hidden source at click time (the bar hydrates late, §1.3). Through 0.46.0 it then forwarded
+to whatever it found, logged in or not, on the rule that the button's presence is Reddit's
+own statement that the session can use it. **That rule is withdrawn.** Reported from a
+logged-out session on a live listing: Reddit now renders those buttons to everyone, so the
+click forwarded into nothing, the optimistic paint moved the score by one, and `settle()`
+could not take it back because a button served to a logged-out reader carries no
+`aria-pressed` for it to read. §7d's "logged out, nothing" is a stale measurement.
+
+The test is now **either** signal — a readable native state, or a session the detector
+recognises — because either one makes the vote answerable for. Neither, and the click casts
+nothing, forwards nothing, and the column is marked `data-shd-vote-miss="logged-out"` with
+copy naming the session rather than a control that has not arrived. The detector is still
+not trusted alone, which is what keeps a logged-in reader with an unfamiliar header voting.
+A *miss* with a session still warns once with the evidence.
+
+The state is mirrored back in old reddit's classes (`likes`/`dislikes`, `upmod`/`downmod`)
+from Reddit's button (`aria-pressed`, `C.NATIVE.voteState`) — read after the click, now and
 again after `settleMs`, so the page's answer beats our optimistic guess and a refused vote
-goes dark — and kept on a local toggle when it does not. The displayed score is
+goes dark. The displayed score is
 `delivered + (state − initial)`, `initial` being the first native state seen, because
 Reddit's `score` attribute already counts the reader's standing vote. Comments get the
 same column (arrows only; their score lives in the tagline), where before 0.34.0 the

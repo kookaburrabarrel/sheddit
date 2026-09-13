@@ -79,10 +79,20 @@ SHD.listing = (() => {
       && R.TIMED_SORTS.includes(R.sortOf());
     const period = timed ? R.TIMES.find(t => t.id === R.timeQuery) : null;
 
-    const why = onProfile ? `${where} has nothing on this tab.`
-      : period ? `${where} has no posts from ${period.phrase}.`
-        : timed ? `${where} has no posts in the time window this sort ranks over.`
-          : `${where} has no posts.`;
+    /* A gated profile is not an empty one, and saying so is the whole fix. Reddit serves
+       zero posts for an account that keeps them hidden, which is indistinguishable from an
+       account with nothing on the tab if all you count is rows — so the page said "u/X has
+       nothing on this tab", and a reader who knows that account has posted reads that as
+       Sheddit failing. Asked only here, where the answer is already "no posts" and the
+       only question left is why. */
+    const hidden = onProfile && C.PROFILE_HIDDEN.test(
+      (document.querySelector(C.MAIN) || document.body).textContent || '');
+
+    const why = hidden ? `${where} keeps their posts hidden, so Reddit serves none of them.`
+      : onProfile ? `${where} has nothing on this tab.`
+        : period ? `${where} has no posts from ${period.phrase}.`
+          : timed ? `${where} has no posts in the time window this sort ranks over.`
+            : `${where} has no posts.`;
     /* A hint only where there is a control to point at — the "links from:" strip is
        rendered by the same tab menu that sits directly above this box. A hint with
        nothing behind it would be the "control that ignores a click" failure (bug 62) in
@@ -92,8 +102,14 @@ SHD.listing = (() => {
         : 'Reddit applies one whether or not the URL says so, and does not say which. '
           + 'Pick a window above to make it explicit.';
 
+    /* The headline moves too. "there doesn't seem to be anything here" is a statement of
+       uncertainty — it is the right note for a feed we cannot account for, and the wrong
+       one when Reddit has told us exactly what is going on. A hidden profile is an answer,
+       not a puzzle, and the line should not invite the reader to suspect the extension. */
     return h('div.' + EMPTY_CLASS, null, [
-      h('p.shd-empty-line', { text: "there doesn't seem to be anything here" }),
+      h('p.shd-empty-line', {
+        text: hidden ? 'this profile is hidden' : "there doesn't seem to be anything here"
+      }),
       h('p.shd-empty-why', { text: why }),
       hint ? h('p.shd-empty-hint', { text: hint }) : null
     ]);
@@ -258,7 +274,19 @@ SHD.listing = (() => {
             }
           }))
         : null,
-      h('li', null, h('a.share', { href: m.permalink, text: 'share' })),
+      /* SHARE SHOWS THE LINK RATHER THAN FOLLOWING IT.
+         It shipped as `href: permalink` — which on a LISTING navigates away from the feed
+         to the comments page, and on a COMMENTS page navigates to the page you are already
+         on, so it reads as a control that does nothing. Reported from a live session as
+         exactly that. It is the same trap `watch` above is already excluded from, one
+         button along, and the same trap that took save and report off this row.
+         Old reddit expanded a box under the row rather than navigating, so a box is both
+         the faithful shape and the one that works: the URL in a field, selected, ready to
+         copy, with no clipboard permission and no session needed. */
+      h('li', null, h('a.share', {
+        href: m.permalink, text: 'share',
+        onclick: (e) => { e.preventDefault(); toggleShare(m); }
+      })),
       /* No save/report. Both need a session, and both shipped as `href: permalink`, so
          they looked like actions and silently navigated to the comments page instead.
          This extension targets logged-out reading (README "Scope"), and old reddit did
@@ -272,6 +300,38 @@ SHD.listing = (() => {
   }
 
   const row = (id) => document.querySelector(`#shd-root ${SHD.dom.rowSel(id)}`);
+
+  /**
+   * Open (or close) the share box under a row: the post's own URL, in a field, selected.
+   *
+   * ABSOLUTE, not the relative permalink the row's links carry, because the one thing a
+   * reader does with this is paste it somewhere else — `/r/x/comments/y/z/` is useless
+   * outside reddit.com and looks like it worked. Built from the page's own origin rather
+   * than a literal, so a reader on sh.reddit.com is not handed a URL for a host they are
+   * not on. A permalink that is already absolute is left exactly as it is.
+   *
+   * Toggling rather than stacking: a second click closes it, which is what makes this a
+   * control rather than something that only accumulates. Focus and select on open so the
+   * next keystroke is a copy, and no clipboard write of our own — that would need a
+   * gesture we cannot guarantee and would make a silent failure look like a success.
+   */
+  function toggleShare(m) {
+    const thing = row(m.id);
+    const entry = thing?.querySelector(':scope > .entry');
+    if (!entry) return;
+    const open = entry.querySelector(':scope > .shd-sharebox');
+    if (open) { open.remove(); return; }
+    let href = m.permalink || m.href || '';
+    try { href = new URL(href, location.origin).href; } catch { /* keep what we have */ }
+    const field = h('input.shd-share-url', { type: 'text', readonly: '', value: href,
+                                             'aria-label': 'link to this post' });
+    entry.appendChild(h('div.shd-sharebox', null, [
+      h('span.shd-share-label', { text: 'link to this post' }),
+      field
+    ]));
+    field.focus();
+    field.select();
+  }
 
   /** model -> DOM node. Pure; no side effects on the page. */
   function render(m) {
