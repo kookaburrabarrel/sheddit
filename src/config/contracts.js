@@ -763,11 +763,31 @@ SHD.C = {
    * through the browser's own editing command (Lexical listens for beforeinput; a direct
    * text set is reconciled away) — and the `submit` is <button rpl slot type> "Comment".
    * `[data-lexical-editor]` is listed so the contract names what was seen; the
-   * contenteditable clauses are the generic fallback. STILL UNVERIFIED: the per-comment
-   * composer Reddit mounts after its reply control is clicked (the probe reads, it never
-   * clicks), and whether `execCommand('insertText')` lands in Lexical from a content
-   * script — the account layer's fallback (reveal the composer with the draft kept) covers
-   * a no. Each miss has the same fail-safe: the native composer is revealed in place
+   * contenteditable clauses are the generic fallback.
+   *
+   * NOW VERIFIED, and the answer is no — measured on a signed-in thread, both directions:
+   *
+   *   composer state                | execCommand | synthetic paste | textContent =
+   *   collapsed (what we hit first) | false       | nothing lands   | reconciled away
+   *   after a TRUSTED user click    | works       | works           | reconciled away
+   *
+   * Two things follow, and both are in account.js rather than here because neither is a
+   * selector problem. Reddit mounts that editor only on a real user gesture: `host.click()`
+   * and a full pointerdown/mousedown/pointerup/mouseup/click sequence on the placeholder
+   * both produced no editor, no submit button and `execCommand` still false. A content
+   * script cannot fake activation and that is the end of it. And `textContent =` never
+   * works against Lexical in either state, so the check on it has to look again after the
+   * editor has had its turn (landed()) — reading it back synchronously returns true for
+   * text that is about to be removed, which was a false positive with a submit behind it.
+   *
+   * What the ceiling actually costs is one extra click: the reader opens Reddit's box
+   * themselves, it stays open, and a second save then completes the whole chain. That is
+   * what the handoff now tells them to do.
+   *
+   * STILL UNVERIFIED: whether the PER-COMMENT composer has the same ceiling. Its reply
+   * control is clicked by us and is therefore untrusted in the same way — if Reddit gates
+   * that button on `isTrusted` too, replies fail identically and take the identical route
+   * out; if it is a plain handler, they work. Open question 17 names the probe. Each miss has the same fail-safe: the native composer is revealed in place
    * (passthrough), and the reader finishes in Reddit's UI. account.js's `compose()`
    * measures the outcome — a new comment element arriving under the target — rather than
    * assuming the click worked (the "N more replies" lesson, log bug 90).

@@ -2434,6 +2434,36 @@ mutate "the key guard swallows every key on the page" run \
 mutate "a comment vote goes back to failing silently" run \
   src/modules/account.js "      markMiss(col, kind);" "      ;"
 
+# Reddit ships the top-level composer COLLAPSED, and the dormant [contenteditable] inside
+# it matches C.COMPOSER.editor — so the editor lookup succeeded, the insert then failed for
+# want of anything live to insert into, and the reader was told the text field had refused
+# their words about a box that was never open.
+mutate "a dormant editor counts as an open composer again" run \
+  src/modules/account.js "    const opened = await waitFor(
+      () => SHD.dom.deepQuery(host, C.COMPOSER.submit), timings.composeWaitMs);
+    if (!opened) return { ok: false, step: 'composer', host };" ""
+
+# THE ONE THAT COULD SPEND A READER'S COMMENT. A rich editor reconciles its DOM against its
+# own model, so text written straight in is removed a moment later — and insertText() read
+# it back on the next line, inside that window, returning true for text that no longer
+# existed. compose() takes that as permission to press submit: an empty comment posted under
+# the reader's name, and the draft gone with it.
+mutate "inserted text is checked before the editor can take it back" run \
+  src/modules/account.js "    if (!has()) return false;
+    await new Promise(r => setTimeout(r, timings.reconcileMs));
+    return has();" "    return has();"
+
+# "A message nobody can read is not a fallback" was written about the draft; it was equally
+# true of the message about the draft. The status line lives in the reply form, inside
+# #shd-root, which the handoff hides — so the sentence saying "your text is still here" was
+# delivered to the side of the page the reader had just been taken off.
+mutate "the handoff message goes only where it cannot be read" run \
+  src/modules/account.js "      SHD.dom.passthroughNote(said);" "      ;"
+
+mutate "the exit bar's note setter writes nothing" run \
+  src/core/dom.js "    note.textContent = text;
+    return true;" "    return true;"
+
 # A post keeping its picture URL in a responsive srcset rather than in `src` got no
 # thumbnail at all, which on a live listing read as several rows missing their picture and
 # a ragged empty column beside them. The sibling resolver had read all three places since

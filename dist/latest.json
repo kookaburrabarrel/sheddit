@@ -1,6 +1,6 @@
 {
-  "version": "0.47.0",
-  "released": "2026-09-13",
+  "version": "0.48.0",
+  "released": "2026-09-14",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.47.0 comes from one logged-out session on live Reddit. The serious one: clicking an arrow while logged out moved the score and lit the arrow without casting anything. Reddit now shows vote buttons to everyone, so their presence had stopped proving a vote could land, and nothing could take the invented number back. A vote is only shown as cast when something can answer for it, and otherwise the arrow says you are not logged in. Also: changing pages no longer empties the screen while the next one loads — the page you were reading stays put; a tall image no longer pushes the whole comment thread below the fold; share opens the link instead of navigating to the page you are already on; a profile Reddit hides says so rather than looking like nothing loaded; and posts whose picture URL lives in a responsive image set get their thumbnails back."
+  "notes": "0.48.0 fixes the reply box for signed-in readers, and one fault in it could have posted an empty comment in your name. Reddit only opens its comment box when you click it yourself, which Sheddit cannot do for you — but it had no way to tell an unopened box from an open one, so it reported the wrong problem and, in the wrong moment, could have pressed Reddit's post button on a box that had just emptied itself. It now checks that the text stayed put before anything is sent, says which step actually failed, and tells you the one thing that works: click Reddit's box once yourself, then come back and save again. The message saying where your draft went is now shown on the side of the page you are actually looking at. Your draft was never at risk and still is not."
 }

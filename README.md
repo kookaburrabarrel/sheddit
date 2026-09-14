@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.47.0](https://img.shields.io/badge/version-0.47.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.48.0](https://img.shields.io/badge/version-0.48.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.47.0 is out — everyone is welcome to try it
+### Beta 0.48.0 is out — everyone is welcome to try it
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
@@ -75,6 +75,23 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
+
+**0.48.0 — the signed-in reply box**
+- **Fixed:** a fault that could have posted an empty comment in your name. Sheddit puts
+  your draft into Reddit's own box and presses Reddit's own button; it checked the text had
+  arrived by reading the box back immediately, before Reddit's editor had accepted or
+  rejected it — so text about to be discarded still read as present, and that reading
+  authorised pressing post. It now waits to see the text stay. Your draft was never at risk.
+- **Fixed:** the wrong step was blamed every time. Reddit ships its comment box collapsed
+  and builds the editor only when you click it; Sheddit could not tell that from an open
+  box, so it reported "could not put the text into Reddit's reply box" about a box that had
+  never opened.
+- **Fixed:** when Sheddit hands you to Reddit's own box it hides its own layout — and the
+  sentence saying where your draft went was written into that layout. It now appears in the
+  bar beside "← back to sheddit" too.
+- **Changed:** it tells you the thing that works. Reddit opens that box only for a real
+  click and an extension's does not count — but yours does, and it stays open: click
+  Reddit's box once, press "← back to sheddit", save again.
 
 **0.47.0 — what a logged-out session on live Reddit found**
 - **Fixed:** clicking an arrow while logged out moved the score and lit the arrow without
@@ -260,7 +277,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.47.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.48.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

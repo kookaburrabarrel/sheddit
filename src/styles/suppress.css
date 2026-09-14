@@ -162,6 +162,17 @@ html.shd-passthrough-active #shd-header { display: none !important; }
   font: bold 11px var(--shd-font, Verdana, Arial, sans-serif);
 }
 #shd-passthrough-exit a { color: var(--shd-accent, #369); text-decoration: none; }
+/* The sentence about the reader's draft. It lives HERE, not in the reply form, because a
+   handoff hides #shd-root and takes the form's own status line with it — see
+   SHD.dom.passthroughNote(). Wraps rather than widening the bar: this is a sentence, and
+   on a narrow window it is the half that has to give. */
+#shd-passthrough-exit .shd-passthrough-note {
+  display: block;
+  max-width: 46em;
+  margin-top: 3px;
+  font-weight: normal;
+  color: var(--shd-text, #1a1a1b);
+}
 
 /* ---------------------------------------------------------------------------
  * The failure screen.

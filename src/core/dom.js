@@ -251,6 +251,31 @@ SHD.dom = (() => {
   }
 
   /** Undo passthrough() and put our own layout back. */
+  /**
+   * Put a sentence in the exit bar, which is the ONE surface of ours a reader can still
+   * see once a handoff is up.
+   *
+   * passthrough() hides #shd-root, and the reply form — with its status line — is inside
+   * it. So the sentence explaining where the reader's draft went, including the one that
+   * literally reads "your text is still here, behind ← back to sheddit", was being written
+   * onto the half of the page they had just been taken off. account.js's own comment two
+   * functions up says "a message nobody can read is not a fallback"; that was written
+   * about the draft and the same thing was true of the message about it.
+   *
+   * The bar is excluded from the suppression rule and fixed at the top of the viewport, so
+   * it survives everything the handoff hides. Nothing here creates it: a note without a
+   * bar to sit in has no reader either, so this reports false and the caller's own status
+   * line stays the record.
+   */
+  function passthroughNote(text) {
+    const bar = document.getElementById(EXIT_ID);
+    if (!bar) return false;
+    let note = bar.querySelector('.shd-passthrough-note');
+    if (!note) note = bar.appendChild(h('span.shd-passthrough-note'));
+    note.textContent = text;
+    return true;
+  }
+
   function passthroughClear() {
     for (const cls of [PASS, PASS_HIDE, PASS_ROOT]) {
       document.querySelectorAll('.' + cls).forEach(e => e.classList.remove(cls));
@@ -279,5 +304,5 @@ SHD.dom = (() => {
     `.thing[data-fullname="${String(id).replace(/["\\]/g, '\\$&')}"]`;
 
   return { h, score, ago, domain, plural, inlineGifs, adoptBody, rowSel,
-           deepQuery, shadowRoots, passthrough, passthroughClear };
+           deepQuery, shadowRoots, passthrough, passthroughNote, passthroughClear };
 })();
