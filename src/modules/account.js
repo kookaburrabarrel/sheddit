@@ -62,10 +62,14 @@ SHD.account = (() => {
              reply control is clicked.
      hydrateWaitMs: how long to wait for Reddit to mount a comment's action row after the
              row has been scrolled inside the suppressed tree's box (nudge()).
+     reconcileMs: how long inserted text has to survive before it counts as landed. A rich
+             editor reconciles its DOM against its own model a microtask or a frame after
+             the write, and text that does not outlive that was never accepted (landed()).
      arriveWaitMs: how long to wait for the posted comment to appear before calling the
              submit lost and revealing the native composer. */
   const timings = { syncMs: 1500, settleMs: 400, composeWaitMs: 4000, pollMs: 100, arriveWaitMs: 8000,
-                    drawerWaitMs: 4000, logoutWaitMs: 6000, hydrateWaitMs: 3000 };
+                    drawerWaitMs: 4000, logoutWaitMs: 6000, hydrateWaitMs: 3000,
+                    reconcileMs: 120 };
 
   const active = () => SHD.session.active();
 
@@ -469,11 +473,40 @@ SHD.account = (() => {
    * the node's text is set directly and an input event dispatched — the honest fallback,
    * and the one whose result is checked before anything is submitted.
    */
-  function insertText(editor, text) {
+  /**
+   * DID IT LAND, AND DID IT STAY? The second half is not pedantry.
+   *
+   * A rich-text editor owns its DOM and reconciles it against its own model. Writing
+   * `textContent` into one puts the words on screen for a moment and then the editor
+   * removes them again — measured on a live thread, where two <p> nodes appeared in
+   * Reddit's editor and were gone by the next frame. The old check read `textContent`
+   * SYNCHRONOUSLY, one line after writing it, which is inside that moment: it returned
+   * true for text that no longer existed by the time anything used the answer.
+   *
+   * What that bought was the worst outcome available here. compose() takes a true from
+   * insertText() as permission to press Reddit's submit — so a false positive posts an
+   * EMPTY comment under the reader's name, and the draft they typed goes nowhere. Every
+   * other failure in this file leaves the reader's words in our form and says so; this one
+   * would have spent their comment on nothing.
+   *
+   * So the answer is given a turn of the event loop to be wrong in. The editor's own
+   * reconciliation is a microtask or a frame away; anything that survives this is text the
+   * editor has accepted rather than text that is briefly in its DOM.
+   */
+  async function landed(editor, text) {
+    const has = () => (editor.textContent || '').includes(text);
+    if (!has()) return false;
+    await new Promise(r => setTimeout(r, timings.reconcileMs));
+    return has();
+  }
+
+  async function insertText(editor, text) {
     try {
       if (typeof editor.focus === 'function') editor.focus();
       const tag = editor.tagName;
       if (tag === 'TEXTAREA' || tag === 'INPUT') {
+        /* No reconciliation to outlive: a form control's value is the model, so what we
+           wrote is what is there. Checked immediately and synchronously, as before. */
         editor.value = text;
         editor.dispatchEvent(new Event('input', { bubbles: true }));
         return editor.value === text;
@@ -483,6 +516,10 @@ SHD.account = (() => {
         done = typeof document.execCommand === 'function' &&
                document.execCommand('insertText', false, text) === true;
       } catch { done = false; }
+      /* The honest fallback, kept for a PLAIN contenteditable, where setting text is the
+         whole of what an editor is. Against a rich editor it is a no-op that looks like a
+         success for a moment — which is exactly what landed() is now there to catch, and
+         why the fallback no longer needs to know which kind it is talking to. */
       if (!done || !(editor.textContent || '').includes(text)) {
         editor.textContent = text;
         const ev = typeof InputEvent === 'function'
@@ -490,7 +527,7 @@ SHD.account = (() => {
           : new Event('input', { bubbles: true });
         editor.dispatchEvent(ev);
       }
-      return (editor.textContent || '').includes(text);
+      return await landed(editor, text);
     } catch { return false; }
   }
 
@@ -518,11 +555,28 @@ SHD.account = (() => {
       host = await waitFor(() => findHost(target, kind, before) || findHost(target, kind), timings.composeWaitMs);
       if (!host) return { ok: false, step: 'composer', host: null };
     }
+    /* A COMPOSER THAT HAS NOT OPENED IS NOT A COMPOSER, and from a selector's side of the
+       glass it looks exactly like one.
+       Reddit ships the top-level composer COLLAPSED — a "Join the conversation" box whose
+       rich editor has not been mounted. The dormant `[contenteditable]` inside it still
+       matches C.COMPOSER.editor, so the editor lookup below used to succeed, and every
+       failure was then attributed to `insert`: the one step that had in fact done nothing
+       wrong got the blame, while the step that had actually failed reported success.
+       Measured on a live thread; the reader saw "could not put the text into Reddit's
+       reply box" for a box that was never open.
+       The submit control is the discriminator, and a measured one: a collapsed composer
+       has none, and one opened by a real click has both. Asked here, BEFORE the editor, so
+       `composer` is what a collapsed box reports — which is also the step whose fallback is
+       the right one, since there is nothing to type into. */
+    const opened = await waitFor(
+      () => SHD.dom.deepQuery(host, C.COMPOSER.submit), timings.composeWaitMs);
+    if (!opened) return { ok: false, step: 'composer', host };
     const editor = await waitFor(() => SHD.dom.deepQuery(host, C.COMPOSER.editor), timings.composeWaitMs);
     if (!editor) return { ok: false, step: 'editor', host };
-    if (!insertText(editor, text)) return { ok: false, step: 'insert', host };
-    const submit = SHD.dom.deepQuery(host, C.COMPOSER.submit);
-    if (!submit) return { ok: false, step: 'submit', host };
+    if (!await insertText(editor, text)) return { ok: false, step: 'insert', host };
+    // Re-resolved rather than reusing `opened`: an editor that has just taken its first
+    // text is exactly when a composer swaps a disabled button for a live one.
+    const submit = SHD.dom.deepQuery(host, C.COMPOSER.submit) || opened;
     const count = commentsUnder(target, kind);
     submit.click();
     // Measured, not assumed: the reply is posted when a comment arrives under the target
@@ -577,16 +631,38 @@ SHD.account = (() => {
     host = host || await waitFor(() => findHost(target, kind), timings.composeWaitMs);
     if (!host) return false;
     const editor = await waitFor(() => SHD.dom.deepQuery(host, C.COMPOSER.editor), timings.composeWaitMs);
-    return !!editor && insertText(editor, text);
+    return !!editor && await insertText(editor, text);
   }
 
   const STEP_COPY = {
     'reply-control': 'could not find Reddit\'s reply button for this comment',
-    composer: 'Reddit did not open its reply box',
+    composer: 'could not get Reddit to open its reply box',
     editor: 'could not find the text field in Reddit\'s reply box',
     insert: 'could not put the text into Reddit\'s reply box',
     submit: 'could not find Reddit\'s submit button',
     arrival: 'no reply appeared — it may still be posting'
+  };
+
+  /**
+   * WHAT TO DO ABOUT IT, for a reader now looking at Reddit's own page.
+   *
+   * Separate from STEP_COPY because on this side of a handoff the diagnosis is the less
+   * useful half of the sentence. The reader does not need to know which selector missed;
+   * they need the next action, and for the commonest failure there is a good one.
+   *
+   * THE SECOND ATTEMPT WORKS, and that is a measurement rather than a hope. Reddit mounts
+   * its rich editor only on a real user gesture — tested from a live thread, where
+   * host.click() and a full synthetic pointer sequence both produced nothing at all, and a
+   * genuine click produced a working editor immediately. Our own click cannot be trusted
+   * and never will be. But the reader's can: once THEY have opened the box, the composer
+   * stays open, so coming back and pressing save again finds a live editor and the whole
+   * chain completes. So the instruction is two clicks, not "retype it".
+   */
+  const HANDOFF_COPY = {
+    composer: 'Reddit only opens its reply box when you click it yourself — click it once, ' +
+              'then press “← back to sheddit” and save again',
+    editor: 'Reddit only opens its reply box when you click it yourself — click it once, ' +
+            'then press “← back to sheddit” and save again'
   };
 
   /**
@@ -693,11 +769,18 @@ SHD.account = (() => {
       catch { carried = false; }
       if (!form.isConnected) return;
       form.dataset.shdCarried = carried ? 'yes' : 'no';
-      status.textContent = posted
+      const said = posted
         ? 'sheddit did not see your reply appear, and it may already have posted — check the thread before sending it again. Your text is still here, behind “← back to sheddit”.'
         : carried
           ? `sheddit ${STEP_COPY[r.step] || 'could not post this'} — your text is in Reddit's reply box; press its own reply button to post it`
-          : `sheddit ${STEP_COPY[r.step] || 'could not post this'} — your text is still here, behind “← back to sheddit”`;
+          : `sheddit ${STEP_COPY[r.step] || 'could not post this'} — ${
+              HANDOFF_COPY[r.step] || 'your text is still here, behind “← back to sheddit”'}`;
+      status.textContent = said;
+      /* AND ON THE SIDE OF THE PAGE THE READER IS NOW LOOKING AT. The line above is inside
+         #shd-root, which the handoff has just hidden — so on its own it is an explanation
+         delivered to nobody, including the one that says "your text is still here". The
+         exit bar is the only surface of ours that survives a passthrough. */
+      SHD.dom.passthroughNote(said);
     });
     return form;
   }

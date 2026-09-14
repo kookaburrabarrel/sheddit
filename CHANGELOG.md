@@ -20,6 +20,56 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.48.0
+
+All of this is the signed-in reply box, from one report on a live thread. The account layer
+is still experimental — see the notice at the top of the README — and this is the kind of
+thing that notice is about.
+
+### Fixed — a fault that could have posted an empty comment in your name
+
+Sheddit does not post through an API. It puts your draft into Reddit's own comment box and
+presses Reddit's own button. To know whether the text arrived, it read the box back
+afterwards — but it read it *immediately*, and Reddit's editor takes a moment to accept or
+reject what it has been handed. Text that was about to be thrown away still read as
+present, and that reading was what authorised pressing post.
+
+Nothing appears to have come of it in practice, and the draft was never at risk. But the
+failure it allowed is the worst one available here: an empty comment posted under your
+name, with the words you wrote dropped. The check now waits to see whether the text stayed
+before anything is sent.
+
+### Fixed — the wrong step was blamed, every time
+
+Reddit ships its comment box collapsed — the "Join the conversation" bar — and the real
+editor is not built until you click it. Sheddit could not tell that from an open box, so it
+tried to type into one that was not there and reported "could not put the text into
+Reddit's reply box" about a box that had never opened. It now checks whether the box is
+actually open first, and says so when it is not.
+
+### Fixed — the explanation was on the side of the page you had just left
+
+When Sheddit hands you over to Reddit's own box, it hides its own layout — and the sentence
+telling you where your draft went was written into that layout. So the message reading
+"your text is still here" was, itself, somewhere you could not read it. It now also appears
+in the bar at the top, next to "← back to sheddit".
+
+### Changed — it now tells you the thing that works
+
+Reddit opens its comment box only for a real click, and an extension's click does not
+count. That is a hard limit and not something a future version will get around. But your
+click does count, and the box stays open afterwards — so the message now says: click
+Reddit's box once yourself, press "← back to sheddit", and save again. The second attempt
+goes through.
+
+### Still true
+
+Your draft is never discarded. It stays in Sheddit's box through every one of these
+failures, and "← back to sheddit" brings it back intact — which is what the reporter
+confirmed on the live thread.
+
+---
+
 ## 0.47.0
 
 All of this came out of one logged-out session on live Reddit — which is the session this

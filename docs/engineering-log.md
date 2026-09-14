@@ -1844,6 +1844,54 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      one never revisited.
 
 
+111. **The reply chain blamed the one step that had not failed, and could have posted an
+     empty comment.** Reported from a signed-in thread where `save` failed at `insert`. The
+     reader's diagnosis went further than the symptom and turned a contract note that had
+     read *STILL UNVERIFIED* since 0.34.0 into a measurement.
+
+     **A collapsed composer looks exactly like an open one.** Reddit ships the top-level
+     composer as a "Join the conversation" box whose Lexical editor has not been mounted.
+     The dormant `[contenteditable]` inside it still matches `C.COMPOSER.editor` — so the
+     editor lookup SUCCEEDED, the insert then failed for want of anything live to insert
+     into, and the reader was told "could not put the text into Reddit's reply box" about a
+     box that had never opened. The step that actually failed reported success and the step
+     that was blamed had not run. A collapsed box has no submit control and an opened one
+     has both, so that is the liveness test now, asked before the editor rather than after
+     it — which also puts the failure on `composer`, the step whose fallback is the right
+     one, since there is nothing to type into.
+
+     **And the insert check was a false positive with a submit behind it.** `insertText()`
+     wrote `textContent` and read it back on the next line. A rich editor reconciles its DOM
+     against its own model a microtask or a frame later — measured live as two `<p>` nodes
+     appearing in Reddit's editor and gone by the next frame — so that read was inside the
+     window where the text still existed. `compose()` takes a true from `insertText()` as
+     permission to press Reddit's submit. The failure mode was therefore an EMPTY comment
+     posted under the reader's name with their draft dropped: every other miss in this file
+     keeps their words and says so, and this one would have spent them on nothing. The
+     answer is now given a turn of the event loop to be wrong in (`landed()`).
+
+     **The ceiling itself is real and cannot be worked around.** `host.click()` and a full
+     pointerdown/mousedown/pointerup/mouseup/click sequence on the placeholder both produced
+     no editor, no submit button and `execCommand` still false. Reddit mounts that editor
+     only on a genuine user gesture; a content script cannot fake activation. What it costs
+     is one click, not the feature: the reader opens the box themselves, it stays open, and
+     a second save completes the whole chain — which is what the handoff now says, in those
+     words, instead of naming a selector.
+
+     **The message was being delivered to the wrong side of the page.** `handoff()` reveals
+     the composer, which hides `#shd-root` — and the reply form's status line is inside it.
+     So the sentence explaining where the draft went, including the one reading "your text
+     is still here, behind ← back to sheddit", was on the half of the page the reader had
+     just been taken off. `handoff()`'s own comment says "a message nobody can read is not
+     a fallback"; that was written about the draft in 0.45.0 and was equally true of the
+     message about the draft, which nobody noticed because the `carried: yes` path it was
+     written for puts its words in Reddit's box where they are visible. The exit bar is the
+     one surface a passthrough leaves standing, so the sentence goes there too.
+
+     The draft itself was never at risk, and that is worth recording as the thing that held:
+     pressing "← back to sheddit" returned it intact, exactly as designed.
+
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
@@ -2362,6 +2410,27 @@ the way a question got settled is usually more useful than the answer.
     It is listed here rather than fixed on the best hypothesis deliberately. `paginator.js`
     carries three reverts that came from reasoning about it instead of measuring it, and
     question 14 above is the standing note saying so.
+
+
+17. **Whether the per-comment composer has the same trusted-gesture ceiling the top-level
+    one does.** Log 111 settled the top-level case: Reddit mounts its rich editor only on a
+    real user gesture, `host.click()` and a full synthetic pointer sequence both produce
+    nothing, and a content script cannot fake activation. `compose()` reaches a REPLY
+    composer differently — it clicks `C.NATIVE.reply` on the comment — and that click is
+    untrusted in exactly the same way.
+
+    So there are two possibilities and they are one measurement apart. If Reddit's Reply
+    button is a plain handler, our click opens the composer and replies work as they do
+    today. If it gates on `isTrusted`, replies hit the identical ceiling and take the
+    identical route out — the liveness gate reports `composer`, the handoff reveals
+    Reddit's box, and the reader is told to click it once and save again. Nothing breaks
+    either way, which is why this is a question rather than a bug.
+
+    THE READING, signed in, on a thread, with the layout up: press `reply` on a comment,
+    let the save fail or succeed, then check `data-shd-step` on the form. `composer` means
+    the ceiling is there too and this entry becomes a log. Anything past it — `editor`,
+    `insert`, or a posted reply — means the reply control is not gated and only the
+    top-level composer is.
 
 
 Two settled things, so nobody reopens them: the **staircase indentation report does not

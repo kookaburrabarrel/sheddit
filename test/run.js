@@ -6285,9 +6285,23 @@ async function boot(html, url, setup) {
     const isComment = source.tagName === 'SHREDDIT-COMMENT';
     const composer = doc.createElement('comment-composer-host');
     let editor;
-    if (opts.composer === 'contenteditable') {
+    if (opts.composer === 'contenteditable' || opts.composer === 'lexical') {
       editor = doc.createElement('div');
       editor.setAttribute('contenteditable', 'true');
+      /* `lexical` is Reddit's ACTUAL editor, modelled by the one behaviour that matters
+         here: it owns its DOM and reconciles it against its own model, so text written
+         straight into it is removed again a moment later. Measured on a live thread —
+         two <p> nodes appeared in Reddit's editor and were gone by the next frame.
+         A plain contenteditable (above) keeps what it is given, which is why both shapes
+         exist: the fallback write is right for one and a no-op for the other, and the
+         only honest way to tell them apart is to look again afterwards. */
+      if (opts.composer === 'lexical') {
+        editor.addEventListener('input', () => {
+          // Asynchronously, like a real reconciliation — a synchronous wipe would be
+          // caught by a synchronous check, which is precisely the bug being modelled.
+          setTimeout(() => { editor.textContent = ''; }, 0);
+        });
+      }
     } else {
       editor = doc.createElement('textarea');
     }
@@ -6321,7 +6335,14 @@ async function boot(html, url, setup) {
         composer.remove();
       }, 30);
     });
-    composer.append(editor, submit);
+    /* COLLAPSED is what Reddit actually ships for a top-level comment: a "Join the
+       conversation" box whose rich editor has not been mounted. The dormant
+       `[contenteditable]` is present and matches C.COMPOSER.editor, so a lookup finds an
+       "editor" that cannot take text — which is how every failure here used to be blamed
+       on `insert`, the one step that had done nothing wrong. What a collapsed box does NOT
+       have is a submit control, and that is the discriminator the code now uses. */
+    composer.append(editor);
+    if (opts.composer !== 'collapsed') composer.append(submit);
     (isComment ? source : doc.querySelector('#main-content')).appendChild(composer);
     state.composer = composer;
     state.editor = editor;
@@ -6969,12 +6990,35 @@ async function boot(html, url, setup) {
     check('a composer that never appears is reported as that step',
       await waitFor(() => formOf('t1_c3')?.dataset.shdState === 'failed', { timeout: 2000 }) &&
       formOf('t1_c3').dataset.shdStep === 'composer' &&
-      /did not open/.test(formOf('t1_c3').querySelector('.shd-reply-status').textContent),
+      /could not get Reddit to open/.test(formOf('t1_c3').querySelector('.shd-reply-status').textContent),
+      formOf('t1_c3')?.querySelector('.shd-reply-status')?.textContent);
+    /* AND WHAT TO DO, which is the half the reader needs. Reddit mounts its editor only on
+       a real user gesture — measured live, where a synthetic click sequence produced
+       nothing and a genuine one produced a working editor at once. Ours will never be
+       trusted; theirs is, and the composer stays open afterwards, so a second save goes
+       through. The instruction is two clicks rather than "retype it". */
+    // The status above is the INTERIM one, set while the handoff is still running; the
+    // sentence the reader is left with lands with shdCarried, after it has finished.
+    await waitFor(() => formOf('t1_c3')?.dataset.shdCarried, { timeout: 4000 });
+    check('...and the reader is told the one thing that makes it work',
+      /click it once/.test(formOf('t1_c3').querySelector('.shd-reply-status').textContent) &&
+      /save again/.test(formOf('t1_c3').querySelector('.shd-reply-status').textContent),
       formOf('t1_c3')?.querySelector('.shd-reply-status')?.textContent);
     check('...the draft is kept', formOf('t1_c3').querySelector('textarea').value === 'This one will not get through.');
     check('...and Reddit\'s own comment is revealed in place so the reader can finish there',
       doc.documentElement.classList.contains('shd-passthrough-active') &&
       doc.querySelector('shreddit-comment[thingid="t1_c3"]').classList.contains('shd-passthrough'));
+    /* A MESSAGE NOBODY CAN READ IS NOT A FALLBACK, and that applied to the message as well
+       as to the draft it was about. The status line above lives in the reply form, inside
+       #shd-root, which the handoff has just hidden — so every word of it, including "your
+       text is still here", was being delivered to the side of the page the reader had just
+       been taken off. The exit bar is the only surface of ours a passthrough leaves up. */
+    const bar = doc.querySelector('#shd-passthrough-exit');
+    check('...and the same sentence reaches the side of the page they can actually see',
+      /click it once/.test(bar?.querySelector('.shd-passthrough-note')?.textContent || ''),
+      bar?.textContent);
+    check('...without losing the way back',
+      !!bar?.querySelector('a'), bar?.innerHTML?.slice(0, 120));
     click(window, doc.querySelector('#shd-passthrough-exit a'));
     check('coming back from the passthrough finds the draft still there',
       !doc.documentElement.classList.contains('shd-passthrough-active') &&
@@ -7010,6 +7054,59 @@ async function boot(html, url, setup) {
     check('...and the reader is never taken off the layout to do it',
       await waitFor(() => !formOf('t1_c6'), { timeout: 1500 }) &&
       !doc.documentElement.classList.contains('shd-passthrough-active'));
+
+    /* --- A COLLAPSED COMPOSER IS NOT AN OPEN ONE, AND IT LOOKS EXACTLY LIKE ONE ---
+       Reported from a signed-in thread. Reddit ships the top-level composer collapsed — a
+       "Join the conversation" box whose rich editor has not been mounted — and the dormant
+       `[contenteditable]` inside it still matches C.COMPOSER.editor. So the editor lookup
+       succeeded, the insert then failed because there was nothing live to insert into, and
+       the reader was told "could not put the text into Reddit's reply box" about a box that
+       was never open. The step that actually failed reported success; the step that was
+       blamed had not run yet.
+       A collapsed box has no submit control and an open one has both, which is what makes
+       the distinction measurable rather than a guess at rich-editor internals. */
+    const c10 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c10"]'),
+      { reply: true, composer: 'collapsed' });
+    click(window, row('t1_c10').querySelector('a.reply'));
+    formOf('t1_c10').querySelector('textarea').value = 'Into a box that never opened.';
+    formOf('t1_c10').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('setup: the collapsed box really does offer something the editor selector matches',
+      await waitFor(() => !!c10.composer, { timeout: 2000 }) &&
+      !!window.SHD.dom.deepQuery(c10.composer, window.SHD.C.COMPOSER.editor),
+      'no dormant editor in the fixture');
+    check('a composer that never opened is reported as `composer`, not as a failed insert',
+      await waitFor(() => formOf('t1_c10')?.dataset.shdStep, { timeout: 4000 }) &&
+      formOf('t1_c10').dataset.shdStep === 'composer',
+      formOf('t1_c10')?.dataset.shdStep);
+    check('...and nothing was submitted into a box that could not hold the text',
+      c10.clicks.submit === 0, `submits=${c10.clicks.submit}`);
+    check('...and the draft is still ours',
+      formOf('t1_c10').querySelector('textarea').value === 'Into a box that never opened.');
+    window.SHD.dom.passthroughClear();
+
+    /* --- A RICH EDITOR THAT RECONCILES THE TEXT AWAY MUST NOT READ AS A SUCCESS ---
+       This is the one that could spend a reader's comment. insertText() wrote textContent
+       and then read it back on the very next line — inside the window before the editor
+       reconciles its DOM against its own model — so it returned true for text that no
+       longer existed. compose() takes that true as permission to press Reddit's submit,
+       which posts an EMPTY comment under the reader's name and drops the draft. Every
+       other failure in this file keeps the reader's words; this one would have spent them
+       on nothing. */
+    const c11 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c11"]'),
+      { reply: true, composer: 'lexical' });
+    click(window, row('t1_c11').querySelector('a.reply'));
+    formOf('t1_c11').querySelector('textarea').value = 'Must not be posted as nothing.';
+    formOf('t1_c11').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('text an editor takes back is reported as not landing',
+      await waitFor(() => formOf('t1_c11')?.dataset.shdStep, { timeout: 4000 }) &&
+      formOf('t1_c11').dataset.shdStep === 'insert',
+      formOf('t1_c11')?.dataset.shdStep);
+    check('...and Reddit\'s submit is never pressed on an editor that ended up empty',
+      c11.clicks.submit === 0 && c11.received.length === 0,
+      `submits=${c11.clicks.submit} received=${JSON.stringify(c11.received)}`);
+    check('...and the reader still has every word they typed',
+      formOf('t1_c11').querySelector('textarea').value === 'Must not be posted as nothing.');
+    window.SHD.dom.passthroughClear();
 
     /* --- the reported failure: the control exists only ONCE REDDIT'S SIDE IS REVEALED ---
        Reported from a signed-in session and reproduced with data-shd-step=reply-control:
