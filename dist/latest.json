@@ -1,6 +1,6 @@
 {
-  "version": "0.48.0",
-  "released": "2026-09-14",
+  "version": "0.49.0",
+  "released": "2026-09-15",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.48.0 fixes the reply box for signed-in readers, and one fault in it could have posted an empty comment in your name. Reddit only opens its comment box when you click it yourself, which Sheddit cannot do for you — but it had no way to tell an unopened box from an open one, so it reported the wrong problem and, in the wrong moment, could have pressed Reddit's post button on a box that had just emptied itself. It now checks that the text stayed put before anything is sent, says which step actually failed, and tells you the one thing that works: click Reddit's box once yourself, then come back and save again. The message saying where your draft went is now shown on the side of the page you are actually looking at. Your draft was never at risk and still is not."
+  "notes": "0.49.0 corrects 0.48.0. That build said it had removed the way a save could lose your draft; it had removed one way and left another. A save could report success, post nothing, and close the form with your text gone — Sheddit had been treating Reddit's box going empty as proof of a post, which is also what the box looks like when Reddit quietly rejected the text. Only your comment actually appearing counts now, and if it has not appeared in time the draft stays. Also fixed: a reply with a blank line in it was always reported as failing and then written into Reddit's box twice, and Sheddit could type into its own reply box instead of Reddit's, doubling your draft. The tests had been passing on the same weak signal that failed live; they no longer are."
 }

@@ -6285,7 +6285,7 @@ async function boot(html, url, setup) {
     const isComment = source.tagName === 'SHREDDIT-COMMENT';
     const composer = doc.createElement('comment-composer-host');
     let editor;
-    if (opts.composer === 'contenteditable' || opts.composer === 'lexical') {
+    if (['contenteditable', 'lexical', 'paragraphs'].includes(opts.composer)) {
       editor = doc.createElement('div');
       editor.setAttribute('contenteditable', 'true');
       /* `lexical` is Reddit's ACTUAL editor, modelled by the one behaviour that matters
@@ -6294,14 +6294,36 @@ async function boot(html, url, setup) {
          two <p> nodes appeared in Reddit's editor and were gone by the next frame.
          A plain contenteditable (above) keeps what it is given, which is why both shapes
          exist: the fallback write is right for one and a no-op for the other, and the
-         only honest way to tell them apart is to look again afterwards. */
+         only honest way to tell them apart is to look again afterwards.
+         `reconcileAfter` is HOW LONG the text survives before the editor takes it back.
+         The live editor outlived the 120ms the first fix waited — a single-line draft was
+         still there at the check and gone before the submit meant anything — so this has
+         to be settable past whatever landed() waits, or the shape that actually shipped
+         cannot be modelled. */
       if (opts.composer === 'lexical') {
         editor.addEventListener('input', () => {
           // Asynchronously, like a real reconciliation — a synchronous wipe would be
           // caught by a synchronous check, which is precisely the bug being modelled.
-          setTimeout(() => { editor.textContent = ''; }, 0);
+          setTimeout(() => { editor.textContent = ''; }, opts.reconcileAfter ?? 0);
         });
       }
+      /* `paragraphs` is the same editor when it ACCEPTS the text, rendering it the way it
+         renders everything: one <p> per paragraph, so the resulting textContent carries
+         no newline character anywhere. That is the shape a substring test against the raw
+         draft can never match, however well the insert worked — measured live as every
+         multi-line draft reported as not landing, and then written a second time. */
+      if (opts.composer === 'paragraphs') {
+        editor.addEventListener('input', () => {
+          const paras = (editor.textContent || '').split(/\n\s*\n/);
+          editor.textContent = '';
+          for (const p of paras) {
+            const el = doc.createElement('p'); el.textContent = p.trim(); editor.appendChild(el);
+          }
+        });
+      }
+      /* `unfocusable` models the live editor declining focus(): the call returns, nothing
+         moves, and the caret stays wherever it was — which was the reader's own draft box. */
+      if (opts.unfocusable) editor.focus = () => {};
     } else {
       editor = doc.createElement('textarea');
     }
@@ -6323,7 +6345,14 @@ async function boot(html, url, setup) {
         const id = opts.newId || `t1_new_${isComment ? source.getAttribute('thingid') : 'top'}`;
         const c = doc.createElement('shreddit-comment');
         const attrs = {
-          thingid: id, postid: 't3_link1', author: 'me', score: '1',
+          /* AUTHORED AS THE READER, because that is what Reddit's optimistic insert
+             carries and it is what compose() now looks for. This fixture used to say
+             `me` while the signed-in header said `tester`, and every "reply posted"
+             assertion was passing on a different signal entirely — the editor reading
+             empty after submit, which is what a FAILED insert reads as too. The suite was
+             green on the exact hole a live run then fell through. */
+          thingid: id, postid: 't3_link1',
+          author: doc.defaultView.SHD.session.username?.() || 'me', score: '1',
           created: new Date().toISOString(), depth: String(parentDepth + 1),
           'comment-position': '99', permalink: `/r/programming/comments/link1/comment/${id}/`,
           'content-type': 'text'
@@ -6351,7 +6380,8 @@ async function boot(html, url, setup) {
 
   /** The suite does not wait 1.5s per row for a hydrated vote bar, nor 8s for a lost reply. */
   const fastAccount = (window) => Object.assign(window.SHD.account.timings,
-    { settleMs: 30, pollMs: 10, composeWaitMs: 400, arriveWaitMs: 800, hydrateWaitMs: 300 });
+    { settleMs: 30, pollMs: 10, composeWaitMs: 400, arriveWaitMs: 800, hydrateWaitMs: 300,
+      reconcileMs: 50 });
 
   const loggedInSettings = (extra = {}) => (win) => {
     win.chrome = { storage: {
@@ -7107,6 +7137,88 @@ async function boot(html, url, setup) {
     check('...and the reader still has every word they typed',
       formOf('t1_c11').querySelector('textarea').value === 'Must not be posted as nothing.');
     window.SHD.dom.passthroughClear();
+
+    /* --- RUN 2, THE ONE THE FIRST FIX DID NOT CLOSE: A SUCCESS THAT POSTED NOTHING ---
+       Measured live on a single-line draft with Reddit's box already open. The text
+       outlived the 120ms landed() waited, so it read as landed; submit was pressed on an
+       editor Reddit had no model for; Reddit posted nothing; and then the editor read
+       EMPTY — because nothing had ever been accepted into it — which the arrival check
+       took as the post having gone through. state=done, form closed, draft dropped,
+       thread unchanged. The one failure this file exists to prevent, reached by way of
+       the check meant to prevent it.
+       An editor that was never filled and one Reddit cleared after a successful post are
+       the same DOM. Only a comment appearing under the target can say a comment posted. */
+    const c12 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c12"]'),
+      { reply: true, composer: 'lexical', reconcileAfter: 200, silentSubmit: true });
+    click(window, row('t1_c12').querySelector('a.reply'));
+    formOf('t1_c12').querySelector('textarea').value = 'One line that outlives the check.';
+    formOf('t1_c12').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('an editor that empties itself after the submit is not taken as a posted reply',
+      await waitFor(() => formOf('t1_c12')?.dataset.shdStep, { timeout: 4000 }) &&
+      formOf('t1_c12').dataset.shdStep !== 'done' && formOf('t1_c12').dataset.shdState !== 'done',
+      `step=${formOf('t1_c12')?.dataset.shdStep} state=${formOf('t1_c12')?.dataset.shdState}`);
+    check('...the form stays open with the draft in it',
+      !!formOf('t1_c12') &&
+      formOf('t1_c12').querySelector('textarea').value === 'One line that outlives the check.');
+    check('...and the reader is told to check the thread rather than that it posted',
+      formOf('t1_c12').dataset.shdStep === 'arrival',
+      formOf('t1_c12').dataset.shdStep);
+    window.SHD.dom.passthroughClear();
+
+    /* --- RUN 1: A TWO-PARAGRAPH DRAFT THAT LANDED WAS REPORTED AS NOT LANDING ---
+       A rich editor renders a paragraph break as a second <p>, so an editor holding the
+       draft perfectly has a textContent with no newline in it — and a substring test
+       against the raw draft can never match. Measured live: every multi-line draft was
+       reported as `insert`, the chain went to the handoff, and the handoff wrote the text
+       AGAIN into a box that already held it, run together with no break. */
+    const c13 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c13"]'),
+      { reply: true, composer: 'paragraphs' });
+    const twoParas = 'First paragraph of the reply.\n\nSecond paragraph, after a blank line.';
+    click(window, row('t1_c13').querySelector('a.reply'));
+    formOf('t1_c13').querySelector('textarea').value = twoParas;
+    formOf('t1_c13').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a multi-paragraph draft the editor accepted is reported as landed and posted',
+      await waitFor(() => c13.clicks.submit === 1, { timeout: 2000 }) &&
+      await waitFor(() => !formOf('t1_c13'), { timeout: 2000 }), `submits=${c13.clicks.submit}`);
+    // Whitespace removed entirely, because adjacent <p> nodes concatenate in textContent
+    // with no separator — the same reason the comparison in account.js does it.
+    const norm = (s) => String(s || '').replace(/\s+/g, '');
+    check('...with the words in Reddit\'s box exactly once, not run together twice',
+      norm(c13.received[0] || '').split(norm(twoParas)).length === 2,
+      JSON.stringify(c13.received));
+    check('...and the posted reply carries both paragraphs',
+      /First paragraph/.test(c13.received[0] || '') && /Second paragraph/.test(c13.received[0] || ''),
+      JSON.stringify(c13.received));
+
+    /* --- THE FOCUS BUG: execCommand WROTE INTO THE READER'S OWN DRAFT BOX ---
+       Measured live, twice: Sheddit's textarea went 478 -> 956 characters, then 375 -> 750,
+       exactly doubled. execCommand('insertText') writes wherever the caret is, focus() on
+       Reddit's editor is a request rather than a guarantee, and the caret was still in
+       .shd-reply-text when the command fired. That is the extension corrupting the one
+       copy of the text the reader was relying on. jsdom has no execCommand, so this
+       supplies one that does what a browser's does — insert at the focused element — and
+       an editor that declines focus, which is what the live one did. */
+    doc.execCommand = (cmd, _ui, val) => {
+      const a = doc.activeElement;
+      if (cmd !== 'insertText' || !a || a.tagName !== 'TEXTAREA') return false;
+      a.value += val;
+      return true;
+    };
+    const c14 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c14"]'),
+      { reply: true, composer: 'contenteditable', unfocusable: true });
+    click(window, row('t1_c14').querySelector('a.reply'));
+    const ta14 = formOf('t1_c14').querySelector('textarea');
+    ta14.value = 'The only copy of this.';
+    ta14.focus();
+    check('setup: the caret is in the reader\'s own box when save is pressed',
+      doc.activeElement === ta14);
+    formOf('t1_c14').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('the reply still goes through, by a write that addresses the editor by reference',
+      await waitFor(() => c14.clicks.submit === 1, { timeout: 2000 }) &&
+      c14.received[0] === 'The only copy of this.', JSON.stringify(c14.received));
+    check('...and the reader\'s own draft box is never written into',
+      ta14.value === 'The only copy of this.', `${ta14.value.length} chars: ${ta14.value}`);
+    delete doc.execCommand;
 
     /* --- the reported failure: the control exists only ONCE REDDIT'S SIDE IS REVEALED ---
        Reported from a signed-in session and reproduced with data-shd-step=reply-control:

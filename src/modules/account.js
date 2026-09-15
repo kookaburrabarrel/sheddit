@@ -457,12 +457,17 @@ SHD.account = (() => {
    * alone; where it does not, the old page-wide count stands rather than a guess.
    */
   function commentsUnder(target, kind) {
-    if (kind === 'comment') return target.querySelectorAll(C.COMMENT).length;
-    const all = [...document.querySelectorAll(C.COMMENT)];
+    /* The reader's OWN comments, on both paths now, where the session knows who they are.
+       The comment path counted everything under the target, which let a paginator batch or
+       another reader's reply stand in for ours; the post path was already narrowed for
+       exactly that reason (log 773's rule) and the two had drifted. Where the name is not
+       known the wider count stands, as before, rather than a guess. */
     const me = SHD.session.username && SHD.session.username();
-    if (!me) return all.length;
-    return all.filter(n =>
-      (n.getAttribute(C.COMMENT_ATTR.author) || '') === me).length;
+    const mine = (n) => !me || (n.getAttribute(C.COMMENT_ATTR.author) || '') === me;
+    const pool = kind === 'comment'
+      ? [...target.querySelectorAll(C.COMMENT)]
+      : [...document.querySelectorAll(C.COMMENT)];
+    return pool.filter(mine).length;
   }
 
   /**
@@ -493,11 +498,35 @@ SHD.account = (() => {
    * reconciliation is a microtask or a frame away; anything that survives this is text the
    * editor has accepted rather than text that is briefly in its DOM.
    */
+  /**
+   * WHITESPACE IS NOT PART OF THE COMPARISON, and the reason is structural, not cosmetic.
+   * A rich editor renders a paragraph break as a second <p>, not as a newline character —
+   * so an editor holding a two-paragraph draft perfectly has a textContent with no "\n" in
+   * it at all, and a substring test against the raw draft can never match. Measured live:
+   * every multi-line draft was reported as not landing, however well it had landed, which
+   * sent the chain into the handoff and wrote the text a SECOND time.
+   *
+   * ALL whitespace goes, not just runs of it, and that is the part collapsing gets wrong:
+   * two adjacent <p> nodes concatenate in textContent with NO separator between them —
+   * `<p>reply.</p><p>Second</p>` reads "reply.Second" — so the draft's space at the
+   * paragraph break has no counterpart on the editor's side to normalise to. What is left
+   * once whitespace is gone is the characters the reader typed, in the order they typed
+   * them, which is the only thing "the words are there" ever meant.
+   */
+  const norm = (s) => String(s || '').replace(/\s+/g, '');
+  const holds = (editor, text) => norm(editor.textContent).includes(norm(text));
+
   async function landed(editor, text) {
-    const has = () => (editor.textContent || '').includes(text);
-    if (!has()) return false;
+    if (!holds(editor, text)) return false;
     await new Promise(r => setTimeout(r, timings.reconcileMs));
-    return has();
+    return holds(editor, text);
+  }
+
+  /** The focused element THROUGH shadow roots — activeElement stops at each host. */
+  function deepActive() {
+    let a = document.activeElement;
+    while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+    return a;
   }
 
   async function insertText(editor, text) {
@@ -511,16 +540,27 @@ SHD.account = (() => {
         editor.dispatchEvent(new Event('input', { bubbles: true }));
         return editor.value === text;
       }
+      /* NEVER BLIND. execCommand('insertText') writes wherever the caret is, and the
+         focus() call above is a request rather than a guarantee — Reddit's editor did not
+         take it. Measured live, twice: the reader's OWN draft box went from 478 to 956
+         characters, then 375 to 750, exactly doubled, because the caret was still in
+         .shd-reply-text when the command fired. That is not a failed insert; it is the
+         extension corrupting the one copy of the text the reader was relying on. So the
+         command runs only when the editor is verifiably the focused element, through any
+         shadow root it sits in, and otherwise the write goes straight to the fallback,
+         which addresses the editor by reference and cannot land anywhere else. */
       let done = false;
-      try {
-        done = typeof document.execCommand === 'function' &&
-               document.execCommand('insertText', false, text) === true;
-      } catch { done = false; }
+      if (deepActive() === editor) {
+        try {
+          done = typeof document.execCommand === 'function' &&
+                 document.execCommand('insertText', false, text) === true;
+        } catch { done = false; }
+      }
       /* The honest fallback, kept for a PLAIN contenteditable, where setting text is the
          whole of what an editor is. Against a rich editor it is a no-op that looks like a
          success for a moment — which is exactly what landed() is now there to catch, and
          why the fallback no longer needs to know which kind it is talking to. */
-      if (!done || !(editor.textContent || '').includes(text)) {
+      if (!done || !holds(editor, text)) {
         editor.textContent = text;
         const ev = typeof InputEvent === 'function'
           ? new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text })
@@ -530,9 +570,6 @@ SHD.account = (() => {
       return await landed(editor, text);
     } catch { return false; }
   }
-
-  const editorEmpty = (ed) => !ed.isConnected ||
-    (('value' in ed && (ed.tagName === 'TEXTAREA' || ed.tagName === 'INPUT')) ? ed.value === '' : (ed.textContent || '').trim() === '');
 
   /**
    * The protocol. Returns { ok, step, host }: `step` names the first thing that could
@@ -579,12 +616,21 @@ SHD.account = (() => {
     const submit = SHD.dom.deepQuery(host, C.COMPOSER.submit) || opened;
     const count = commentsUnder(target, kind);
     submit.click();
-    // Measured, not assumed: the reply is posted when a comment arrives under the target
-    // (Reddit inserts its own optimistic copy), or the composer Reddit owns is gone or
-    // cleared — which is what Reddit does to its editor once the request succeeds.
-    const arrived = await waitFor(
-      () => commentsUnder(target, kind) > count || !host.isConnected || editorEmpty(editor),
-      timings.arriveWaitMs);
+    /* ONLY A COMMENT THAT APPEARED COUNTS AS POSTED. Nothing weaker.
+       This used to accept two other signals as well — the composer disappearing, or the
+       editor reading empty — on the reasoning that both are what Reddit does once a post
+       succeeds. They are. They are also exactly what an editor looks like when the insert
+       never took: measured live, a single-line draft passed landed(), submit was pressed
+       on an editor Reddit had no model for, Reddit posted nothing, and the editor then
+       read empty BECAUSE nothing had ever been accepted into it. That emptiness was taken
+       as arrival. The form closed on it and the draft went with it — the one failure this
+       file promises never to produce, reached by way of the check meant to prevent it.
+       An editor that was never filled is indistinguishable from one Reddit cleared after
+       a successful post, so neither can carry the arrival signal. The count of the
+       reader's own comments under the target can, and a slow post that misses this window
+       goes the safe way: `arrival`, reveal-only, draft kept, and a sentence saying to check
+       the thread before sending it again. */
+    const arrived = await waitFor(() => commentsUnder(target, kind) > count, timings.arriveWaitMs);
     return arrived ? { ok: true, step: 'done', host } : { ok: false, step: 'arrival', host };
   }
 
@@ -631,7 +677,14 @@ SHD.account = (() => {
     host = host || await waitFor(() => findHost(target, kind), timings.composeWaitMs);
     if (!host) return false;
     const editor = await waitFor(() => SHD.dom.deepQuery(host, C.COMPOSER.editor), timings.composeWaitMs);
-    return !!editor && await insertText(editor, text);
+    if (!editor) return false;
+    /* ALREADY THERE IS ALREADY CARRIED. compose() may have put the words into this very
+       editor and then misjudged its own work — the multi-line case did exactly that, and
+       this call wrote the draft a second time into a box that already held it, run
+       together with no break between. Whatever insertText() concluded, the editor's
+       contents are the fact; if the words are in it, the handoff's job is done. */
+    if (holds(editor, text)) return true;
+    return await insertText(editor, text);
   }
 
   const STEP_COPY = {

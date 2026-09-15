@@ -1891,6 +1891,71 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      The draft itself was never at risk, and that is worth recording as the thing that held:
      pressing "← back to sheddit" returned it intact, exactly as designed.
 
+112. **111's fix did not close the data-loss path. It changed its shape — and the suite was
+     green on the hole the whole time.** Three saves on one comment in a live thread, three
+     different outcomes, reported with the measurements that separate them.
+
+     **Run 2 is the one that matters.** Single-line draft, Reddit's box already open — the
+     recovery 111 modelled. The text outlived the 120ms `landed()` waited, so it read as
+     landed; submit was pressed on an editor Reddit had no model for; Reddit posted nothing;
+     and the editor then read EMPTY — because nothing had ever been accepted into it. The
+     arrival check took that emptiness as the post having succeeded, closed the form, and
+     dropped the draft. `state=done`, thread unchanged, words gone. 111 had replaced "posts
+     an empty comment" with "posts nothing and reports that it did", which is the same
+     failure from the reader's side: the one thing this file promises never to do.
+
+     Two signals had been accepted as arrival besides a comment appearing — the composer
+     disappearing, and the editor reading empty — on the reasoning that both are what Reddit
+     does after a successful post. They are. They are also exactly what an editor looks like
+     when the insert never took. **An editor that was never filled and one Reddit cleared
+     after posting are the same DOM**, so neither can carry the signal. Arrival is now the
+     reader's own comment appearing under the target and nothing weaker; a slow post that
+     misses the window goes the safe way — `arrival`, reveal-only, draft kept, "check the
+     thread before sending it again". The comment path is narrowed to the reader's author the
+     way the post path already was (log 773), so a paginator batch or a stranger's reply
+     cannot stand in either.
+
+     **Why the suite never saw it, which is the finding worth keeping.** The fixture posted
+     its optimistic comment as `author="me"` while the signed-in header named the reader
+     `tester`. So the narrowed count never grew, and every "reply posted" assertion in the
+     suite had been passing on the `editorEmpty` disjunct — the exact signal a failed insert
+     also produces. The fixture law says a fixture must resemble the page's delivery; this one
+     had the right markup and the wrong author, and the check that would have exposed the
+     mismatch was the one being bypassed by it. It posts as the session's name now, and
+     eleven previously-green assertions pass on a comment appearing for the first time.
+
+     **Run 1: a two-paragraph draft that landed was reported as not landing**, which sent
+     the chain into the handoff, which wrote the text a second time into a box that already
+     held it — run together, no break. A rich editor renders a paragraph break as a second
+     `<p>`, and adjacent `<p>` nodes concatenate in `textContent` with NO separator:
+     `<p>reply.</p><p>Second</p>` reads "reply.Second". So the draft's space at the break has
+     nothing on the editor's side to normalise against, and collapsing whitespace — the
+     obvious fix, and the one the report proposed — still cannot match. All whitespace goes
+     from both sides; what remains is the characters typed, in order, which is what "the
+     words are there" meant. The handoff also checks for the words before writing them.
+
+     **The focus bug, measured twice.** The reader's OWN draft box went 478 → 956 characters,
+     then 375 → 750: exactly doubled. `execCommand('insertText')` writes wherever the caret
+     is, `editor.focus()` is a request the live editor declined, and the caret was still in
+     `.shd-reply-text` when the command fired. That is not a failed insert; it is the
+     extension corrupting the one copy of the text the reader was relying on. The command now
+     runs only when the editor is verifiably the focused element, through any shadow root it
+     sits in (`deepActive()`); otherwise the write goes straight to the fallback, which
+     addresses the editor by reference and cannot land anywhere else.
+
+     **Open question 17 is answered by run 1**, incidentally: the step reached was `insert`,
+     which is past `composer`, so the liveness gate found a submit control that Reddit
+     mounted from our untrusted `replyControl.click()`. The per-comment composer is NOT
+     trusted-gated. Only the top-level one is.
+
+     **Run 3 reached `reply-control`** on a fresh load of the same page — the lazily-hydrated
+     action row again, and the third different step for one comment. Open question 18.
+
+     On the proxy 111 offered ("a failed save never increments the count"): it held in all
+     three runs including the one that reported success, so it cannot separate *correctly
+     refused* from *silently lost*. The check that would have caught run 2 is the one now in
+     `compose()`: a comment authored by the reader, under the target, before the form closes.
+
 
 ## The popup policy — supersedes bugs 30, 33 and 38
 
@@ -2412,8 +2477,35 @@ the way a question got settled is usually more useful than the answer.
     question 14 above is the standing note saying so.
 
 
-17. **Whether the per-comment composer has the same trusted-gesture ceiling the top-level
-    one does.** Log 111 settled the top-level case: Reddit mounts its rich editor only on a
+18. **Why the reply control is sometimes not there at all.** Three saves on one comment in
+    one live thread reached three different steps: `insert`, a false `done`, and
+    `reply-control` — the last on a fresh page load, meaning `C.NATIVE.reply` resolved to
+    nothing even after `resolveLate()` scrolled the native comment into the suppressed box
+    and waited `hydrateWaitMs`. The action row is lazily hydrated (log 107), so the chain
+    is non-deterministic on the same comment, and 3s may simply be short on a cold load —
+    or the nudge may fire before the native tree has laid out enough for the row to be
+    inside the box. Not measured, and not tuned blind: the reading is
+    `data-shd-step` across several saves on one comment, with the time since load noted,
+    and whether `SHD.dom.deepQuery(comment, SHD.C.NATIVE.reply)` resolves by hand a moment
+    after a `reply-control` failure. If it does, the wait is short; if it does not, the
+    row is not hydrating and the nudge is the thing to look at.
+
+19. **A comment rendered twice in the tree.** Reported in passing from the same session,
+    not chased: one comment appeared twice in Sheddit's rendering. Every dedupe in the
+    pipeline keys on the source element's stamp, so the likeliest cause is the same
+    comment arriving twice as two distinct elements — a paginator batch overlapping the
+    served slice, or a history traversal re-inserting one — but that is a guess. Needs the
+    thread URL and which comment, and `document.querySelectorAll('[data-fullname="<id>"]')`
+    counted against the native `shreddit-comment[thingid="<id>"]` count on the same page.
+
+17. ~~**Whether the per-comment composer has the same trusted-gesture ceiling the top-level
+    one does.**~~ **ANSWERED: no — see log 112.** A save on a comment reached `insert`,
+    which is past the liveness gate, so Reddit mounted a real composer with a submit control
+    from our untrusted `replyControl.click()`. Only the top-level "Join the conversation"
+    box is gated on a genuine gesture. The reasoning below is kept because it names what the
+    probe was and why either answer was survivable.
+
+    Log 111 settled the top-level case: Reddit mounts its rich editor only on a
     real user gesture, `host.click()` and a full synthetic pointer sequence both produce
     nothing, and a content script cannot fake activation. `compose()` reaches a REPLY
     composer differently — it clicks `C.NATIVE.reply` on the comment — and that click is

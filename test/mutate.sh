@@ -1724,8 +1724,11 @@ mutate "the empty-feed shortcut runs on a route change, over the outgoing page" 
 # paginator is auto-loading batches of shreddit-comment inside the same 8s window. Any batch
 # read as "your comment arrived" and the form closed on it, dropping the reader's draft
 # while Reddit still held unposted text. Log 773's rule, reaching the path that lacked it.
+# Both paths share one author filter now (0.49.0), so this row reintroduces the drift on
+# both at once: every comment under the target counts, whoever wrote it.
 mutate "any comment arriving anywhere counts as the reader's comment posting" run \
-  src/modules/account.js '    const all = [...document.querySelectorAll(C.COMMENT)];' '    const all = []; return document.querySelectorAll(C.COMMENT).length;'
+  src/modules/account.js "    const mine = (n) => !me || (n.getAttribute(C.COMMENT_ATTR.author) || '') === me;" \
+                         "    const mine = () => true;"
 
 # C.USER_DRAWER.host leads with [id*="user-drawer"], which the TOGGLE's own id contains, and
 # the toggle sits earlier in document order. Revealing it hands passthrough() the button and
@@ -2449,9 +2452,9 @@ mutate "a dormant editor counts as an open composer again" run \
 # existed. compose() takes that as permission to press submit: an empty comment posted under
 # the reader's name, and the draft gone with it.
 mutate "inserted text is checked before the editor can take it back" run \
-  src/modules/account.js "    if (!has()) return false;
+  src/modules/account.js "    if (!holds(editor, text)) return false;
     await new Promise(r => setTimeout(r, timings.reconcileMs));
-    return has();" "    return has();"
+    return holds(editor, text);" "    return holds(editor, text);"
 
 # "A message nobody can read is not a fallback" was written about the draft; it was equally
 # true of the message about the draft. The status line lives in the reply form, inside
@@ -2463,6 +2466,49 @@ mutate "the handoff message goes only where it cannot be read" run \
 mutate "the exit bar's note setter writes nothing" run \
   src/core/dom.js "    note.textContent = text;
     return true;" "    return true;"
+
+# LOG 112: 111's fix left a second data-loss path, and the suite was green on it.
+#
+# Arrival had accepted the composer closing or the editor reading empty as proof of a post,
+# because both are what Reddit does after one succeeds. They are also what an editor looks
+# like when the insert never took: measured live, a single-line draft outlived the check,
+# submit was pressed on an editor Reddit had no model for, nothing posted, the editor read
+# empty BECAUSE nothing was accepted, and the form closed on it with the draft gone.
+mutate "an emptied editor counts as a posted reply again" run \
+  src/modules/account.js "    const arrived = await waitFor(() => commentsUnder(target, kind) > count, timings.arriveWaitMs);" \
+  "    const arrived = await waitFor(() => commentsUnder(target, kind) > count || !host.isConnected ||
+      (editor.textContent || '').trim() === '', timings.arriveWaitMs);"
+
+# Adjacent <p> nodes concatenate in textContent with NO separator — "reply.Second" — so a
+# comparison that merely collapses whitespace still cannot match a draft with a paragraph
+# break. Both shapes of the old comparison, because the report proposed the first as the
+# fix and it is not one.
+mutate "the comparison collapses whitespace instead of dropping it" run \
+  src/modules/account.js "  const norm = (s) => String(s || '').replace(/\s+/g, '');" \
+                         "  const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();"
+mutate "the comparison is back to the raw draft" run \
+  src/modules/account.js "  const norm = (s) => String(s || '').replace(/\s+/g, '');" \
+                         "  const norm = (s) => String(s || '');"
+
+# execCommand('insertText') writes wherever the caret is, and focus() on Reddit's editor is
+# a request it declined. Measured twice: the reader's OWN draft box doubled, 478 -> 956 and
+# 375 -> 750 — the extension corrupting the one copy of the text the reader relied on.
+mutate "execCommand fires without checking where the caret is" run \
+  src/modules/account.js "      if (deepActive() === editor) {
+        try {
+          done = typeof document.execCommand === 'function' &&
+                 document.execCommand('insertText', false, text) === true;
+        } catch { done = false; }
+      }" "      try {
+        done = typeof document.execCommand === 'function' &&
+               document.execCommand('insertText', false, text) === true;
+      } catch { done = false; }"
+
+# The handoff's own "already there" guard has NO row, deliberately: with the comparison
+# above fixed, compose() no longer misjudges a landed insert, so the guard is unreachable
+# from any fixture and a row for it survives (measured, 2026-09-15). It stays as belt against
+# a future false negative in insertText(), and this note stays so nobody adds the row and
+# reads its survival as a hole.
 
 # A post keeping its picture URL in a responsive srcset rather than in `src` got no
 # thumbnail at all, which on a live listing read as several rows missing their picture and

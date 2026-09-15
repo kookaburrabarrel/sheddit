@@ -20,6 +20,63 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.49.0
+
+The signed-in reply box again, and this entry corrects the previous one. 0.48.0 said it
+had removed the way a save could lose your draft. It had removed one way and left another,
+and the tests that should have caught it were passing for the wrong reason.
+
+### Fixed — a save could report success, post nothing, and discard your draft
+
+Sheddit decides a reply has posted by watching for it to appear. Until now it also accepted
+two weaker signs: Reddit's box closing, or Reddit's box going empty — both things Reddit
+does after a successful post. They are also both what the box looks like when the text was
+never accepted in the first place. On a live thread that is exactly what happened: the text
+went in, Reddit's editor quietly rejected it, the box read empty, Sheddit called that a
+success, closed its own form, and the draft was gone. Nothing had posted.
+
+Only your comment actually appearing counts now. If Reddit is slow and it hasn't appeared
+in time, Sheddit says so and keeps your draft — the safe direction.
+
+### Fixed — a multi-paragraph reply was reported as failing, then written twice
+
+A draft with a blank line in it was always reported as "could not put the text into
+Reddit's reply box", even when it had gone in perfectly, because of how Reddit's editor
+represents paragraphs internally. Sheddit then handed you over to Reddit's box and put the
+text in a second time, run together with the first. The check now compares the words you
+typed, not the spacing around them.
+
+### Fixed — Sheddit could write into its own reply box instead of Reddit's
+
+Measured twice: the text in Sheddit's box doubled. The browser command used to type into
+Reddit's editor types wherever the cursor is, and Reddit's editor was declining to take it —
+so it typed into the box you were looking at. That is the extension corrupting the one
+copy of your text. The command now runs only when Reddit's editor verifiably has the
+cursor; otherwise the text is placed by a method that cannot go anywhere else.
+
+### Answered — replying to a comment is not blocked the way a top-level comment is
+
+0.48.0 noted it did not know whether replies to individual comments hit the same "Reddit
+only opens the box for a real click" limit. They do not. That limit applies only to the
+top-level "Join the conversation" box.
+
+### Why the tests missed all of this
+
+The test fixture posted its pretend comment under the wrong name, so the "did my comment
+appear" check could never succeed in the suite — and every reply test had been passing on
+the same weak signal that failed live. The fixture posts as the signed-in reader now, and
+those tests pass on a comment appearing for the first time.
+
+### Known, not fixed
+
+**Finding the Reply button is unreliable.** Three saves on one comment reached three
+different outcomes, and on a fresh page load the button was not found at all. That part of
+Reddit's page is built lazily and the wait may be too short on a cold load, or the trigger
+may fire too early. It needs a reading, not a guess. And one comment rendered twice in a
+thread, once — reported in passing, not yet reproduced.
+
+---
+
 ## 0.48.0
 
 All of this is the signed-in reply box, from one report on a live thread. The account layer
