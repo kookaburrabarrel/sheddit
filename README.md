@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.48.0](https://img.shields.io/badge/version-0.48.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.49.0](https://img.shields.io/badge/version-0.49.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.48.0 is out — everyone is welcome to try it
+### Beta 0.49.0 is out — everyone is welcome to try it
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
@@ -75,6 +75,22 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
+
+**0.49.0 — the reply box, corrected**
+- **Fixed:** 0.48.0 said it had removed the way a save could lose your draft. It had
+  removed one and left another: a save could report success, post nothing, and close the
+  form with your text gone. Sheddit had been accepting Reddit's box going empty as proof
+  of a post — which is also what the box looks like when Reddit quietly rejected the text.
+  Only your comment actually appearing counts now; if it hasn't in time, the draft stays.
+- **Fixed:** a reply with a blank line in it was always reported as failing, even when it
+  went in perfectly, and then written into Reddit's box a second time.
+- **Fixed:** Sheddit could type into its own reply box instead of Reddit's, doubling your
+  draft — measured twice. It now only uses the browser's typing command when Reddit's
+  editor verifiably has the cursor.
+- **Why the tests missed it:** the fixture posted its pretend comment under the wrong
+  name, so every reply test had been passing on the same weak signal that failed live.
+- **Known:** finding the Reply button on a comment is unreliable; one of three saves on the
+  same comment could not find it at all. Needs a reading before it gets a fix.
 
 **0.48.0 — the signed-in reply box**
 - **Fixed:** a fault that could have posted an empty comment in your name. Sheddit puts
@@ -277,7 +293,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.48.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.49.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

@@ -784,10 +784,19 @@ SHD.C = {
    * themselves, it stays open, and a second save then completes the whole chain. That is
    * what the handoff now tells them to do.
    *
-   * STILL UNVERIFIED: whether the PER-COMMENT composer has the same ceiling. Its reply
-   * control is clicked by us and is therefore untrusted in the same way — if Reddit gates
-   * that button on `isTrusted` too, replies fail identically and take the identical route
-   * out; if it is a plain handler, they work. Open question 17 names the probe. Each miss has the same fail-safe: the native composer is revealed in place
+   * The PER-COMMENT composer does NOT have that ceiling — measured (log 112): a save on a
+   * comment reached the insert step, which is past the liveness gate, so Reddit mounted a
+   * real composer with its submit control from our untrusted click on `C.NATIVE.reply`.
+   * Only the top-level box is gated on a genuine gesture. What the per-comment path has
+   * instead is non-determinism: the reply control is on the lazily-hydrated action row and
+   * was not found at all on one of three saves (open question 18).
+   *
+   * Two more things the same session measured about the editor, both handled in
+   * account.js: `textContent` of adjacent <p> nodes concatenates with NO separator, so any
+   * comparison against a multi-line draft has to drop whitespace on both sides rather than
+   * collapse it; and `focus()` on the editor is a request it may decline, after which
+   * `execCommand` writes into whatever IS focused — which was the reader's own draft box.
+   * Neither is a selector problem, which is why neither lives here. Each miss has the same fail-safe: the native composer is revealed in place
    * (passthrough), and the reader finishes in Reddit's UI. account.js's `compose()`
    * measures the outcome — a new comment element arriving under the target — rather than
    * assuming the click worked (the "N more replies" lesson, log bug 90).
