@@ -697,59 +697,10 @@ SHD.model = (() => {
     };
   }
 
-  function searchPost(el) {
-    try {
-      const raw = el.getAttribute('data-faceplate-tracking-context');
-      if (!raw) return null;
-      const ctx = JSON.parse(raw);
-      const p = ctx.post;
-      if (!p || !p.id || !p.title) return null;
-
-      const sub = ctx.subreddit?.name || '';
-      const author = ctx.profile?.name || '[deleted]';
-      // Link to permalink or construct standard fallback URL
-      const baseId = p.id.replace(/^t3_/, '');
-      const permalink = p.permalink || (sub ? `/r/${sub}/comments/${baseId}/` : `/comments/${baseId}/`);
-
-      // Scrape anchor tags inside if present for thumbnails / content href
-      const linkEl = el.querySelector('a[href*="/comments/"]');
-      const href = linkEl?.getAttribute('href') || permalink;
-      const imgEl = el.querySelector('img');
-
-      return {
-        kind: 'post',
-        id: p.id,
-        title: p.title,
-        href: href,
-        permalink: permalink,
-        domain: sub ? `self.${sub}` : 'reddit.com',
-        author: author,
-        subreddit: sub,
-        subredditPrefixed: sub ? `r/${sub}` : '',
-        score: null, // Search SDUI telemetry context often omits score until hydration
-        upvoteRatio: null,
-        comments: null,
-        created: null,
-        thumbnail: imgEl?.getAttribute('src') || null,
-        isSelf: true,
-        type: 'link',
-        contentHref: null,
-        mp4: null,
-        image: null,
-        images: [],
-        bodyNode: null,
-        removedNotice: null,
-        source: el
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
   /* imagesOf is public for the same reason mp4Of is: gallery frames HYDRATE LATE — the
      carousel's lazy <img>s are srcless at consume time and grow their src afterwards
      (bug 91) — so the consumer re-reads the source element after render, exactly as the
      watch link re-resolves the mp4 at click time. */
-  return { post, comment, profileComment, searchPost, mp4Of, expired, imagesOf,
+  return { post, comment, profileComment, mp4Of, expired, imagesOf,
            rejects, rejectSummary, clearRejects };
 })();

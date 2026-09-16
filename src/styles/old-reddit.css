@@ -374,9 +374,9 @@ html.shd-active #shd-loading.shd-loading-over {
      what separates it from the feed, and it is what --shd-gutter is derived from. */
   padding: 0;
   background: var(--shd-panel);
-  border: none;
+  border: 1px solid var(--shd-panel-border);
   border-radius: var(--shd-radius);
-  box-shadow: none;
+  box-shadow: var(--shd-shadow);
   font-size: 11px;
 }
 #shd-sidebar .redditname a { font-size: 14px; color: var(--shd-accent); text-decoration: none; }
@@ -1287,9 +1287,9 @@ html.shd-active #shd-loading p { margin: 0; }
   width: 100%;
   box-sizing: border-box;
   padding: 6px 30px 6px 8px;
-  border: 1px solid var(--shd-border, #c4c4c4);
-  background-color: var(--shd-bg, #ffffff);
-  color: var(--shd-text, #222222);
+  border: 1px solid var(--shd-border);
+  background-color: var(--shd-bg);
+  color: var(--shd-text);
   font-family: inherit;
   font-size: 12px;
   border-radius: 2px;
@@ -1297,7 +1297,7 @@ html.shd-active #shd-loading p { margin: 0; }
 }
 
 #search input[type="text"]:focus {
-  border-color: var(--shd-accent, #5f99cf);
+  border-color: var(--shd-accent);
 }
 
 #search input[type="submit"] {
@@ -1316,7 +1316,7 @@ html.shd-active #shd-loading p { margin: 0; }
 #searchexpando {
   margin-top: 4px;
   font-size: 10px;
-  color: var(--shd-dim, #888888);
+  color: var(--shd-dim);
 }
 
 #searchexpando label {
