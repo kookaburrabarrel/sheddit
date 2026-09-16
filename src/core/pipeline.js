@@ -34,6 +34,7 @@ globalThis.SHD = globalThis.SHD || {};
     // reading a thread comment with profile attribute names, which rejects and hands the
     // whole page back; a list of guesses is not a contract (bug 41's lesson).
     if (m === R.PROFILE) return SHD.settings.profiles ? [C.POST, C.PROFILE_COMMENT] : [];
+    if (m === R.SEARCH) return SHD.settings.listing ? [C.POST, C.SEARCH_TRACKER] : [];
     return [];
   }
 
@@ -42,6 +43,7 @@ globalThis.SHD = globalThis.SHD || {};
     if (m === R.LISTING) return !!SHD.settings.listing;
     if (m === R.COMMENTS) return !!SHD.settings.comments;
     if (m === R.PROFILE) return !!SHD.settings.profiles;
+    if (m === R.SEARCH) return !!SHD.settings.listing;
     return false;
   }
 
@@ -166,6 +168,13 @@ globalThis.SHD = globalThis.SHD || {};
           ok = tag === C.POST
             ? SHD.listing.consume(el)
             : SHD.listing.consumeProfileComment(el);
+        } else if (mode === R.SEARCH && tag === C.SEARCH_TRACKER.split('[')[0]) {
+          // Handle search-telemetry-tracker elements
+          const mod = SHD.model.searchPost(el);
+          if (mod) {
+            SHD.listing.place(SHD.listing.render(mod));
+            ok = true;
+          }
         }
         markDone(el);                 // stamp regardless: a skipped item must not be retried
         if (ok) rendered++;
@@ -287,9 +296,9 @@ globalThis.SHD = globalThis.SHD || {};
    */
   function renderEmpty() {
     if (SHD.gate.stopped || SHD.gate.revealed) return false;
-    // LISTING and PROFILE only. A COMMENTS route has no feed to be empty of — a thread
+    // LISTING, PROFILE and SEARCH only. A COMMENTS route has no feed to be empty of — a thread
     // with no replies still carries the post, so it renders by the ordinary path.
-    if (mode !== R.LISTING && mode !== R.PROFILE) return false;
+    if (mode !== R.LISTING && mode !== R.PROFILE && mode !== R.SEARCH) return false;
     if (!enabledFor(mode)) return false;
     if (queue.size) return false;                  // work in hand: it is not empty yet
     const reason = SHD.gate.emptyFeedReason();
