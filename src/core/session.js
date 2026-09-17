@@ -127,6 +127,24 @@ SHD.session = (() => {
        report no name at all while the real link sat two nodes away. Each href is resolved
        against the page (so `https://www.reddit.com/user/x/` and `/user/x/` are one name)
        and matched on the PATH; the first that parses as a bare profile wins. */
+    /* THE ATTRIBUTE FIRST. Reddit stamps the reader's name on a direct child of the app
+       element from the first byte, while every anchor below only appears once the drawer
+       has been opened — so on a fresh load the anchors found nothing and the corner said
+       "logged in" with no name, every page, every time (measured 2026-09-17). Read as a
+       value, not an href: none of the path parsing below applies, only the same "is this a
+       name at all" test. C.SESSION.usernameAttr explains the scoping. */
+    if (S.usernameAttr) {
+      const el = document.querySelector(S.usernameAttr);
+      const raw = (el && el.getAttribute('username') || '').trim();
+      if (raw && !NOT_A_NAME.test(raw) && /^[\w-]+$/.test(raw)) {
+        out.name = raw;
+        const img = findInHeader(S.avatar);
+        const src = img && (img.getAttribute('src') || '');
+        if (/^https?:\/\//i.test(src)) out.avatar = src;
+        return out;
+      }
+    }
+
     for (const link of allInHeader(S.username)) {
       const href = link.getAttribute('href') || '';
       if (!href) continue;

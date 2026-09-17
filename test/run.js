@@ -6322,11 +6322,18 @@ async function boot(html, url, setup) {
         });
       }
       /* `unfocusable` models the live editor declining focus(): the call returns, nothing
-         moves, and the caret stays wherever it was — which was the reader's own draft box. */
+         moves, and the caret stays wherever it was — which was the reader's own draft box.
+         `focusable` is the opposite, for jsdom's sake: a bare contenteditable is not a
+         focusable area there, so a test of the execCommand path needs a tabindex to make
+         focus() actually move the caret. */
       if (opts.unfocusable) editor.focus = () => {};
+      if (opts.focusable) editor.setAttribute('tabindex', '0');
     } else {
       editor = doc.createElement('textarea');
     }
+    // A hook on the editor the moment it exists — it is created mid-chain, after our own
+    // save has clicked Reddit's reply control, so a test cannot reach it any earlier.
+    if (typeof opts.onEditor === 'function') opts.onEditor(editor);
     const submit = doc.createElement('button');
     submit.type = 'submit';
     submit.textContent = 'Comment';
@@ -6370,8 +6377,31 @@ async function boot(html, url, setup) {
        "editor" that cannot take text — which is how every failure here used to be blamed
        on `insert`, the one step that had done nothing wrong. What a collapsed box does NOT
        have is a submit control, and that is the discriminator the code now uses. */
-    composer.append(editor);
-    if (opts.composer !== 'collapsed') composer.append(submit);
+    if (opts.composer === 'collapsed') {
+      /* THE LIVE SHAPE (2026-09-17): a visible trigger, and beside it a HIDDEN form that
+         already holds the editor and an enabled submit. The submit is present — which is
+         what defeated a presence test — and only visibility tells the states apart. What
+         opens it is focus on the textarea inside the trigger's shadow root; `opens` says
+         whether this box honours that, because the live top-level one does and a box that
+         does not must still be reported as `composer` and handed off. */
+      const trigger = doc.createElement('faceplate-textarea-input');
+      trigger.setAttribute('data-testid', 'trigger-button');
+      trigger.setAttribute('size', 'collapsed');
+      const ta = trigger.attachShadow({ mode: 'open' }).appendChild(doc.createElement('textarea'));
+      const form = doc.createElement('faceplate-form');
+      form.setAttribute('hidden', '');
+      form.append(editor, submit);
+      if (opts.opens) {
+        ta.addEventListener('focus', () => setTimeout(() => {
+          form.removeAttribute('hidden');
+          trigger.setAttribute('hidden', '');
+          state.expanded = (state.expanded || 0) + 1;
+        }, 30));
+      }
+      composer.append(trigger, form);
+    } else {
+      composer.append(editor, submit);
+    }
     (isComment ? source : doc.querySelector('#main-content')).appendChild(composer);
     state.composer = composer;
     state.editor = editor;
@@ -6586,18 +6616,82 @@ async function boot(html, url, setup) {
     })());
   }
 
+  /* --- THE NAME IS AN ATTRIBUTE ON THE APP, THERE FROM THE FIRST BYTE ---
+     Measured live on every page type: no /user/<me>/ anchor exists at load — the only one
+     is the "View Profile" row inside #user-drawer-content, which is not in the DOM until
+     the drawer has been opened. So the corner said "logged in" and the menu had no profile
+     entry, everywhere, always. What the page DOES carry at t=0 is
+     shreddit-app > after-login-toast-dispatcher[username]. */
+  console.log('\n\x1b[1mTHE READER\'S NAME, READ FROM THE APP ELEMENT\x1b[0m');
+  {
+    const { doc, window } = await boot(
+      listingPage({ loggedIn: true, noUsername: true, dispatcher: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    check('setup: the header carries no profile link at all',
+      !doc.querySelector('reddit-header-large a[href*="/user/"]'));
+    check('the name is read from the dispatcher attribute',
+      window.SHD.session.username() === 'tester', String(window.SHD.session.username()));
+    check('...so the corner names the reader instead of saying "logged in"',
+      !doc.querySelector('#shd-header .shd-account-unnamed') &&
+      /tester/.test(doc.querySelector('#shd-header .shd-account')?.textContent || ''),
+      doc.querySelector('#shd-header .shd-account')?.textContent);
+    click(window, doc.querySelector('#shd-header .shd-account-toggle'));   // the menu is built on open
+    check('...and the menu carries a profile link built from it',
+      !!doc.querySelector('#shd-header .shd-account-menu a[href="/user/tester/"]'),
+      doc.querySelector('#shd-header .shd-account-menu')?.innerHTML?.slice(0, 160));
+  }
+  {
+    /* THE CONTROL, and the reason the clause is a direct child of shreddit-app and nothing
+       looser: the same element sitting inside a post must be ignored, because a name that
+       deep could be anyone's, and greeting the reader by a stranger's name is the failure
+       this whole contract is built around. */
+    const { doc, window } = await boot(
+      listingPage({ loggedIn: true, noUsername: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    const decoy = doc.createElement('after-login-toast-dispatcher');
+    decoy.setAttribute('username', 'stranger');
+    doc.querySelector('shreddit-post').appendChild(decoy);
+    window.SHD.session.reset();
+    check('a dispatcher nested inside a post is not taken for the reader\'s name',
+      window.SHD.session.username() === null, String(window.SHD.session.username()));
+  }
+
   console.log('\n\x1b[1mTHE ACCOUNT CORNER\x1b[0m');
 
   /** Reddit's user drawer, MODELLED: the avatar button mounts a panel carrying `Log out`. */
   function installUserDrawer(window, doc, opts = {}) {
     const state = { opened: 0, logouts: 0, panel: null };
     const toggle = doc.querySelector('#expand-user-drawer-button');
+    /* `avatarPartial` is the live header's trap: a faceplate-partial whose id contains
+       "user-drawer" sitting INSIDE the toggle button, earlier in document order than the
+       panel, and therefore what a loose host match returns first. */
+    if (opts.avatarPartial && toggle) {
+      const av = doc.createElement('faceplate-partial');
+      av.id = 'user-drawer-avatar-logged-in';
+      toggle.appendChild(av);
+    }
     const mount = () => {
       if (state.panel) return;
       const panel = doc.createElement('div');
-      panel.id = 'user-drawer-panel';
+      panel.id = opts.panelId || 'user-drawer-panel';
       if (opts.profileLink) panel.innerHTML = '<a href="/user/latename/">latename</a>';
-      if (opts.logout !== false) {
+      /* `live` is Reddit's log-out item as measured 2026-09-17: a custom element carrying
+         the click handler ITSELF, wrapping a tracker, a list and a focusable <div> whose
+         text is the only human-readable handle. No href, no role, no testid anywhere. */
+      if (opts.live) {
+        const ctl = doc.createElement('user-drawer-logout');
+        ctl.innerHTML = '<faceplate-tracker noun="logout"><ul>' +
+          '<li id="logout-list-item" role="presentation"><div tabindex="0">Log Out</div></li>' +
+          '</ul></faceplate-tracker>';
+        ctl.addEventListener('click', () => {
+          state.logouts++;
+          if (opts.endsSession === false) return;
+          doc.querySelector('#expand-user-drawer-button')?.remove();
+          state.panel?.remove();
+          state.panel = null;
+        });
+        panel.appendChild(ctl);
+      } else if (opts.logout !== false) {
         const el = doc.createElement(opts.asAnchor ? 'a' : 'button');
         if (opts.asAnchor) el.setAttribute('href', 'https://www.reddit.com/logout');
         el.textContent = opts.label || 'Log Out';
@@ -6680,6 +6774,83 @@ async function boot(html, url, setup) {
     check('the name comes from the HEADER, never from a post author on the page',
       doc.querySelectorAll('#shd-root a.author[href^="/user/"]').length > 0 &&
       !/kleudorian/.test(corner?.textContent || ''), corner?.textContent);
+  }
+  {
+    /* --- LOG OUT, AGAINST THE DRAWER REDDIT ACTUALLY SHIPS ---
+       Measured live 2026-09-17: the item is user-drawer-logout > faceplate-tracker > ul >
+       li#logout-list-item > div[tabindex=0] "Log Out" — no href, no role, no testid — with
+       the click handler on the custom element itself. Every selector clause missed it and
+       the text scan never looked at a <div>, so `log out` waited 2.5s and then said it could
+       not find Reddit's control, on a page where the control was one click away. */
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    const drawer = installUserDrawer(window, doc, { live: true, panelId: 'user-drawer-content' });
+    Object.assign(window.SHD.account.timings, { pollMs: 10, drawerWaitMs: 500, logoutWaitMs: 800 });
+    let reloaded = 0;
+    window.SHD.account.nav.reload = () => { reloaded++; };
+    click(window, doc.querySelector('.shd-account-toggle'));
+    const logout = [...doc.querySelectorAll('.shd-account-menu button')]
+      .find(b => /^log out$/i.test(b.textContent.trim()));
+    click(window, logout);
+    check('the live log-out item is found through the drawer that mounts on the toggle, and pressed',
+      await waitFor(() => drawer.logouts === 1, { timeout: 1500 }) && drawer.logouts === 1,
+      `logouts=${drawer.logouts} opened=${drawer.opened}`);
+    check('setup: the control it pressed really carries none of the older shapes',
+      !doc.querySelector('a[href*="/logout"], button[data-testid*="logout"], [role="menuitem"][href*="logout"]'));
+    check('...and the session ending is measured before the page is reloaded',
+      await waitFor(() => reloaded === 1, { timeout: 2000 }) && reloaded === 1, `reloaded=${reloaded}`);
+  }
+  {
+    /* --- THE REVEAL FALLBACK REVEALS THE DRAWER, NOT THE AVATAR INSIDE THE TOGGLE ---
+       Measured live after the miss above: the page went dark with the reader's avatar alone
+       at top-left and Reddit's drawer nowhere. The loose host clause matched
+       faceplate-partial#user-drawer-avatar-logged-in — inside the toggle button, earlier in
+       document order than the panel — and passthrough() corridored down to it, hiding
+       #user-drawer-content as a sibling of the path. */
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    installUserDrawer(window, doc, { avatarPartial: true, panelId: 'user-drawer-content', logout: false });
+    Object.assign(window.SHD.account.timings, { pollMs: 10, drawerWaitMs: 200, logoutWaitMs: 200 });
+    window.SHD.account.nav.reload = () => {};
+    click(window, doc.querySelector('.shd-account-toggle'));
+    click(window, [...doc.querySelectorAll('.shd-account-menu button')]
+      .find(b => /^log out$/i.test(b.textContent.trim())));
+    await waitFor(() => doc.documentElement.classList.contains('shd-passthrough-active'), { timeout: 2000 });
+    const toggle = doc.querySelector('#expand-user-drawer-button');
+    const avatar = doc.querySelector('#user-drawer-avatar-logged-in');
+    const content = doc.querySelector('#user-drawer-content');
+    check('setup: an avatar partial whose id says "user-drawer" sits INSIDE the toggle, ahead of the panel',
+      !!avatar && !!toggle && toggle.contains(avatar) && !!content &&
+      avatar.compareDocumentPosition(content) & 4 /* content follows avatar */);
+    check('the fallback reveals the drawer panel, not the avatar inside the toggle',
+      content.classList.contains('shd-passthrough') && !avatar.classList.contains('shd-passthrough'),
+      `content=${content.className} avatar=${avatar.className}`);
+    check('...and the panel is not hidden as a sibling of a corridor to the wrong element',
+      !content.classList.contains('shd-passthrough-hide'), content.className);
+    window.SHD.dom.passthroughClear();
+  }
+  {
+    /* The same trap WITHOUT a named #user-drawer-content to prefer — a drawer whose panel
+       carries only a loose id. Here the exclusion is the only thing standing between the
+       fallback and the avatar, which is what makes this the block that actually tests it:
+       with the named panel present the preference alone gets the right answer. */
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    installUserDrawer(window, doc, { avatarPartial: true, logout: false });
+    Object.assign(window.SHD.account.timings, { pollMs: 10, drawerWaitMs: 200, logoutWaitMs: 200 });
+    window.SHD.account.nav.reload = () => {};
+    click(window, doc.querySelector('.shd-account-toggle'));
+    click(window, [...doc.querySelectorAll('.shd-account-menu button')]
+      .find(b => /^log out$/i.test(b.textContent.trim())));
+    await waitFor(() => doc.documentElement.classList.contains('shd-passthrough-active'), { timeout: 2000 });
+    const avatar = doc.querySelector('#user-drawer-avatar-logged-in');
+    const panel = doc.querySelector('#user-drawer-panel');
+    check('setup: no named panel exists, so the loose clause is all there is',
+      !doc.querySelector('#user-drawer-content') && !!panel && !!avatar);
+    check('an element inside the toggle is excluded even when it is the first loose match',
+      panel.classList.contains('shd-passthrough') && !avatar.classList.contains('shd-passthrough'),
+      `panel=${panel.className} avatar=${avatar.className}`);
+    window.SHD.dom.passthroughClear();
   }
   {
     // The contract that names the reader is unverified live, so a miss has to be a shape
@@ -7104,6 +7275,15 @@ async function boot(html, url, setup) {
       await waitFor(() => !!c10.composer, { timeout: 2000 }) &&
       !!window.SHD.dom.deepQuery(c10.composer, window.SHD.C.COMPOSER.editor),
       'no dormant editor in the fixture');
+    /* THE SECOND MEASUREMENT (2026-09-17): the collapsed box has its submit control too,
+       hidden and enabled, in a hidden form beside the hidden editor. A presence test —
+       which is what 0.48.0 shipped, on a measurement in which no submit existed — passes
+       on a closed box. This setup line is what makes the assertion after it mean
+       something: the old discriminator would have said "open". */
+    check('setup: ...and a submit control, present but hidden, which a presence test takes for open',
+      !!window.SHD.dom.deepQuery(c10.composer, window.SHD.C.COMPOSER.submit) &&
+      !!window.SHD.dom.deepQuery(c10.composer, window.SHD.C.COMPOSER.submit).closest('[hidden]'),
+      'fixture lacks the hidden submit');
     check('a composer that never opened is reported as `composer`, not as a failed insert',
       await waitFor(() => formOf('t1_c10')?.dataset.shdStep, { timeout: 4000 }) &&
       formOf('t1_c10').dataset.shdStep === 'composer',
@@ -7113,6 +7293,58 @@ async function boot(html, url, setup) {
     check('...and the draft is still ours',
       formOf('t1_c10').querySelector('textarea').value === 'Into a box that never opened.');
     window.SHD.dom.passthroughClear();
+
+    /* --- AND A COLLAPSED BOX THAT HONOURS FOCUS IS OPENED AND POSTED THROUGH ---
+       The live top-level composer does: its trigger's click does nothing and a synthetic
+       pointer sequence did nothing (log 111), but focusing the textarea inside the
+       trigger's shadow root expands it in ~300ms (log 113). So the ceiling 0.48.0 told the
+       reader to climb by hand — "click it once, then save again" — is climbed for them,
+       and the whole chain completes from Sheddit's own box. The box above, which does not
+       honour focus, still takes the handoff. */
+    const c15 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c15"]'),
+      { reply: true, composer: 'collapsed', opens: true });
+    click(window, row('t1_c15').querySelector('a.reply'));
+    formOf('t1_c15').querySelector('textarea').value = 'Opened by focus, posted by us.';
+    formOf('t1_c15').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a collapsed composer is opened by focusing the trigger\'s inner textarea',
+      await waitFor(() => c15.expanded === 1, { timeout: 2000 }), `expanded=${c15.expanded}`);
+    check('...and the reply then posts from Sheddit\'s own box, no handoff',
+      await waitFor(() => c15.clicks.submit === 1, { timeout: 2000 }) &&
+      c15.received[0] === 'Opened by focus, posted by us.' &&
+      await waitFor(() => !formOf('t1_c15'), { timeout: 2000 }) &&
+      !doc.documentElement.classList.contains('shd-passthrough-active'),
+      `submits=${c15.clicks.submit} received=${JSON.stringify(c15.received)}`);
+
+    /* --- PARAGRAPHS GO IN AS PARAGRAPHS ---
+       execCommand('insertText') hands the editor a run of characters, and a newline inside
+       it is not a paragraph to a rich editor: measured live, a two-paragraph draft posted
+       as one. 'insertParagraph' via execCommand is swallowed; what the editor honours is
+       the beforeinput a real Enter produces. jsdom has no execCommand, so this supplies one
+       that inserts at the focused element, and counts the paragraph events between the
+       pieces. */
+    {
+      const inputs = [];
+      doc.execCommand = (cmd, _ui, val) => {
+        const a = doc.activeElement;
+        if (cmd !== 'insertText' || !a || a.getAttribute('contenteditable') !== 'true') return false;
+        a.textContent += val;
+        return true;
+      };
+      const c16 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c16"]'),
+        { reply: true, composer: 'contenteditable', focusable: true,
+          onEditor: (ed) => ed.addEventListener('beforeinput', (e) => inputs.push(e.inputType)) });
+      click(window, row('t1_c16').querySelector('a.reply'));
+      formOf('t1_c16').querySelector('textarea').value = 'One.\n\nTwo.\n\nThree.';
+      formOf('t1_c16').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+      const breaks = () => inputs.filter(t => t === 'insertParagraph').length;
+      check('a three-paragraph draft is typed as three pieces with a paragraph break between each',
+        await waitFor(() => c16.clicks.submit === 1, { timeout: 2000 }) && breaks() === 2,
+        `breaks=${breaks()} received=${JSON.stringify(c16.received)}`);
+      check('...and every paragraph reaches Reddit',
+        /One\./.test(c16.received[0] || '') && /Two\./.test(c16.received[0] || '') &&
+        /Three\./.test(c16.received[0] || ''), JSON.stringify(c16.received));
+      delete doc.execCommand;
+    }
 
     /* --- A RICH EDITOR THAT RECONCILES THE TEXT AWAY MUST NOT READ AS A SUCCESS ---
        This is the one that could spend a reader's comment. insertText() wrote textContent

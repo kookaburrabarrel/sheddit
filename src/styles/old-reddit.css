@@ -94,7 +94,11 @@ html.shd-active {
   --shd-gutter: calc(var(--shd-side-w) + var(--shd-side-gap) * 2);
 }
 
-html.shd-active { background: var(--shd-page-bg); }
+/* !important, like the body rule beneath it: Reddit paints its own dark canvas colour on
+   <html>, and where the viewport is taller than the page the canvas is what shows — a black
+   band under a classic-theme listing, measured live. The canvas takes <html>'s background
+   when there is one, so ours has to win this cascade outright, not merely on specificity. */
+html.shd-active { background: var(--shd-page-bg) !important; }
 html.shd-active body {
   background: var(--shd-page-bg) !important;
   font-family: var(--shd-font) !important;

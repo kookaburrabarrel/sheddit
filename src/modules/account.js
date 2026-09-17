@@ -522,6 +522,41 @@ SHD.account = (() => {
     return holds(editor, text);
   }
 
+  /**
+   * Is this element something the reader could see? Null-safe, and returns the element so
+   * it can sit directly inside a waitFor().
+   *
+   * Layout is the honest answer — a display:none ancestor anywhere, through any shadow
+   * root, zeroes the client rects — and it is not defeated by our own suppression, which
+   * hides the native tree with visibility and opacity rather than by removing its boxes.
+   * jsdom does no layout at all, so every element reads as unseen there; on a page with no
+   * layout engine the `hidden` attribute is the fallback, which is exactly what the
+   * fixtures model and nothing a live page relies on.
+   */
+  const layoutless = () => !document.body || document.body.getClientRects().length === 0;
+  function shown(el) {
+    if (!el || !el.isConnected) return null;
+    if (layoutless()) return el.closest?.('[hidden]') ? null : el;
+    return el.getClientRects().length > 0 ? el : null;
+  }
+
+  /**
+   * Open a collapsed composer the way the live page accepts: focus, not a click.
+   * Measured on the top-level "Join the conversation" box — the trigger's own click does
+   * nothing and a full synthetic pointer sequence did nothing (log 111), but focusing the
+   * textarea inside the trigger's shadow root expands it in ~300ms, and the host exposes a
+   * focus() of its own. Both are tried; neither is trusted, which is why the caller then
+   * WAITS for a visible submit control rather than assuming. A composer that is already
+   * open has no visible trigger and this is a no-op.
+   */
+  function openComposer(host) {
+    const trigger = shown(SHD.dom.deepQuery(host, C.COMPOSER.trigger));
+    if (!trigger) return false;
+    try { trigger.shadowRoot?.querySelector('textarea')?.focus(); } catch { /* best effort */ }
+    try { if (typeof host.focus === 'function') host.focus(); } catch { /* best effort */ }
+    return true;
+  }
+
   /** The focused element THROUGH shadow roots — activeElement stops at each host. */
   function deepActive() {
     let a = document.activeElement;
@@ -550,10 +585,23 @@ SHD.account = (() => {
          shadow root it sits in, and otherwise the write goes straight to the fallback,
          which addresses the editor by reference and cannot land anywhere else. */
       let done = false;
-      if (deepActive() === editor) {
+      if (deepActive() === editor && typeof document.execCommand === 'function') {
+        /* ONE PARAGRAPH AT A TIME. execCommand('insertText') hands the editor a run of
+           characters, and a newline inside that run is not a paragraph to a rich editor —
+           measured live, a two-paragraph draft went in as one. 'insertParagraph' through
+           execCommand is swallowed too; what the editor honours is the `beforeinput` a real
+           Enter produces. So the draft is split where the reader left a blank line, each
+           piece is typed, and between pieces the editor is told a paragraph ended the way
+           the keyboard would tell it. */
         try {
-          done = typeof document.execCommand === 'function' &&
-                 document.execCommand('insertText', false, text) === true;
+          done = true;
+          text.split(/\n\s*\n/).forEach((para, i) => {
+            if (i && typeof InputEvent === 'function') {
+              editor.dispatchEvent(new InputEvent('beforeinput',
+                { inputType: 'insertParagraph', bubbles: true, cancelable: true }));
+            }
+            if (para && document.execCommand('insertText', false, para) !== true) done = false;
+          });
         } catch { done = false; }
       }
       /* The honest fallback, kept for a PLAIN contenteditable, where setting text is the
@@ -605,10 +653,20 @@ SHD.account = (() => {
        has none, and one opened by a real click has both. Asked here, BEFORE the editor, so
        `composer` is what a collapsed box reports — which is also the step whose fallback is
        the right one, since there is nothing to type into. */
+    /* AND OPEN MEANS VISIBLE, NOT PRESENT. The paragraph above was written on a
+       measurement in which a collapsed box had no submit control at all. Measured again a
+       week later, it has one — hidden, enabled, inside a hidden faceplate-form beside a
+       hidden editor — so the presence test passed on a closed box and the insert went into
+       an editor with no model (log 113). What a collapsed box shows instead is its
+       trigger, and what opens it is focus on the textarea in the trigger's shadow root.
+       So: if the trigger is the visible thing, open it; then wait for a submit control the
+       reader could see, which is the one discriminator the markup has not moved under. */
+    openComposer(host);
     const opened = await waitFor(
-      () => SHD.dom.deepQuery(host, C.COMPOSER.submit), timings.composeWaitMs);
+      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs);
     if (!opened) return { ok: false, step: 'composer', host };
-    const editor = await waitFor(() => SHD.dom.deepQuery(host, C.COMPOSER.editor), timings.composeWaitMs);
+    const editor = await waitFor(
+      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.editor)), timings.composeWaitMs);
     if (!editor) return { ok: false, step: 'editor', host };
     if (!await insertText(editor, text)) return { ok: false, step: 'insert', host };
     // Re-resolved rather than reusing `opened`: an editor that has just taken its first
@@ -676,7 +734,13 @@ SHD.account = (() => {
     }
     host = host || await waitFor(() => findHost(target, kind), timings.composeWaitMs);
     if (!host) return false;
-    const editor = await waitFor(() => SHD.dom.deepQuery(host, C.COMPOSER.editor), timings.composeWaitMs);
+    /* The same gate compose() applies, because the same closed box reaches here: a reader
+       handed an unopened composer with their draft "in" it has been handed nothing. Try to
+       open it the one way that works, and carry the text only into an editor they can see —
+       otherwise the exit-bar sentence about clicking it once is the accurate one. */
+    openComposer(host);
+    const editor = await waitFor(
+      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.editor)), timings.composeWaitMs);
     if (!editor) return false;
     /* ALREADY THERE IS ALREADY CARRIED. compose() may have put the words into this very
        editor and then misjudged its own work — the multi-line case did exactly that, and
@@ -982,10 +1046,30 @@ SHD.account = (() => {
    * one avatar button, with the log-out control hidden by our own class. The opposite of
    * what the fallback promises.
    */
+  /**
+   * The drawer's panel, for the reveal fallback — never the toggle, and never anything
+   * INSIDE the toggle either.
+   *
+   * The second exclusion is the fix for a measured miss. `host` leads with a loose
+   * `[id*="user-drawer"]`, which matches faceplate-partial#user-drawer-avatar-logged-in —
+   * the avatar, sitting inside the toggle button and earlier in document order than the
+   * panel. Revealing it corridored passthrough() down to the avatar and display:none'd
+   * every sibling on the way, #user-drawer-content included: a dark page, the avatar alone
+   * at top-left, and Reddit's drawer nowhere. The named panel is asked for first so the
+   * loose clause only ever decides when the named one is absent.
+   */
   function drawerPanel() {
     const toggle = document.querySelector(C.USER_DRAWER.toggle);
-    const hosts = [...document.querySelectorAll(C.USER_DRAWER.host)];
-    return hosts.find(el => el !== toggle && !(toggle && el.contains(toggle))) || null;
+    const usable = (el) => !!el && el !== toggle &&
+      !(toggle && (el.contains(toggle) || toggle.contains(el)));
+    /* Two lookups, not one selector list. querySelectorAll('#named, [loose]') returns
+       DOCUMENT order whatever order the clauses are written in, so a combined query would
+       hand back the avatar partial first regardless — the named panel is only "first" if
+       it is asked for on its own. The exclusion above is what carries the case where the
+       named panel is absent altogether. */
+    const named = document.querySelector(C.USER_DRAWER.content);
+    if (usable(named)) return named;
+    return [...document.querySelectorAll(C.USER_DRAWER.host)].find(usable) || null;
   }
 
   function findLogoutControl() {
@@ -996,7 +1080,7 @@ SHD.account = (() => {
     const exact = [];
     const scan = (root, depth) => {
       if (!root || depth > 8 || typeof root.querySelectorAll !== 'function') return;
-      for (const el of root.querySelectorAll('a, button, [role="menuitem"]')) {
+      for (const el of root.querySelectorAll(C.NATIVE.logoutScan)) {
         if (C.NATIVE.logoutText.test((el.textContent || '').trim())) exact.push(el);
       }
       if (root.shadowRoot) scan(root.shadowRoot, depth + 1);

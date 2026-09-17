@@ -1,6 +1,6 @@
 {
-  "version": "0.49.0",
-  "released": "2026-09-15",
+  "version": "0.50.0",
+  "released": "2026-09-17",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.49.0 corrects 0.48.0. That build said it had removed the way a save could lose your draft; it had removed one way and left another. A save could report success, post nothing, and close the form with your text gone — Sheddit had been treating Reddit's box going empty as proof of a post, which is also what the box looks like when Reddit quietly rejected the text. Only your comment actually appearing counts now, and if it has not appeared in time the draft stays. Also fixed: a reply with a blank line in it was always reported as failing and then written into Reddit's box twice, and Sheddit could type into its own reply box instead of Reddit's, doubling your draft. The tests had been passing on the same weak signal that failed live; they no longer are."
+  "notes": "0.50.0 fixes the signed-in account corner against today's Reddit. Log out could not find Reddit's control, and its fallback showed your avatar on a dark page instead of Reddit's menu; both now find the right thing. Your username was never read, so the corner said only 'logged in' — Reddit stamps the name on the page from the first byte, and Sheddit reads it there and only there. The top-level reply box is now opened for you: Reddit's collapsed box had started shipping a hidden post button, which fooled the 'is it open' check, and it turns out focusing the field inside the box opens it where a click did not. Blank lines in a reply post as paragraphs. And a black band under short pages in the classic theme is gone."
 }

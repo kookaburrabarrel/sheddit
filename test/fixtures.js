@@ -446,7 +446,15 @@ function headerHtml(opts = {}) {
      what prevents it, and a test drives exactly that. `noUsername` drops the link so the
      unnamed fallback has a page to run on. */
   const name = opts.username || 'tester';
-  return `<reddit-header-large>` +
+  /* `dispatcher` is what the live page actually carries the name in: an attribute on a
+     direct child of shreddit-app, present from the first byte — while every /user/ anchor
+     appears only once the drawer has opened. `dispatcherDeep` is the CONTROL: the same
+     element nested inside a post, where the contract must not read it, because a name
+     that deep could be anyone's. headerHtml's output is concatenated straight inside
+     <shreddit-app>, which is what makes the first one a direct child. */
+  const dispatcher = opts.dispatcher
+    ? `<after-login-toast-dispatcher username="${name}"></after-login-toast-dispatcher>` : '';
+  return dispatcher + `<reddit-header-large>` +
     (opts.loggedIn ? `<span>` +
       (opts.noUsername ? '' : `<a href="/user/${name}/">${name}</a>`) +
       `<button id="expand-user-drawer-button" aria-label="Expand user menu"><img alt="User Avatar" src="https://styles.redditmedia.com/avatar.png"></button></span>` : '') +

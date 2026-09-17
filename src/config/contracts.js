@@ -379,8 +379,27 @@ SHD.C = {
      * shrug at, so this one matcher is strict, scoped to the drawer, and account.js clicks
      * nothing when more than the exact phrase matches.
      */
-    logout: 'a[href*="/logout" i], button[data-testid*="logout" i], [role="menuitem"][href*="logout" i]',
+    /* MEASURED LIVE 2026-09-17, signed in. Reddit's log-out item is none of the three
+       shapes below it — it is
+         user-drawer-logout > faceplate-tracker[noun=logout] > ul > li#logout-list-item
+           > div[tabindex=0]  "Log Out"
+       a <div> with no href, no role and no testid, and the click handler is on the CUSTOM
+       ELEMENT itself (connectedCallback adds a click listener that ends the session), so a
+       click anywhere inside it bubbles up and works. Nothing else is needed: no form, no
+       token. Both the element and the list item are named so the attribute pass finds it
+       without ever reaching the text scan; the older clauses stay as fallbacks for the
+       shapes that were guessed at before anyone had looked. The item does not exist until
+       the drawer has been opened — #user-drawer-content ships holding one
+       faceplate-partial and fills ~1.6s after the avatar is clicked — which account.js's
+       toggle-then-wait already covers; the wait was searching for the wrong thing. */
+    logout: 'user-drawer-logout, #logout-list-item, ' +
+            'a[href*="/logout" i], button[data-testid*="logout" i], [role="menuitem"][href*="logout" i]',
     logoutText: /^log\s*out$/i,
+    /* What the text fallback is allowed to consider. `[tabindex]` is there because the live
+       control is a focusable <div> — without it the div carrying exactly "Log Out" was
+       never looked at, and the fallback that exists for a renamed control could not see
+       the one control on the page. */
+    logoutScan: 'a, button, [role="menuitem"], [tabindex]',
     /* The per-comment "Reply" control, for opening Reddit's own composer on a logged-in
        session (account.js). CANDIDATE still: the 2026-09-05 signed-in probe read the
        first comment before its action row had hydrated — the only buttons under it were
@@ -694,6 +713,23 @@ SHD.C = {
      * than mistaken for a name. A miss costs the name and nothing else: the corner says
      * "logged in" instead, and the preferences link beside it is unaffected.
      */
+    /* THE NAME IS AN ATTRIBUTE, NOT A LINK, and it is there from the first byte. Measured
+       live 2026-09-17 on a listing, a comments page and a profile: none of the anchor
+       clauses below match at load, because the only `/user/<me>/` link on the page is the
+       "View Profile" row inside #user-drawer-content, and that content is not in the DOM
+       until the drawer has been opened once. Polled 0-9s after load: no profile link, so
+       the corner said "logged in" and the menu had no profile entry, on every page.
+       What IS in the page at t=0 is
+         shreddit-app > after-login-toast-dispatcher[username="<me>"]
+       a direct child of the app element. Direct child is the scoping: nothing that deep
+       in a post or a comment can be mistaken for it, which is the property every other
+       clause here exists to secure. `achievements-entrypoint[username]` carries the same
+       value in the right rail, and is deliberately NOT listed: it has not been seen on
+       another user's profile page, where "username" could as easily name the profile's
+       owner, and greeting the reader by a stranger's name is the failure this contract is
+       built around. Read as an attribute value, so session.js's href parsing does not
+       apply; the anchors below remain the fallback for a page without the dispatcher. */
+    usernameAttr: 'shreddit-app > after-login-toast-dispatcher[username]',
     username: 'reddit-header-large a[href*="/user/"], ' +
               '#expand-user-drawer-button a[href*="/user/"], ' +
               'user-drawer-app a[href*="/user/"], ' +
@@ -742,6 +778,14 @@ SHD.C = {
    */
   USER_DRAWER: {
     toggle: '#expand-user-drawer-button, reddit-header-large [id*="user-drawer" i] button',
+    /* The panel itself, named, and searched BEFORE `host`. The loose `[id*="user-drawer"]`
+       clause below also matches faceplate-partial#user-drawer-avatar-logged-in — which is
+       the avatar, and it lives INSIDE the toggle button. Measured live: the "reveal Reddit's
+       own drawer" fallback revealed that partial, and passthrough() then display:none'd
+       every sibling on the way down to it, #user-drawer-content among them. The reader got
+       a dark page with their avatar alone at top-left and the drawer nowhere. Same class of
+       bug the toggle exclusion was written for, one level down. */
+    content: '#user-drawer-content',
     host: '[id*="user-drawer" i], user-drawer-app, faceplate-tracker[noun*="user_drawer" i]'
   },
 
@@ -805,7 +849,23 @@ SHD.C = {
     host: 'comment-composer-host, shreddit-composer, shreddit-async-loader[bundlename*="composer" i], ' +
           'faceplate-form[action*="comment" i]',
     editor: 'textarea, [data-lexical-editor], [contenteditable="true"], [contenteditable=""]',
-    submit: 'button[type="submit"], [slot="submit-button"], button[slot*="submit" i]'
+    submit: 'button[type="submit"], [slot="submit-button"], button[slot*="submit" i]',
+    /* THE COLLAPSED STATE, measured live 2026-09-17 on a top-level composer:
+         comment-composer-host[slot=ready]
+           faceplate-textarea-input[data-testid=trigger-button size=collapsed]  visible
+           faceplate-form[slot=ready] > shreddit-composer                      hidden
+             div[slot=rte][contenteditable][data-lexical-editor]               hidden
+             button[type=submit] "Comment"                                     hidden, enabled
+       The submit button is PRESENT while collapsed. 0.48.0 discriminated open from
+       collapsed by its presence — on the measurement then available, a collapsed box had
+       none — and the markup has moved under that: deepQuery found the hidden button, the
+       box was taken for open, and the insert went into an editor with no model (log 113).
+       Open and collapsed differ by VISIBILITY, not by what exists, so account.js reads
+       that; this names the trigger so the collapsed state can be recognised and opened.
+       What opens it is FOCUS on the textarea inside the trigger's shadow root — clicking
+       the trigger does nothing, a real pointer sequence did nothing (log 111), and a focus
+       call expands it in ~300ms. The host also exposes focus() on its prototype. */
+    trigger: 'faceplate-textarea-input[data-testid="trigger-button"]'
   },
 
   /**

@@ -20,6 +20,71 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.50.0
+
+A signed-in round against today's Reddit. Reading and voting passed end to end; everything
+that has to find a control in Reddit's header or its comment box missed. Four of those are
+fixed here, each against the live markup the report captured.
+
+### Fixed — log out never found Reddit's control
+
+`log out` waited, then said it could not find Reddit's log-out control. Reddit's item is a
+plain focusable box inside a custom element — no link, no button, none of the shapes Sheddit
+was looking for — and its text was never examined because the fallback only looked at links
+and buttons. It is named now, and the search reads focusable elements too.
+
+### Fixed — the "show Reddit's own menu" fallback showed the wrong thing
+
+When log out failed, the page went dark with your avatar alone at the top-left and Reddit's
+menu nowhere. The avatar sits inside the button that opens the menu and happened to match
+the same search; revealing it hid the menu as a side effect. The menu panel is asked for by
+name first, and nothing inside the toggle button is ever a candidate.
+
+### Fixed — your username was never read
+
+The corner said "logged in" and the menu had no profile link, on every page. Sheddit looked
+for a link to your profile in the header, and there is none until Reddit's menu has been
+opened once. Reddit does stamp your name on the page from the first byte, in one specific
+place; Sheddit reads it there now. The name is only ever taken from that place — the same
+marker sitting anywhere deeper is ignored, because a name that deep could be anyone's.
+
+### Fixed — the top-level reply box is opened for you, and paragraphs survive
+
+0.48.0 could not tell Reddit's collapsed "Join the conversation" box from an open one, on the
+grounds that only an open one has a post button. Reddit's markup has changed: the collapsed
+box now has the button too, hidden. Sheddit reads whether it is visible instead.
+
+Better than that: 0.48.0 told you to click the box yourself because a simulated click does
+nothing. It turns out focusing the field inside the box does open it — so Sheddit does that,
+and a reply to a fresh thread now goes through from Sheddit's own box. If a box does not
+open that way, you still get the two-click instruction.
+
+And a reply with blank lines in it posted as one paragraph; the editor treats a run of typed
+text as one paragraph regardless of newlines. Sheddit now types each paragraph and presses
+Enter between them the way the editor expects.
+
+### Fixed — a black band under short pages
+
+Reddit's own dark background on the page canvas showed through below a short listing in the
+classic theme. Sheddit's theme colour wins there now.
+
+### Known, not fixed
+
+- **`load more` on your own profile overview never resolves.** Second sighting of the stuck
+  paginator, this time with a firm "not the timeout". Still waiting on the one-line reading
+  from a stuck page, which is reachable from the page console.
+- **A post on your own profile overview is not shown**, though the comments are. Sheddit
+  read the post and rejected it for a missing attribute; which one needs a reading from
+  the page.
+- Noted from the same round, not acted on: profile comments carry no vote arrows or score;
+  the profile sidebar offers submit links rather than karma and cake day; a hidden-history
+  profile hands back to Reddit with no note; the NSFW toggle loses keyboard focus when
+  pressed; crosspost domain tags link to the bare host; and `shreddit-post`'s `score`
+  attribute lags a vote — Sheddit reads the button state, not that attribute, so nothing to
+  change there.
+
+---
+
 ## 0.49.0
 
 The signed-in reply box again, and this entry corrects the previous one. 0.48.0 said it

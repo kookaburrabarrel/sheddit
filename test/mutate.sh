@@ -1734,7 +1734,8 @@ mutate "any comment arriving anywhere counts as the reader's comment posting" ru
 # the toggle sits earlier in document order. Revealing it hands passthrough() the button and
 # display:none's the panel holding Reddit's log-out control — the opposite of the promise.
 mutate "the log-out fallback reveals the avatar button instead of the drawer" run \
-  src/modules/account.js '    return hosts.find(el => el !== toggle && !(toggle && el.contains(toggle))) || null;' '    return hosts[0] || null;'
+  src/modules/account.js '    return [...document.querySelectorAll(C.USER_DRAWER.host)].find(usable) || null;' \
+                         '    return [...document.querySelectorAll(C.USER_DRAWER.host)][0] || null;'
 
 # logOut()'s first act is a programmatic click on Reddit's avatar button, which bubbles to
 # the document listener that closes our menu on an outside click. Without the guard the menu
@@ -2443,8 +2444,9 @@ mutate "a comment vote goes back to failing silently" run \
 # their words about a box that was never open.
 mutate "a dormant editor counts as an open composer again" run \
   src/modules/account.js "    const opened = await waitFor(
-      () => SHD.dom.deepQuery(host, C.COMPOSER.submit), timings.composeWaitMs);
-    if (!opened) return { ok: false, step: 'composer', host };" ""
+      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs);
+    if (!opened) return { ok: false, step: 'composer', host };" \
+                         "    const opened = SHD.dom.deepQuery(host, C.COMPOSER.editor);"
 
 # THE ONE THAT COULD SPEND A READER'S COMMENT. A rich editor reconciles its DOM against its
 # own model, so text written straight in is removed a moment later — and insertText() read
@@ -2494,15 +2496,64 @@ mutate "the comparison is back to the raw draft" run \
 # a request it declined. Measured twice: the reader's OWN draft box doubled, 478 -> 956 and
 # 375 -> 750 — the extension corrupting the one copy of the text the reader relied on.
 mutate "execCommand fires without checking where the caret is" run \
-  src/modules/account.js "      if (deepActive() === editor) {
-        try {
-          done = typeof document.execCommand === 'function' &&
-                 document.execCommand('insertText', false, text) === true;
-        } catch { done = false; }
-      }" "      try {
-        done = typeof document.execCommand === 'function' &&
-               document.execCommand('insertText', false, text) === true;
-      } catch { done = false; }"
+  src/modules/account.js "      if (deepActive() === editor && typeof document.execCommand === 'function') {" \
+                         "      if (typeof document.execCommand === 'function') {"
+
+# LOG 113 AND 114 — a signed-in round against today's markup (2026-09-17).
+#
+# Reddit's log-out item is a focusable <div> inside a custom element, with no href, role or
+# testid; every clause missed it and the text scan never looked at a <div>. Both halves in
+# one row, because either alone still finds the live item and the other covers it.
+# Anchored on the halves of each line that carry one quote kind only — an anchor holding
+# both ' and " cannot be quoted for both bash and the anchor check's raw read.
+mutate "the log-out item goes unrecognised again" run \
+  src/config/contracts.js "    logout: 'user-drawer-logout, #logout-list-item, ' +" \
+                          "    logout: '' +" \
+  src/config/contracts.js ", [tabindex]'," "',"
+
+# The loose host clause matches an avatar partial INSIDE the toggle button, earlier in
+# document order than the panel; revealing it hid the drawer as a sibling of the corridor.
+# The named-panel preference has no row of its own: querySelectorAll returns document order,
+# so with the exclusion in place the preference is unobservable from any fixture, and a row
+# for it survives. The exclusion is what carries the case without a named panel.
+mutate "the reveal fallback can pick the avatar inside the toggle again" run \
+  src/modules/account.js "      !(toggle && (el.contains(toggle) || toggle.contains(el)));" \
+                         "      !(toggle && el.contains(toggle));"
+
+# The reader's name is an attribute on a direct child of the app element from the first
+# byte; every anchor clause only matches once the drawer has been opened.
+mutate "the name attribute is no longer read" run \
+  src/core/session.js "    if (S.usernameAttr) {" "    if (false && S.usernameAttr) {"
+
+# ...and it must be read from THERE, not from anywhere: the same element inside a post could
+# be anyone's, and greeting the reader by a stranger's name is the failure this contract is
+# built around.
+mutate "the name attribute is read from anywhere on the page" run \
+  src/config/contracts.js "    usernameAttr: 'shreddit-app > after-login-toast-dispatcher[username]'," \
+                          "    usernameAttr: 'after-login-toast-dispatcher[username]',"
+
+# A collapsed composer now ships its submit control hidden and enabled, so presence is no
+# discriminator; 0.48.0's gate passed on a closed box and the insert went into an editor
+# with no model.
+mutate "a hidden submit counts as an open composer again" run \
+  src/modules/account.js "      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs);" \
+                         "      () => SHD.dom.deepQuery(host, C.COMPOSER.submit), timings.composeWaitMs);"
+
+# Focus on the trigger's inner textarea opens the live box where clicks do not.
+mutate "a collapsed composer is never opened" run \
+  src/modules/account.js "    openComposer(host);
+    const opened = await waitFor(" "    const opened = await waitFor("
+
+# A newline inside one insertText run is not a paragraph to a rich editor; measured live, a
+# two-paragraph draft posted as one.
+mutate "paragraphs are typed as one run" run \
+  src/modules/account.js "          text.split(/\n\s*\n/).forEach((para, i) => {
+            if (i && typeof InputEvent === 'function') {
+              editor.dispatchEvent(new InputEvent('beforeinput',
+                { inputType: 'insertParagraph', bubbles: true, cancelable: true }));
+            }
+            if (para && document.execCommand('insertText', false, para) !== true) done = false;
+          });" "          if (document.execCommand('insertText', false, text) !== true) done = false;"
 
 # The handoff's own "already there" guard has NO row, deliberately: with the comparison
 # above fixed, compose() no longer misjudges a landed insert, so the guard is unreachable

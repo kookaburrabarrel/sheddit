@@ -1956,6 +1956,89 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      refused* from *silently lost*. The check that would have caught run 2 is the one now in
      `compose()`: a comment authored by the reader, under the target, before the form closes.
 
+113. **Open meant present, and the markup moved under it — then the thing that opens the
+     box turned out to be focus.** A signed-in round on 0.49.0, top-level reply, 564-char
+     draft: `insert` again, and behind the handoff a dark page with a collapsed "Join the
+     conversation" box and nothing in it.
+
+     111's discriminator was the submit control's PRESENCE, on the measurement then
+     available: a collapsed box had none. Measured a week later, it has one —
+     `button[type=submit] "Comment"`, hidden and enabled, inside a hidden `faceplate-form`
+     beside the hidden editor, with `faceplate-textarea-input[data-testid=trigger-button
+     size=collapsed]` the only visible thing. So `deepQuery` found the hidden button, the box
+     was taken for open, and the insert went into a Lexical root with no model. The
+     `compose()` comment said this exact case was fixed. It was, against the shape that
+     existed; open and collapsed now differ by VISIBILITY and by nothing that exists, so
+     that is what `shown()` reads — client rects in a browser, the `hidden` attribute where
+     there is no layout engine, null-safe so it sits inside a `waitFor()`.
+
+     THE PART THAT CHANGES THE OUTCOME. 111 measured that `host.click()` and a full
+     synthetic pointer sequence open nothing, and told the reader to click the box
+     themselves. This round measured what nobody had tried: focusing the textarea inside the
+     trigger's shadow root expands the composer in ~300ms, editor and submit both visible,
+     and the host exposes `focus()` on its prototype. A click is gated on a trusted gesture;
+     focus is not. So `openComposer()` does that before the liveness wait, and a box that
+     honours it is opened and posted through from Sheddit's own form — the two-click
+     instruction is now the floor for a box that does not, rather than the path.
+
+     AND PARAGRAPHS. `execCommand('insertText')` hands the editor one run of characters, in
+     which a newline is not a paragraph: 112's "run together" was partly the double write
+     and partly this. `execCommand('insertParagraph')` is swallowed; what the editor honours
+     is the `beforeinput` a real Enter produces. The draft is split at blank lines, each
+     piece typed, and `insertParagraph` dispatched between them. Single newlines inside a
+     paragraph are left to the editor.
+
+     Three fixture shapes: `collapsed` is now the live one (visible trigger with a shadow
+     textarea, hidden form holding editor AND submit); `opens` says whether focus expands
+     it, because the live box does and a box that does not must still report `composer`;
+     `focusable` plus a shimmed `execCommand` that inserts at the focused element, counting
+     `insertParagraph` between the pieces.
+
+114. **Three selector misses in the account corner, one round, all against markup nobody
+     had captured.** Rendering and voting passed end to end; every delegation that reads
+     Reddit's header did not.
+
+     **Log out never found the control.** Reddit's item is `user-drawer-logout >
+     faceplate-tracker[noun=logout] > ul > li#logout-list-item > div[tabindex=0]` "Log Out"
+     — a `<div>`, no href, no role, no testid — and the click handler is on the custom
+     element (`connectedCallback` adds it), so a click anywhere inside bubbles up and ends
+     the session with no form and no token. `C.NATIVE.logout` had three guessed shapes and
+     the text fallback scanned `a, button, [role=menuitem]`, so the one control on the page
+     was never looked at even though its text passes `^log\s*out$`. The drawer content is
+     not in the DOM until the avatar is clicked (a `faceplate-partial` fills ~1.6s later);
+     the toggle-then-wait already covered that, and was waiting for the wrong thing. Named
+     now, and `[tabindex]` joins the scan.
+
+     **The reveal fallback revealed the avatar.** `drawerPanel()` excluded the toggle and
+     anything containing it, but not anything INSIDE it — and
+     `faceplate-partial#user-drawer-avatar-logged-in` matches the loose `[id*="user-drawer"]`
+     clause, lives inside the toggle button, and comes first in document order.
+     `passthrough()` corridored to the avatar and `display:none`'d `#user-drawer-content` as
+     a sibling: dark page, avatar at top-left, drawer nowhere. Same class as the toggle
+     exclusion, one level down. A second lesson in fixing it: `querySelectorAll('#named,
+     [loose]')` returns DOCUMENT order whatever order the clauses are written in, so "prefer
+     the named panel" has to be its own lookup — a combined query hands back the avatar
+     first regardless, and the first version of this fix did exactly that while its test
+     passed on the exclusion alone. Two lookups now; the test that makes the exclusion
+     load-bearing has no named panel at all.
+
+     **The username was never read.** Every clause was `a[href*="/user/"]` in the header or
+     drawer, and on a fresh load none exists — the only `/user/<me>/` anchor is "View
+     Profile" inside the drawer content, absent until opened. Polled 0–9s: nothing. What the
+     page carries from the first byte is `shreddit-app > after-login-toast-dispatcher
+     [username]`, a direct child of the app element. Direct child IS the scoping — nothing
+     that deep in a post can be mistaken for it — and the control fixture puts the same
+     element inside a post to prove the clause does not reach it. `achievements-entrypoint
+     [username]` carries the same value in the right rail and is deliberately not listed: it
+     has not been seen on another user's profile, where "username" could as easily be the
+     profile's owner, and greeting the reader by a stranger's name is the failure this
+     contract exists to prevent.
+
+     One observation fixed alongside: Reddit paints its own dark canvas colour on `<html>`,
+     and where the viewport is taller than the page the canvas is what shows — a black band
+     under a classic-theme listing. `html.shd-active`'s background is `!important` now, as
+     the body rule beneath it already was.
+
 
 ## The popup policy — supersedes bugs 30, 33 and 38
 
@@ -2475,6 +2558,30 @@ the way a question got settled is usually more useful than the answer.
     It is listed here rather than fixed on the best hypothesis deliberately. `paginator.js`
     carries three reverts that came from reasoning about it instead of measuring it, and
     question 14 above is the standing note saying so.
+
+    **A second sighting, 2026-09-17**, on the reader's OWN profile overview
+    (`/user/<me>/`): 18 comments render, then `loading more…` indefinitely — polled at 9s
+    and again later, and `SETTLE_CEILING_MS` is 6s, so this is not the ceiling. Another
+    user's profile shows `load more` idle and `/submitted/` reaches `no more pages`, so it is
+    the overview/comments end-of-feed on one's own profile. The reporter's hypothesis — the
+    native `shreddit-feed-load-more-observer` elements (three, same cursor) never intersect
+    inside the suppressed tree — is plausible and not the mechanism we drive: `loadNext()`
+    calls the partial's `loadContent()` directly. The reading is the same one line, and it
+    IS reachable from page-context JS, because `diag()` writes to DOM attributes:
+    `document.querySelector('.shd-sentinel').dataset`. Two sightings and still no dataset.
+
+20. **A post on the reader's own profile overview is consumed and not drawn.** Native
+    overview held 1 `shreddit-post` + 18 `shreddit-profile-comment`; Sheddit rendered the
+    18. The post carries `data-shd=done`, so `pipeline.js` reached it and
+    `listing.consume()` returned false — which means `model.post()` rejected it, and that
+    rejects only for a missing id, title or permalink. Old reddit interleaves posts in an
+    overview, so this is a real omission, and it is one attribute away from a fix. No
+    capture of a profile-overview `shreddit-post` exists; the one on the page the report
+    came from is the reading, and it needs nothing from the extension's world:
+    `[...document.querySelector('shreddit-post').attributes].map(a => a.name)` on
+    `/user/<me>/`, plus whether `document.querySelector('shreddit-post a[slot="full-post-link"]')`
+    and `shreddit-post [slot="title"]` exist. Whichever of the triad is absent names the
+    clause to add.
 
 
 18. **Why the reply control is sometimes not there at all.** Three saves on one comment in
