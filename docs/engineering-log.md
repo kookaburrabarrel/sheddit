@@ -2040,6 +2040,46 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      the body rule beneath it already was.
 
 
+115. **The paginator drove Reddit's hovercards instead of its feed — again, and the guard
+     written for exactly that could not see it.** Reported live 2026-09-21, signed in, front
+     page: 27 rows, scroll, 27 rows, repeatedly; then `no more pages` with unproductive=7 and
+     exhausted=5 while a fresh target was still being reported. The target it had chosen was
+     `/svc/shreddit/community-hover-card/oldreddit`. Driving the real
+     `/svc/shreddit/feeds/home-feed` partial by hand on the same page: 27 rows to 52.
+
+     WHAT MAKES THIS WORTH AN ENTRY is that the defence already existed and had a mutation
+     row. `partial()` rejects any partial inside an ITEM, and `ITEMS.LISTING` is
+     `article, shreddit-post`, with a comment recording the first time this happened ("40
+     pages burned, ZERO new rows") and a row named *hovercard partials inside posts are
+     driven as pages again*. Every word of that is still true and none of it fired, because
+     **the hovercards moved out of the posts.** The one measured this time sat in the feed
+     and in no post at all, earlier in document order than the real handle, so it passed the
+     ownership test and `querySelector` returned it first. A guard keyed to where a thing
+     was is not a guard against the thing.
+
+     So the fix is two narrowings that fail differently, neither sufficient alone — the
+     shape the age-gate fix already uses. `C.PARTIAL_NOT_SRC` excludes the hovercard by the
+     src we measured, wherever it sits; that is what fixes the reported page, and on its own
+     it is a string against a path Reddit can rename. `partial()` adds the structural half,
+     which needs no src: **a continuation follows the content it continues.** Reddit appends
+     the next slice's handle after the slice it is continuing, while a partial belonging to
+     something already delivered hangs off a link inside it. That one catches the next
+     non-handle partial nobody has named, in the position this one was found — and it is
+     also insufficient alone, because a partial appended past the end of the slice passes
+     it. Both fail safe: nothing qualifies, and the sentinel says `no more pages` rather
+     than driving something that was never going to yield a row.
+
+     WRITING THE TEST EXPOSED THE WEAKER HALF OF MY OWN FIX, which is the part worth
+     keeping. The first cut was the structural rule alone, and its three assertions passed —
+     but only because the fixture's decoy sat after the last post, so what actually saved it
+     was "take the last handle", not the position rule. The floor case (a feed whose ONLY
+     partial is a hovercard) failed immediately and said so. Two decoys now: the measured
+     hovercard, and a `recommendations` partial ahead of the posts carrying a src the
+     contract deliberately does NOT exclude — without the second, removing the position rule
+     breaks no assertion and the rule is decoration. Three mutation rows, one per narrowing
+     and one reverting `partial()` whole.
+
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
@@ -2558,6 +2598,20 @@ the way a question got settled is usually more useful than the answer.
     It is listed here rather than fixed on the best hypothesis deliberately. `paginator.js`
     carries three reverts that came from reasoning about it instead of measuring it, and
     question 14 above is the standing note saying so.
+
+    **LARGELY ANSWERED, 2026-09-21 — see log 115, and read this entry knowing that.** A live
+    round on the front page produced the reading this question kept asking for, and the
+    mechanism is that the paginator was driving a community-hovercard partial instead of the
+    feed's continuation: the rows could not grow because the thing being driven was never
+    going to grow them. `unproductive=7`, `exhausted=5`, a fresh target still reported —
+    exactly the signature below. That is fixed.
+
+    WHAT IS NOT ANSWERED, and why this stays open: the symptom in the two sightings below is
+    a label stuck on `loading more…`, and driving a hovercard does not produce that. It
+    produces a completed load that yielded nothing — `unproductive`, `setStatus(null)`, back
+    to `load more`. So the front-page case is closed and the STUCK LABEL is not. If it
+    recurs after 0.51.0, the reading is unchanged and now much more likely to isolate a
+    second mechanism rather than this one.
 
     **A second sighting, 2026-09-17**, on the reader's OWN profile overview
     (`/user/<me>/`): 18 comments render, then `loading more…` indefinitely — polled at 9s

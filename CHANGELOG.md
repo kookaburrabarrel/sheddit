@@ -20,6 +20,43 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.51.0
+
+### Fixed — the front page stopped loading more posts
+
+Reddit ships a listing a few posts at a time and hands the page a hidden element to fetch the
+next batch. Because Sheddit hides Reddit's own layout, Reddit never triggers that element
+itself, so Sheddit triggers it — that is how infinite scroll works here at all.
+
+Reddit now uses the same kind of hidden element for the little community cards that appear
+when you hover a subreddit name. Sheddit picked one of those instead of the one that fetches
+posts, and kept picking it: fetching a hovercard, finding no new posts, trying again, until
+the control gave up and said there was nothing left. Measured on a live front page: stuck at
+27 posts, and 52 the moment the right element was triggered.
+
+Sheddit now rules the hovercards out by name, and separately applies a rule that does not
+depend on knowing their name: the thing that continues a list has to come *after* the list.
+Either one alone would have fixed today's page; both are there because Reddit renames things,
+and when neither matches, the control honestly says there are no more pages rather than
+fetching something that will never produce a post.
+
+### Unchanged
+
+Everything else in the same round passed: signed-in identity and the account menu, theme
+switching, front page, subreddits, comments pages and profiles, comment collapse, the reply
+box opening and cancelling, narrow-window layout, browser back and forward, and handing
+search back to Reddit. No page errors.
+
+### Known, not fixed
+
+**`load more` can still stick on your own profile overview.** The front-page case above is
+fixed and explains most of what was reported, but the symptom recorded twice before was a
+control stuck reading "loading more…", and fetching a hovercard does not produce that — it
+produces a finished fetch that found nothing. So a second cause is likely and is still open.
+Also still open: a post on your own profile overview is read and then not shown.
+
+---
+
 ## 0.50.0
 
 A signed-in round against today's Reddit. Reading and voting passed end to end; everything

@@ -228,10 +228,18 @@ const COMMENT_DEPTHS = [0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 2, 0, 1, 2, 3, 0, 1, 0, 0,
 const PAGER_SCRIPT = `
 (() => {
   const PAGE_SIZE = 3;
-  window.__shdPager = { loads: 0, times: [] };
+  window.__shdPager = { loads: 0, times: [], decoyDrives: 0, driven: [] };
   class ShdFakePartial extends HTMLElement {
     loadContent() {
       const st = window.__shdPager;
+      const src = this.getAttribute('src') || '';
+      st.driven.push(src);
+      /* A HOVERCARD YIELDS NOTHING, which is the whole of the live failure: the paginator
+         drove one, it appended no posts, and the row count sat still while the chain
+         burned its budget. One custom element serves every faceplate-partial on the page,
+         so without this branch the decoy would helpfully append a page like the real
+         handle and the test could not tell the two apart. */
+      if (/hover-card|recommendations/.test(src)) { st.decoyDrives++; return; }
       st.loads++; st.times.push(Date.now());
       const feed = document.querySelector('shreddit-feed');
       if (!feed) return;
@@ -471,9 +479,11 @@ function listingPage(opts = {}) {
     ${SR_OUTLET}
     <div><div id="subgrid-container"><div><main id="main-content">
       <shreddit-feed>
+        ${opts.strayPartial ? STRAY_PARTIAL : ''}
         ${POSTS.map((p, i) => postHtml(
           opts.removed && i === 0 ? { ...p, removed: opts.removed } : p)).join('')}
         <shreddit-ad-post><div>sponsored, contains no shreddit-post</div></shreddit-ad-post><hr>
+        ${opts.hovercard ? HOVERCARD_PARTIAL : ''}
         <faceplate-partial loading="programmatic" src="/feed/next"></faceplate-partial>
       </shreddit-feed>
     </main></div></div></div>
@@ -504,6 +514,25 @@ const EMPTY_FEED_PANEL = `
           <p>Make one and get this feed started.</p>
           <a href="/r/911truth/submit">Create a post</a>
         </div>`;
+
+/* A community hovercard's partial, IN the feed and in no post — the shape reported live
+   2026-09-21 that defeated the `!closest(ITEM)` ownership test. It is deliberately placed
+   BEFORE the continuation and after the last post's wrapper, because that is the ordering
+   that made querySelector hand it back first. Same `loading="programmatic"` the real
+   continuation carries, so nothing but its position and its src tells them apart — a
+   decoy that differed in either would not reproduce the bug. */
+const HOVERCARD_PARTIAL =
+  '<faceplate-partial loading="programmatic" ' +
+  'src="/svc/shreddit/community-hover-card/oldreddit"></faceplate-partial>';
+
+/* THE NEXT ONE, whatever it turns out to be. C.PARTIAL_NOT_SRC names the hovercard because
+   it was measured; it cannot name a partial Reddit has not shipped yet. This decoy carries
+   a src the contract does NOT exclude and sits BEFORE the last post, so the only thing that
+   can reject it is the structural rule — a continuation follows the content it continues.
+   Without it the position test in partial() has no assertion that fails when it is removed. */
+const STRAY_PARTIAL =
+  '<faceplate-partial loading="programmatic" ' +
+  'src="/svc/shreddit/recommendations/feed"></faceplate-partial>';
 
 const emptyListingPage = () =>
   listingPage().replace(/<shreddit-feed>[\s\S]*<\/shreddit-feed>/,

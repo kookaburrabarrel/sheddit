@@ -891,9 +891,11 @@ mutate "the chain starts only if the observer speaks first" run \
 # partial. Document order puts the branches first, so without the placement preference the
 # paginator spends its pages expanding branch after branch and never continues the thread.
 mutate "document order beats placement and the thread never continues" run \
-  src/core/paginator.js "    const all = document.querySelectorAll(SEL);
-    for (const p of all) if (!p.closest(ITEM)) return p;
-    return ITEM_FALLBACK[MODE] ? (all[0] || null) : null;" "    return document.querySelector(SEL);"
+  src/core/paginator.js "    const all = [...document.querySelectorAll(SEL)];
+    const free = all.filter(p => !p.closest(ITEM));" \
+                        "    return document.querySelector(SEL); // eslint-disable-line
+    const all = [...document.querySelectorAll(SEL)];
+    const free = all.filter(p => !p.closest(ITEM));"
 
 # The pick crosses the bridge as a selector only the chosen element matches. Reverting to
 # "both sides querySelector the same string" re-splits the two worlds: the isolated world
@@ -989,9 +991,8 @@ mutate "the mp4 pick stops preferring the best rendition" run \
 # subreddit link INSIDE the posts, so once the real feed partial was spent the chain drove
 # hovercard after hovercard. No partial inside a post ever continues a feed.
 mutate "hovercard partials inside posts are driven as pages again" run \
-  src/core/paginator.js "    for (const p of all) if (!p.closest(ITEM)) return p;
-    return ITEM_FALLBACK[MODE] ? (all[0] || null) : null;" \
-                        "    return all[0] || null;"
+  src/core/paginator.js "    const free = all.filter(p => !p.closest(ITEM));" \
+                        "    const free = all;"
 
 # The second guard on the same failure: a load that yields no new sources is a dead end,
 # whatever it was we drove. Without this the chain keeps paying for nothing. The mutation
@@ -2560,6 +2561,34 @@ mutate "paragraphs are typed as one run" run \
 # from any fixture and a row for it survives (measured, 2026-09-15). It stays as belt against
 # a future false negative in insertText(), and this note stays so nobody adds the row and
 # reads its survival as a hole.
+
+# LOG 115 — the paginator drove hovercards instead of the feed, AGAIN, and the guard written
+# for exactly that could not see it: ITEMS.LISTING rejects partials inside posts, and the
+# hovercards moved out of the posts. Measured live: 27 rows in, 27 out, then "no more pages"
+# with unproductive=7. Two narrowings that fail differently, so one row each — if either is
+# covered by the other, the pair is one guard wearing two hats.
+#
+# The measured exclusion. Without it, a feed whose only partial is a hovercard drives it.
+mutate "the measured hovercard src is driven as a page again" run \
+  src/config/contracts.js "  PARTIAL_NOT_SRC: '[src*=\"hover-card\" i]'," \
+                          "  PARTIAL_NOT_SRC: '[src*=\"__never_matches__\" i]',"
+
+# The structural rule, which needs no src and catches the non-handle partial nobody has
+# named yet. Its fixture decoy carries a src the contract deliberately does NOT exclude.
+mutate "a partial ahead of the content is driven as a continuation" run \
+  src/core/paginator.js "    const trailing = free.filter(followsLastItem);
+    // The last one, not the first: if Reddit ever ships more than one handle past the end
+    // of the slice, the newest is the one that continues from where the page now stops.
+    return trailing[trailing.length - 1] || null;" \
+                        "    return free[0] || null;"
+
+# ...and the resolver whole, back to the 0.50.0 behaviour that shipped the bug.
+mutate "partial() reverts to first-free-wins" run \
+  src/core/paginator.js "    const all = [...document.querySelectorAll(SEL)];
+    const free = all.filter(p => !p.closest(ITEM));" \
+                        "    const all = [...document.querySelectorAll(SEL)];
+    const free = all.filter(p => !p.closest(ITEM));
+    if (true) return free[0] || (ITEM_FALLBACK[MODE] ? all[0] : null);"
 
 # A post keeping its picture URL in a responsive srcset rather than in `src` got no
 # thumbnail at all, which on a live listing read as several rows missing their picture and

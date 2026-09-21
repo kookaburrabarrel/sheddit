@@ -64,6 +64,21 @@ SHD.C = {
      self-trigger on scroll; Reddit's feed JS calls it. We call it ourselves via its
      public loadContent(). Verified live: 3 posts -> 28 posts in one call. */
   LAZY_LOADER: 'faceplate-partial',
+  /* A partial that is NOT a pagination handle, by what it fetches.
+     MEASURED LIVE 2026-09-21, signed in, front page: Reddit serves community hovercards as
+     `faceplate-partial[loading="programmatic"]` with
+     src="/svc/shreddit/community-hover-card/<sub>" — the same element and the same loading
+     mode as the feed's own continuation, sitting in the feed and in NO post, so neither the
+     selector nor paginator.js's `!closest(ITEM)` ownership rule could tell them apart. The
+     paginator drove one instead of `/svc/shreddit/feeds/home-feed`: 27 rows in, 27 out,
+     repeatedly, then "no more pages".
+     A NEGATIVE test, not a positive one. Requiring the src to look like a feed endpoint
+     would break silently the day Reddit renames it; naming the thing we measured and have
+     proof is not a handle costs a page only if Reddit reuses that path for pagination,
+     which is the safer direction to be wrong in. Paired with a structural rule in
+     paginator.js (a continuation follows the content it continues) that does not depend on
+     knowing any src at all — see partial(). */
+  PARTIAL_NOT_SRC: '[src*="hover-card" i]',
   FEED_PARTIAL: 'shreddit-feed faceplate-partial[loading="programmatic"]',
   /* Comment threads lazy-load the same way. ARCHITECTURE §1.5 recorded 29 pending
      partials on a real thread; we only ever drove the feed's, so anything past the

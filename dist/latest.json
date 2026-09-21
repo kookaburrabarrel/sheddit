@@ -1,6 +1,6 @@
 {
-  "version": "0.50.0",
-  "released": "2026-09-17",
+  "version": "0.51.0",
+  "released": "2026-09-21",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.50.0 fixes the signed-in account corner against today's Reddit. Log out could not find Reddit's control, and its fallback showed your avatar on a dark page instead of Reddit's menu; both now find the right thing. Your username was never read, so the corner said only 'logged in' — Reddit stamps the name on the page from the first byte, and Sheddit reads it there and only there. The top-level reply box is now opened for you: Reddit's collapsed box had started shipping a hidden post button, which fooled the 'is it open' check, and it turns out focusing the field inside the box opens it where a click did not. Blank lines in a reply post as paragraphs. And a black band under short pages in the classic theme is gone."
+  "notes": "0.51.0 fixes infinite scroll on the front page. Reddit loads more posts through a hidden element the page normally triggers itself, and Sheddit triggers it instead — but Reddit now uses that same kind of element for the little community cards that pop up when you hover a subreddit name, and Sheddit was triggering one of those. It fetched a hovercard over and over, the list never grew, and eventually the control said there was nothing left. Measured on a live front page: 27 posts, and 52 once the right element was triggered. Sheddit now picks it two ways at once — by ruling out the hovercard, and by the rule that the thing continuing a list has to come after the list."
 }

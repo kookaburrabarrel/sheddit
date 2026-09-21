@@ -168,8 +168,12 @@ SHD.paginator = (() => {
    * not depend on the answer.
    */
   const FRESH = `:not([${C.MARK}="done"])`;
+  /* ...and that is not something we have measured is never a handle. Applied to every
+     clause on every route, because an author hovercard can hang off a comment as readily
+     as a community one hangs off a post. See C.PARTIAL_NOT_SRC. */
+  const NOT_A_HANDLE = `:not(${C.PARTIAL_NOT_SRC})`;
   const selectorFor = (mode) =>
-    (SELECTORS[mode] || SELECTORS.LISTING).map(s => s + FRESH).join(', ');
+    (SELECTORS[mode] || SELECTORS.LISTING).map(s => s + FRESH + NOT_A_HANDLE).join(', ');
 
   let SEL = selectorFor('LISTING');
   let CONTAINER = CONTAINERS.LISTING;
@@ -198,10 +202,56 @@ SHD.paginator = (() => {
      expander in document order, so the paginator would spend its pages expanding branch
      after branch and never continue the thread. Branch expanders are still the fallback —
      bug 27's stamping keeps them advancing rather than spinning. */
+  /**
+   * A CONTINUATION FOLLOWS THE THING IT CONTINUES. That is what tells it from a hovercard.
+   *
+   * The `!closest(ITEM)` rule above was written against hovercard partials living INSIDE
+   * posts, which is where they were when it was measured. Reported live 2026-09-21 on the
+   * signed-in front page: they are not there any more. A
+   * `/svc/shreddit/community-hover-card/oldreddit` partial sat in the feed and in no post,
+   * EARLIER in document order than the real `/svc/shreddit/feeds/home-feed` continuation —
+   * so it passed the ownership test, `querySelector` returned it first, and the paginator
+   * drove it. Measured: 27 rows in, 27 rows out, repeatedly, then `no more pages` with
+   * unproductive=7 and exhausted=5 while a fresh target was still being reported. Driving
+   * the real partial by hand on the same page took 27 rows to 52.
+   *
+   * TWO NARROWINGS, because neither is sufficient and they fail differently.
+   *
+   * C.PARTIAL_NOT_SRC excludes the thing we measured, wherever it sits. That is the one
+   * that fixes the reported page, and on its own it is a string against a service path
+   * Reddit can rename.
+   *
+   * This function adds the structural half, which needs no src at all: a continuation
+   * FOLLOWS the content it continues. Reddit appends the next slice's handle after the
+   * slice it is continuing, while a partial belonging to something already delivered hangs
+   * off a link inside it. That catches the next non-handle partial nobody has named yet,
+   * in the position the reported one was found — earlier in the feed than the real handle.
+   * It is not sufficient alone either: a partial appended past the end of the slice passes
+   * it, which is why the measured exclusion is there too.
+   *
+   * Both fail SAFE, which the parentage test could not. When nothing qualifies we report
+   * exhausted — `no more pages`, the honest floor this file already uses for an unverified
+   * profile feed — instead of driving something that was never going to yield a row.
+   */
+  const followsLastItem = (p) => {
+    const box = document.querySelector(CONTAINER);
+    const items = box ? box.querySelectorAll(ITEM) : [];
+    const last = items[items.length - 1];
+    if (!last) return true;      // nothing delivered yet: any free partial is the handle
+    return !!(last.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING);
+  };
+
   const partial = () => {
-    const all = document.querySelectorAll(SEL);
-    for (const p of all) if (!p.closest(ITEM)) return p;
-    return ITEM_FALLBACK[MODE] ? (all[0] || null) : null;
+    const all = [...document.querySelectorAll(SEL)];
+    const free = all.filter(p => !p.closest(ITEM));
+    /* COMMENTS keeps first-free-wins: there a per-branch expander IS a legitimate thing to
+       drive once the top-level partial is spent (bug 53), and those sit inside their own
+       comment, so the position test would disqualify exactly the fallback the route wants. */
+    if (ITEM_FALLBACK[MODE]) return free[0] || all[0] || null;
+    const trailing = free.filter(followsLastItem);
+    // The last one, not the first: if Reddit ever ships more than one handle past the end
+    // of the slice, the newest is the one that continues from where the page now stops.
+    return trailing[trailing.length - 1] || null;
   };
 
   /** Point the paginator at a route's partials. Called by pipeline.js before attach(). */

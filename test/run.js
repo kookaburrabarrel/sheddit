@@ -3593,6 +3593,98 @@ async function boot(html, url, setup) {
       !('browser_specific_settings' in m));
   }
 
+  /* --- A HOVERCARD PARTIAL IN THE FEED IS NOT THE FEED'S CONTINUATION ---
+     Reported live 2026-09-21, signed in, front page. `!closest(ITEM)` was written against
+     hovercard partials living INSIDE posts, which is where they were when it was measured.
+     They are not there any more: a `/svc/shreddit/community-hover-card/oldreddit` partial
+     sat in the feed and in no post, EARLIER in document order than the real
+     `/svc/shreddit/feeds/home-feed` continuation. It passed the ownership test,
+     querySelector returned it first, and the paginator drove it — 27 rows in, 27 rows out,
+     repeatedly, then "no more pages" with unproductive=7, exhausted=5, a fresh target still
+     being reported. Driving the real partial by hand on the same page: 27 rows to 52.
+     The discriminator is POSITION: Reddit appends the next slice's handle AFTER the slice
+     it continues, while a hovercard hangs off a link inside content already delivered. */
+  console.log('\n\x1b[1mPAGINATION PICKS THE FEED\'S OWN CONTINUATION\x1b[0m');
+  {
+    const { doc, window } = await boot(listingPage({ hovercard: true }),
+      'https://www.reddit.com/', noAuto);
+    window.eval(PAGER_SCRIPT);
+    const st = () => window.__shdPager;
+
+    const parts = [...doc.querySelectorAll('shreddit-feed faceplate-partial')];
+    check('setup: the decoy is in the feed, in no post, and ahead of the real handle',
+      parts.length === 2 &&
+      /hover-card/.test(parts[0].getAttribute('src')) &&
+      /feed\/next/.test(parts[1].getAttribute('src')) &&
+      !parts[0].closest('article, shreddit-post'),
+      parts.map(p => p.getAttribute('src')).join(' | '));
+    check('setup: ...so the old ownership test alone would have handed back the decoy',
+      /hover-card/.test(
+        doc.querySelector('shreddit-feed faceplate-partial[loading="programmatic"]')
+          .getAttribute('src')));
+
+    const before = doc.querySelectorAll('#shd-root .thing.link').length;
+    const ok = await window.SHD.paginator.loadNext('manual');
+    check('the load drives the continuation and not the hovercard',
+      ok === true && st().decoyDrives === 0 && st().loads === 1,
+      `driven=${JSON.stringify(st().driven)} decoy=${st().decoyDrives}`);
+    check('...so the rows actually grow',
+      doc.querySelectorAll('#shd-root .thing.link').length === before + PAGER_PAGE_SIZE,
+      `${before} -> ${doc.querySelectorAll('#shd-root .thing.link').length}`);
+
+    /* And it keeps working once the real handle has replaced itself — the decoy is still
+       sitting there, still fresh, still first in document order. */
+    const second = await window.SHD.paginator.loadNext('manual');
+    check('a second page still skips the decoy still sitting in front of it',
+      second === true && st().decoyDrives === 0 && st().loads === 2,
+      `driven=${JSON.stringify(st().driven)}`);
+    check('...and the rows grow again',
+      doc.querySelectorAll('#shd-root .thing.link').length === before + PAGER_PAGE_SIZE * 2,
+      String(doc.querySelectorAll('#shd-root .thing.link').length));
+    window.close();
+  }
+  {
+    /* THE NEXT ONE, whatever it turns out to be. C.PARTIAL_NOT_SRC names the hovercard
+       because it was measured, and cannot name a partial Reddit has not shipped yet. This
+       decoy carries a src the contract does NOT exclude and sits BEFORE the posts, so the
+       only thing that can reject it is the structural rule: a continuation follows the
+       content it continues. Without this block, removing that rule breaks no assertion. */
+    const { doc, window } = await boot(listingPage({ strayPartial: true }),
+      'https://www.reddit.com/', noAuto);
+    window.eval(PAGER_SCRIPT);
+    const first = doc.querySelector('shreddit-feed faceplate-partial');
+    check('setup: an unnamed non-handle partial leads the feed, and the contract does not exclude it',
+      /recommendations/.test(first.getAttribute('src') || '') &&
+      !first.matches(window.SHD.C.PARTIAL_NOT_SRC) &&
+      !first.closest('article, shreddit-post'),
+      first.getAttribute('src'));
+    const before = doc.querySelectorAll('#shd-root .thing.link').length;
+    const ok = await window.SHD.paginator.loadNext('manual');
+    check('a partial ahead of the content cannot be the thing that continues it',
+      ok === true && window.__shdPager.decoyDrives === 0 &&
+      doc.querySelectorAll('#shd-root .thing.link').length === before + PAGER_PAGE_SIZE,
+      `driven=${JSON.stringify(window.__shdPager.driven)}`);
+    window.close();
+  }
+  {
+    /* THE FLOOR, and the half the parentage test could not give: with no continuation at
+       all, a feed full of hovercards must report exhausted rather than drive one. */
+    const page = listingPage({ hovercard: true })
+      .replace('<faceplate-partial loading="programmatic" src="/feed/next"></faceplate-partial>', '');
+    const { doc, window } = await boot(page, 'https://www.reddit.com/', noAuto);
+    window.eval(PAGER_SCRIPT);
+    check('setup: the only partial left in the feed is the hovercard',
+      doc.querySelectorAll('shreddit-feed faceplate-partial').length === 1);
+    const ok = await window.SHD.paginator.loadNext('manual');
+    check('with no continuation, a hovercard is not driven as a page',
+      ok === false && window.__shdPager.decoyDrives === 0,
+      `ok=${ok} decoy=${window.__shdPager.decoyDrives}`);
+    check('...and the sentinel says so rather than spinning',
+      doc.querySelector('.shd-sentinel')?.dataset.shdRefusal === 'exhausted',
+      doc.querySelector('.shd-sentinel')?.dataset.shdRefusal);
+    window.close();
+  }
+
   console.log('\n\x1b[1mPAGINATION\x1b[0m');
   {
     const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/', noAuto);
