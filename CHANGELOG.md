@@ -20,6 +20,48 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.51.1
+
+No behaviour changed. This build corrects what Sheddit says about itself, on its own pages
+and in this repository.
+
+### Fixed — the options page and the header said less than was true
+
+- The note under *Play video on the comments page* said video "is the one feature that
+  makes a request of its own" and that nothing else makes a request of any kind — a few
+  lines below the switch for the version check, which also makes one. It names both now.
+- The account note had lost the sentence before "When you are, the vote arrows register…",
+  so it never said *when you are what*. It reads "When you are logged in" now.
+- The header's **auto: on** tooltip promised "no more than once every twenty hours". That
+  is the limit after an answer; a check that fails is retried after an hour
+  (`RETRY_INTERVAL_MS`), so a browser that is offline at startup is not left without an
+  answer for most of a day. The tooltip says both now.
+
+### Changed — the privacy policy, to match the code
+
+`PRIVACY.md` said two things leave the browser in one place and three requests in another.
+It says three throughout, adds the one-hour retry, and discloses that the `<html>` element
+carries `data-shd-*` state while a page loads and more posts arrive, not only the scroll
+marker. Its history entry for the `old.reddit.com` redirect was dated 0.38.0; it shipped in
+0.33.0. The age-gate click has happened since 0.3.0, not 0.30.0 as two places said.
+
+### Changed — the documentation, read against the code
+
+A full pass over every document and source comment, about 150 corrections. The ones worth
+knowing: `ARCHITECTURE.md` described the reply protocol as it was before 0.49.0 (an emptied
+box counted as success) and the page change as it was before 0.47.0; `TESTING.md` carried
+suite counts from several releases ago and told you to use `verify:live -- --headed` for a
+signed-in check, which always runs logged out (`--headed --login`); the issue chooser linked
+a Discussions page that does not exist. The download zips are rebuilt because the options
+page and the stylesheets' comments changed.
+
+### Known, not fixed
+
+Unchanged from 0.51.0: `load more` can still stick on your own profile overview, and a post
+on that overview is read and then not shown.
+
+---
+
 ## 0.51.0
 
 ### Fixed — the front page stopped loading more posts
