@@ -289,7 +289,9 @@ const PAGER_PAGE_SIZE = 3;
 const COMMENT_PAGER_SCRIPT = `
 (() => {
   const BATCH = [0, 1, 1, 2, 0];
-  window.__shdCommentPager = { loads: 0 };
+  // loads counts REQUESTS; delivered counts batches that have landed. The gap between them
+  // is the 50ms below, and a test that reads one without the other is racing it.
+  window.__shdCommentPager = { loads: 0, delivered: 0 };
   window.__shdDecoyLoads = 0;
   class ShdFakeCommentPartial extends HTMLElement {
     loadContent() {
@@ -339,6 +341,7 @@ const COMMENT_PAGER_SCRIPT = `
       next.setAttribute('loading', 'programmatic');
       next.setAttribute('src', '/more-comments');
       tree.appendChild(next);
+      window.__shdCommentPager.delivered++;
   }
   if (!customElements.get('faceplate-partial')) {
     customElements.define('faceplate-partial', ShdFakeCommentPartial);
