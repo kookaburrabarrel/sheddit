@@ -291,6 +291,42 @@ SHD.chrome = (() => {
           h('a', { href: `/user/${user}/${t.path}`, text: t.label })))));
   }
 
+  function searchBox() {
+    const sub = SHD.route.subredditOf();
+    const query = new URLSearchParams(location.search).get('q') || '';
+
+    const form = h('form', {
+      action: sub ? `/r/${sub}/search` : '/search',
+      method: 'get',
+      id: 'search',
+      role: 'search'
+    }, [
+      h('input', { type: 'text', name: 'q', placeholder: 'search', tabindex: '20', value: query }),
+      h('input', { type: 'submit', value: '', tabindex: '22' })
+    ]);
+
+    if (sub) {
+      form.appendChild(
+        h('div#searchexpando', null,
+          h('label', null, [
+            h('input', {
+              type: 'checkbox',
+              name: 'restrict_sr',
+              checked: 'checked',
+              value: 'on',
+              onchange: (e) => {
+                form.action = e.currentTarget.checked ? `/r/${sub}/search` : '/search';
+              }
+            }),
+            ` limit my search to r/${sub}`
+          ])
+        )
+      );
+    }
+
+    return h('div.spacer', null, form);
+  }
+
   /** Right rail. Populated from whatever the page already told us — no API. */
   function sidebar() {
     if (document.querySelector('#shd-sidebar')) return;
@@ -308,6 +344,7 @@ SHD.chrome = (() => {
     const tabbar = root.querySelector('.shd-tabmenu-wrap');
     const rail =
       h('div#shd-sidebar.side', null, [
+        searchBox(),
         h('div.spacer', null, [
           h('div.titlebox', null, [
             h('h1.redditname', null, h('a', title)),
