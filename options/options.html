@@ -61,8 +61,9 @@
   Playing video is the one feature that makes a request of its own: opening a video post's
   comments page fetches that video’s manifest from Reddit’s media CDN, so Sheddit knows
   which files to play. Reddit ships newer videos with the sound in a separate file, so the
-  player loads both and keeps them together. Nothing else in the extension makes a request
-  of any kind. Turn this off and video posts go back to being a link and a thumbnail.
+  player loads both and keeps them together. Apart from the version check above, nothing
+  else in the extension makes a request of any kind. Turn this off and video posts go back
+  to being a link and a thumbnail.
 </p>
 
 <p class="note">
@@ -82,8 +83,8 @@
   Sheddit never asks you to log in, and nothing else on the page changes. Logged in it
   becomes your avatar and name, opening a menu of Reddit’s own account pages and a log out
   that presses Reddit’s own button. Turn this off and there is no corner at all.
-  When you are, the vote arrows register, a “reply” opens an old-reddit reply box, and the
-  sidebar gets “submit a new link / text post”. Every one of those goes through Reddit’s
+  When you are logged in, the vote arrows register, a “reply” opens an old-reddit reply
+  box, and the sidebar gets “submit a new link / text post”. Every one of those goes through Reddit’s
   own controls on the page — Sheddit still makes no request of its own, never sees your
   login, and never acts without a click from you. Turn it off to read with your account
   and have Sheddit behave exactly as it does logged out.

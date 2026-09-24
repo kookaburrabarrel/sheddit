@@ -3,10 +3,13 @@
  * build.js — produces dist/sheddit.dev.js
  *
  * A single self-contained file you can paste into DevTools on any reddit.com page to run
- * the whole extension immediately. Same source files, same order as the manifest; the
- * stylesheets are inlined and injected as <style> tags instead of arriving via the manifest.
+ * the whole extension immediately. Same content scripts as the manifest (the build fails if
+ * the two lists drift), in load order except where noted below; the stylesheets are inlined
+ * and injected as <style> tags instead of arriving via the manifest.
  *
- * This exists so the extension is testable without the load-unpacked / reload cycle.
+ * This exists so the extension is testable without the load-unpacked / reload cycle, and it
+ * is what run.js and geometry.js execute. Loading unpacked never needs it: the manifest
+ * points at src/ directly.
  *
  *   node build.js
  */

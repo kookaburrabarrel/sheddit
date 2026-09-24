@@ -5,13 +5,15 @@ npm install
 npm test        # everything, ~3 min
 ```
 
+Needs Node 22.22.2+ on the 22 line, 24.15+, or 26+ — jsdom's `engines` floor.
+
 Seven ways to exercise this, cheapest first. The first six are automated; `npm test`
 runs all of them. (Assertion counts move with every release — trust `npm test`'s own
 summary over this table when they disagree, and update the table when they do.)
 
 | # | Command | Needs | Assertions |
 |---|---|---|---|
-| 1 | `node test/css-lint.js` | nothing | 40 |
+| 1 | `node test/css-lint.js` | nothing | 41 |
 | 2 | `node test/run.js` | jsdom | 869 |
 | 3 | `node test/geometry.js` | Chromium | 225 |
 | 4 | `node test/extension.js` | Chromium | 167 |
@@ -95,8 +97,9 @@ output:
 | The account layer's wiring | session.js and account.js load before the modules built from them, in manifest and bundle; the new contracts exist and the new modules name no Reddit element outside contracts.js; the setting ships on with a checkbox |
 | old.reddit.com | the host swap (`dest` unwrapped out of the login wall, an off-site or nested-login `dest` refused, port and scheme kept, nothing but that one host rewritten), the notice (blackout set before the first `await`, heading, live region, the destination as a link, why the link failed and who to blame), the setting (off = untouched page, no storage = the shipped default), the loop guard (a repeat hop refused and old reddit offered instead; a stale or different-page record is not a loop), a `.rss` document left alone, and the manifest wiring |
 
-Nothing is mocked except `IntersectionObserver` and `chrome.storage`, neither of which
-jsdom provides.
+None of Sheddit's own code is mocked. The default boot stubs only `IntersectionObserver` and
+`chrome.storage`, neither of which jsdom provides; the groups above that fake more of the
+browser (a Navigation API, a dead rAF) say so.
 
 ## 3. Real layout geometry (headless Chromium)
 
@@ -106,7 +109,7 @@ helps, but reads one declaration at a time and cannot see what two individually-
 rules do to each other once boxes exist.
 
 `test/geometry.js` loads the bundle in headless Chromium and reads
-`getBoundingClientRect()`: row alignment across ten viewport widths, column overlap,
+`getBoundingClientRect()`: row alignment across eleven viewport widths, column overlap,
 score wrapping, float containment, comment indent uniformity, the `[–]`/vote-arrow
 collision under a real `:hover`, and the native passthrough proven visible via
 `checkVisibility()` plus a hit test.
@@ -187,20 +190,20 @@ to point at binaries, `SHEDDIT_REQUIRE_FIREFOX=1` to make its skip fail.
 ## The suites have teeth — verified by mutation
 
 ```bash
-npm run test:mutate      # ~20 min, on a throwaway copy
+npm run test:mutate      # hours, on a throwaway copy
 ```
 
 `test/mutate.sh` reintroduces bugs this codebase actually shipped and reports whether
 the suite that should notice does. A `SURVIVED` row is a hole in the tests.
 
 ```bash
-bash test/anchor-check.sh   # ~1 min, runs no suite
+bash test/anchor-check.sh   # seconds, runs no suite
 ```
 
 **Run this after touching any source file, and before believing a green sweep.** A row
 whose anchor no longer matches any code tests nothing, and it says so with `ANCHOR MISS`,
 which is neither a pass nor a failure — so for a long time those rows read as silence. A
-single review found twenty-one of them at once. `anchor-check.sh` lists them in a minute
+single review found twenty-one of them at once. `anchor-check.sh` lists them in seconds
 without running a suite; the sweep itself now exits non-zero on a miss, and on a browser
 suite that ran without a browser, which looked like a result whichever way the
 `SHEDDIT_REQUIRE_BROWSER` switch was set.
@@ -275,9 +278,10 @@ If you change rendering logic and the suite stays green, check that you actually
 npm run preview
 ```
 
-Writes `dist/preview.listing.html` and `dist/preview.comments.html`. Open either directly
-in a browser — they are fully self-contained (Sheddit's CSS is inlined; fixture images are
-swapped for coloured placeholders). Everything else is the exact markup the extension
+Writes `dist/preview.listing.html`, `dist/preview.comments.html` and
+`dist/preview.empty.html` (an empty listing). Open any of them directly in a browser —
+they are fully self-contained (Sheddit's CSS is inlined; fixture images are swapped for
+coloured placeholders). Everything else is the exact markup the extension
 produces.
 
 ---
@@ -366,7 +370,8 @@ After editing source, hit the reload icon on the extension card, then reload the
 
 ```bash
 npm run verify:live              # logged out, headless
-npm run verify:live -- --headed  # watch it; sign in first to test a real vote
+npm run verify:live -- --headed  # watch it (a fresh profile, so still logged out)
+npm run verify:live -- --headed --login  # sign in first, to test a real vote
 ```
 
 `test/live-contracts.js` opens real reddit.com and checks every selector and attribute
@@ -400,7 +405,7 @@ The automated suite covers structure; these need eyes:
 - [ ] Logged out: clicking `reply` reveals the native composer, and "← back to sheddit" returns
 - [ ] **Logged in** (0.34.0, every item below is unverified live — see the changelog):
   - [ ] the header says *logged in*; if it does not, the LOGGED-IN SESSION section of
-        `npm run verify:live -- --headed` says which `C.SESSION` signal the header carries
+        `npm run verify:live -- --headed --login` says which `C.SESSION` signal the header carries
   - [ ] an upvote on a post row lights the arrow AND registers on Reddit's own page (reload
         and look)
   - [ ] a post you had voted on before comes up lit ~1.5s after render

@@ -1,11 +1,11 @@
 # Artwork
 
-Every picture this project publishes — the Chrome Web Store's three listing images and the
-README's header banner in both colour schemes — and the sources they are built from. All of
-them are generated:
+Five of the pictures this project publishes — the Chrome Web Store's three listing images and
+the README's header banner in both colour schemes — and the sources they are built from. All
+five are generated; the other images in `docs/assets/` are captures and are not built here:
 
 ```bash
-npm run promo                                # writes all three into docs/assets/
+npm run promo                                # writes all five into docs/assets/
 node docs/promo/render.js tile               # just the small one
 node docs/promo/render.js --out /tmp/look    # somewhere else, to check before committing
 node docs/promo/render.js --scale 2          # 2x, for reading the type up close
@@ -28,11 +28,12 @@ but how they are authored: 1280×400 of layout, rasterised at 2×, giving the 25
 README has always used. The store assets are the opposite case and stay at 1:1, because the
 store validates exact pixels and anything else is a rejected upload.
 
-`promo.css` holds everything the two cards share and `promo.js` prepares the icon for both;
-each card's own file holds only the numbers that differ. `screenshot.html` shares none of
-it — it is a crop, not a composition. The browser driving lives in the repository root's `headless.js`, shared with
-`export-icons.js`. Nothing here ships: `package-extension.js` builds the zip from a fixed
-list — `manifest.json`, `icons/`, `src/`, `options/` — so `docs/` never reaches a user.
+`promo.css` holds everything the two cards and the two banners share and `promo.js` prepares
+the icon for all four; each one's own file holds only the numbers that differ.
+`screenshot.html` shares none of it — it is a crop, not a composition. The browser driving
+lives in the repository root's `headless.js`, shared with `export-icons.js`. Nothing here
+ships: `package-extension.js` builds both zips from a fixed list — `manifest.json`,
+`icons/`, `src/`, `options/` — so `docs/` never reaches a user.
 
 ## The README banner
 
@@ -92,15 +93,15 @@ Two numbers in there are worth knowing before editing:
   `#shd-sidebar` below 1100px. The marquee renders at 1080 and the tile at 700, so neither
   shows it — at those scales its 10px note would be a few pixels tall, and on the marquee
   half of it would fall off the card anyway.
-- **The row count is a crop dependency.** Both cards crop `listing.html` to a fixed height.
-  Ten posts overfill the taller crop; trim the list and the bottom of the product shot
+- **The row count is a crop dependency.** Both cards and both banners crop `listing.html`
+  to a fixed height. Ten posts overfill the tallest crop; trim the list and the bottom of the product shot
   becomes an empty white rectangle.
 
 ## What the store requires, and what enforces it
 
 `render.js` reads the PNG header it just wrote and fails loudly on either hard requirement:
 
-- **Exact pixel size.** 440×280 and 1400×560, no tolerance.
+- **Exact pixel size.** 440×280, 1400×560 and the screenshot's 1280×800, no tolerance.
 - **24-bit, no alpha.** Every layer on both cards is opaque, so Chrome writes truecolour
   RGB. If the check reports an alpha channel, something on the card is letting the page
   background through — fix the card, don't strip the channel.
@@ -117,9 +118,9 @@ Three things the store's policies rule out, so that a later edit does not put th
 
 ## The icon
 
-Both cards reference `docs/assets/store-icon.png` rather than holding a copy, so
-re-exporting the icon reaches the store art on the next run and there is no second copy to
-forget.
+Both cards and both banners reference `docs/assets/store-icon.png` rather than holding a
+copy, so re-exporting the icon reaches the store art and the README banner on the next run
+and there is no second copy to forget.
 
 That file is 128×128 with **no alpha**: the artwork sits on an opaque pale-blue field
 (~`#cfebfe`), and the antenna deliberately breaks up out of the rounded tile into it. Drop
@@ -145,7 +146,7 @@ width off the card's left margin.
 
 ### Why the cards do not use icons/icon.svg
 
-They easily could: it is one line in `promo.css` plus dropping `data-key-field` from the two
+They easily could: it is one line in `promo.css` plus dropping `data-key-field` from the four
 `<img>` tags, and it would delete `promo.js`, the `--allow-file-access-from-files` flag, the
 readiness assertion in `render.js` and the two padding constants — every one of which exists
 only because the raster brings a background with it.
@@ -164,8 +165,9 @@ afford it.
 ## Rendering
 
 `render.js` drives Chrome over the DevTools protocol using node's own `WebSocket`, with no
-npm dependency of its own — `package.json`'s three belong to the test suite. It finds a
-browser at `CHROME_PATH`, then Playwright's copy, then the usual system paths.
+npm dependency of its own — `package.json`'s two belong to the test suite. It finds a
+browser at `CHROME_PATH` or `PUPPETEER_EXECUTABLE_PATH`, then Playwright's copy, then the
+usual system paths.
 
 It does **not** use `chrome --screenshot --window-size=440,280`, and that is deliberate:
 Old Headless was removed from the Chrome binary in 132, and under new Headless

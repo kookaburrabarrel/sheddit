@@ -8,12 +8,13 @@
  *   npm run verify:live                       # logged out, headless
  *   npm run verify:live -- --headed           # watch it
  *   npm run verify:live -- --headed --login   # SIGN IN first — the run the account layer needs
+ *   npm run verify:live -- --sub=aww --user=<name>   # another subreddit / profile
  *
  * WHY THIS EXISTS
- * Every other suite runs against synthetic fixtures. TESTING.md is explicit about the
- * consequence: "if Reddit changes its markup, the fixtures will keep passing while the
- * real site breaks". This is the script that notices. Run it after any suspected
- * redesign; whatever it reports MISSING is what to fix in contracts.js.
+ * Every other suite runs against synthetic fixtures, so if Reddit changes its markup the
+ * fixtures keep passing while the real site breaks. This is the script that notices. Run
+ * it after any suspected redesign; whatever it reports MISSING is what to fix in
+ * contracts.js.
  *
  * IT ALSO SETTLES THE VOTE-DELEGATION QUESTION.
  * Delegation forwards our arrow's click to Reddit's own button. ARCHITECTURE §1.2 records
@@ -25,7 +26,7 @@
  *   open shadow root → delegation works only because dom.deepQuery pierces it
  *   not found        → delegation CANNOT work; voting needs a different mechanism
  *
- * Run it logged in (--headed, sign in, then let it continue) to also confirm a real vote
+ * Run it logged in (--headed --login, sign in, then press Enter) to also confirm a real vote
  * registers. Logged out, Reddit shows a login prompt instead, which is still a pass for
  * "we found and clicked the right control".
  */

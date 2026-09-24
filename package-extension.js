@@ -1,6 +1,6 @@
-// Builds the download zips: exactly what manifest.json references (manifest.json,
-// icons/, src/, options/) — nothing from test/, docs/, .github/, or the root markdown
-// files, none of which ship inside the packed extension. Two artifacts from one tree:
+// Builds the download zips: the directories manifest.json loads from (manifest.json,
+// icons/, src/, options/, minus *.md and dotfiles) — nothing from test/, docs/, .github/,
+// or the root markdown files, none of which ship inside the packed extension. Two artifacts from one tree:
 //
 //   dist/sheddit.zip          Chrome — the Web Store upload and the README download
 //   dist/sheddit-firefox.zip  Firefox — identical files, manifest transformed below

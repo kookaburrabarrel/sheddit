@@ -4,8 +4,8 @@
  *
  * It exists because both need the same four awkward things — find a browser, get an exact
  * viewport, wait until the page has actually finished, capture at the pixel — and neither
- * is worth a dependency. package.json's three belong to the test suite; this uses node's
- * own WebSocket.
+ * is worth a dependency. package.json's two belong to the test suite; this uses node's
+ * own WebSocket (global from Node 22).
  *
  * WHY NOT `chrome --screenshot --window-size=W,H`
  * Because it silently produces the wrong picture. Old Headless was removed from the Chrome
@@ -20,7 +20,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-/** Chrome, wherever this machine keeps it. Playwright's copy first: CI has that one. */
+/** Chrome, wherever this machine keeps it. An explicit CHROME_PATH or
+ *  PUPPETEER_EXECUTABLE_PATH wins; then Playwright's copy, which CI has. */
 function findChrome() {
   const candidates = [
     process.env.CHROME_PATH,

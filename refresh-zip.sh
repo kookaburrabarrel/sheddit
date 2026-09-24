@@ -2,8 +2,11 @@
 #
 # Make the README's download links serve the current code.
 #
-#   ./refresh-zip.sh            pull main, rebuild BOTH zips, push if they changed
-#   ./refresh-zip.sh <version>  bump manifest.json + package.json to it first
+#   ./refresh-zip.sh            pull main, rebuild BOTH zips, push if they changed,
+#                               then point the GitHub `Release` tag and release at it
+#   ./refresh-zip.sh <version>  bump manifest.json + package.json to it first, and stamp
+#                               dist/latest.json + BUILT in src/core/update.js with today
+#                               (the README's version is NOT touched — bump it by hand)
 #
 # The zips are build artifacts kept in version control so the README can link a
 # download without a release. That only works if they are rebuilt whenever the source

@@ -5,8 +5,8 @@
  * THE GAP THIS FILLS
  * Every other suite runs dist/sheddit.dev.js, which is the same source concatenated by
  * build.js. That proves the logic but not the packaging: manifest match patterns, the
- * document_start / document_idle split, script order, and delivery of the two
- * stylesheets are all invented by the manifest and exercised by nothing. TESTING.md
+ * document_start / document_idle split, script order, and delivery of every
+ * stylesheet are all invented by the manifest and exercised by nothing. TESTING.md
  * listed "not yet run as a packed extension end-to-end" as a known gap.
  *
  * HOW

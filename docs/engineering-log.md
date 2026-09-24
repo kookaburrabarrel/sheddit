@@ -444,7 +444,7 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     override — `.flat-list.buttons a.comments { color: var(--shd-accent) }` — made the first
     item of every row accent blue, so the row competed with the title instead of receding
     under it. Measured as the most noticeable per-row departure from the real thing. Related
-    palette-level departures fixed in the same pass, all from `old-reddit.md`: the header was
+    palette-level departures fixed in the same pass, all from `OLD-REDDIT.md`: the header was
     grey where old reddit's is `#cee3f8` on `#5f99cf`; unselected sort tabs were flat blue
     pills, inverting the folder-tab metaphor (old reddit draws *every* tab bordered and white
     with orangered text, and only the **bottom** border distinguishes the selected one); the
@@ -1426,7 +1426,7 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     script `exclude_matches` `old.reddit.com` — correctly, since old reddit is the
     thing this extension imitates — so on the one host where a reader most needs to be
     told *this is not us*, there was nothing of ours that could say it. That is bug
-    52's argument ("a silent hand-back is indistinguishable from an unrelated bug")
+    13's argument ("a silent hand-back is indistinguishable from an unrelated bug")
     arriving through a door the exclusion held open.
 
     The fix is one script and one stylesheet on that host and nothing else
@@ -1450,7 +1450,7 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
 
 97. **The extension answered Reddit's 18+ prompt for you, and three documents said it
     could not.** `answerAgeGate()` has clicked Reddit's own affirmative button since
-    0.30.0, deliberately: a merely hidden gate leaves Reddit's scroll lock in place and
+    0.3.0, deliberately: a merely hidden gate leaves Reddit's scroll lock in place and
     the session unattested, so the page underneath the layout half-works. That decision
     stands. What was wrong was everything around it. PRIVACY.md said Sheddit "never acts
     on your behalf", SECURITY.md said "it cannot act on your account", and the Chrome
@@ -1912,7 +1912,7 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      reader's own comment appearing under the target and nothing weaker; a slow post that
      misses the window goes the safe way — `arrival`, reveal-only, draft kept, "check the
      thread before sending it again". The comment path is narrowed to the reader's author the
-     way the post path already was (log 773), so a paginator batch or a stranger's reply
+     way the post path already was (log 70), so a paginator batch or a stranger's reply
      cannot stand in either.
 
      **Why the suite never saw it, which is the finding worth keeping.** The fixture posted
@@ -2116,7 +2116,7 @@ carries the unanswered-pagination question below.
 Measured directly: 7 rows × 10 viewport widths from 360–1920px, every
 `#siteTable > .thing.link` reports an **identical** `left`, with zero horizontal overflow;
 comment indentation is a uniform 25px per depth (31px until it was measured against
-old.reddit — see old-reddit.md). This is now a standing assertion
+old.reddit — see OLD-REDDIT.md). This is now a standing assertion
 ("every row shares one left offset, at every width"), so a regression fails the build
 rather than becoming folklore again.
 
@@ -2624,41 +2624,6 @@ the way a question got settled is usually more useful than the answer.
     IS reachable from page-context JS, because `diag()` writes to DOM attributes:
     `document.querySelector('.shd-sentinel').dataset`. Two sightings and still no dataset.
 
-20. **A post on the reader's own profile overview is consumed and not drawn.** Native
-    overview held 1 `shreddit-post` + 18 `shreddit-profile-comment`; Sheddit rendered the
-    18. The post carries `data-shd=done`, so `pipeline.js` reached it and
-    `listing.consume()` returned false — which means `model.post()` rejected it, and that
-    rejects only for a missing id, title or permalink. Old reddit interleaves posts in an
-    overview, so this is a real omission, and it is one attribute away from a fix. No
-    capture of a profile-overview `shreddit-post` exists; the one on the page the report
-    came from is the reading, and it needs nothing from the extension's world:
-    `[...document.querySelector('shreddit-post').attributes].map(a => a.name)` on
-    `/user/<me>/`, plus whether `document.querySelector('shreddit-post a[slot="full-post-link"]')`
-    and `shreddit-post [slot="title"]` exist. Whichever of the triad is absent names the
-    clause to add.
-
-
-18. **Why the reply control is sometimes not there at all.** Three saves on one comment in
-    one live thread reached three different steps: `insert`, a false `done`, and
-    `reply-control` — the last on a fresh page load, meaning `C.NATIVE.reply` resolved to
-    nothing even after `resolveLate()` scrolled the native comment into the suppressed box
-    and waited `hydrateWaitMs`. The action row is lazily hydrated (log 107), so the chain
-    is non-deterministic on the same comment, and 3s may simply be short on a cold load —
-    or the nudge may fire before the native tree has laid out enough for the row to be
-    inside the box. Not measured, and not tuned blind: the reading is
-    `data-shd-step` across several saves on one comment, with the time since load noted,
-    and whether `SHD.dom.deepQuery(comment, SHD.C.NATIVE.reply)` resolves by hand a moment
-    after a `reply-control` failure. If it does, the wait is short; if it does not, the
-    row is not hydrating and the nudge is the thing to look at.
-
-19. **A comment rendered twice in the tree.** Reported in passing from the same session,
-    not chased: one comment appeared twice in Sheddit's rendering. Every dedupe in the
-    pipeline keys on the source element's stamp, so the likeliest cause is the same
-    comment arriving twice as two distinct elements — a paginator batch overlapping the
-    served slice, or a history traversal re-inserting one — but that is a guess. Needs the
-    thread URL and which comment, and `document.querySelectorAll('[data-fullname="<id>"]')`
-    counted against the native `shreddit-comment[thingid="<id>"]` count on the same page.
-
 17. ~~**Whether the per-comment composer has the same trusted-gesture ceiling the top-level
     one does.**~~ **ANSWERED: no — see log 112.** A save on a comment reached `insert`,
     which is past the liveness gate, so Reddit mounted a real composer with a submit control
@@ -2684,6 +2649,40 @@ the way a question got settled is usually more useful than the answer.
     the ceiling is there too and this entry becomes a log. Anything past it — `editor`,
     `insert`, or a posted reply — means the reply control is not gated and only the
     top-level composer is.
+
+18. **Why the reply control is sometimes not there at all.** Three saves on one comment in
+    one live thread reached three different steps: `insert`, a false `done`, and
+    `reply-control` — the last on a fresh page load, meaning `C.NATIVE.reply` resolved to
+    nothing even after `resolveLate()` scrolled the native comment into the suppressed box
+    and waited `hydrateWaitMs`. The action row is lazily hydrated (log 107), so the chain
+    is non-deterministic on the same comment, and 3s may simply be short on a cold load —
+    or the nudge may fire before the native tree has laid out enough for the row to be
+    inside the box. Not measured, and not tuned blind: the reading is
+    `data-shd-step` across several saves on one comment, with the time since load noted,
+    and whether `SHD.dom.deepQuery(comment, SHD.C.NATIVE.reply)` resolves by hand a moment
+    after a `reply-control` failure. If it does, the wait is short; if it does not, the
+    row is not hydrating and the nudge is the thing to look at.
+
+19. **A comment rendered twice in the tree.** Reported in passing from the same session,
+    not chased: one comment appeared twice in Sheddit's rendering. Every dedupe in the
+    pipeline keys on the source element's stamp, so the likeliest cause is the same
+    comment arriving twice as two distinct elements — a paginator batch overlapping the
+    served slice, or a history traversal re-inserting one — but that is a guess. Needs the
+    thread URL and which comment, and `document.querySelectorAll('[data-fullname="<id>"]')`
+    counted against the native `shreddit-comment[thingid="<id>"]` count on the same page.
+
+20. **A post on the reader's own profile overview is consumed and not drawn.** Native
+    overview held 1 `shreddit-post` + 18 `shreddit-profile-comment`; Sheddit rendered the
+    18. The post carries `data-shd=done`, so `pipeline.js` reached it and
+    `listing.consume()` returned false — which means `model.post()` rejected it, and that
+    rejects only for a missing id, title or permalink. Old reddit interleaves posts in an
+    overview, so this is a real omission, and it is one attribute away from a fix. No
+    capture of a profile-overview `shreddit-post` exists; the one on the page the report
+    came from is the reading, and it needs nothing from the extension's world:
+    `[...document.querySelector('shreddit-post').attributes].map(a => a.name)` on
+    `/user/<me>/`, plus whether `document.querySelector('shreddit-post a[slot="full-post-link"]')`
+    and `shreddit-post [slot="title"]` exist. Whichever of the triad is absent names the
+    clause to add.
 
 
 Two settled things, so nobody reopens them: the **staircase indentation report does not

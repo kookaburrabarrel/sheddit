@@ -75,20 +75,28 @@ all need post or subreddit data that is not currently read. Each one is a new en
 needs a real machine. The specs above are complete enough to build from the moment someone
 can confirm the attribute names.
 
-Two of the entries that were on that list have moved since it was written, and the list is
-corrected here from the source rather than from memory, which is the only correction this
-file permits:
+Three of the things recorded as missing need a correction since it was written, and the
+list is corrected here from the source rather than from memory, which is the only correction
+this file permits:
 
 - **The comments sort bar is built.** `comments.js` renders old reddit's `div.menuarea`
   strip above the tree — `all N comments`, then `sorted by:` — and takes the current sort
   from `route.sortQuery` rather than `location.search`, because the sort swap can read
   during the pre-commit window and bold the sort the reader just left.
-- **Flair is read but not rendered.** The blocker moved: `contracts.js` and `model.js`
-  carry the field, so the pill is now a rendering job in `listing.js`, not a contract that
-  needs a live machine to confirm. The spec for it above still stands.
+- **The `.morelink` CTA is built, for a logged-in reader only.** `account.js` renders the
+  sidebar's `Submit a new link` / `Submit a new text post` as `a.morelink` in a
+  `.shd-submit` box — links onto Reddit's composer, behind the account layer's session check.
+- **Flair is still not read.** `contracts.js` names `shreddit-post-flair` only inside
+  `THUMB_EXCLUDE`, so that flair emoji are not taken for thumbnails; neither it nor
+  `model.js` carries the flair text, so the pill still needs a new contract confirmed on a
+  live machine before `listing.js` has anything to render. The spec for it above still
+  stands.
 
-**The reply textarea, search box and user bar are out of scope** — all auth-gated, and
-`README.md` "Scope" rules them out for the same reason `save` and `report` were removed.
+**The search box is out of scope** — CONTRIBUTING.md "Scope" and ARCHITECTURE §8 keep search
+out. The reply textarea and the user bar, once ruled out with it as auth-gated, have since
+been built by the account layer (`account.js`): the reply box (`.shd-reply-form`) for a
+reader already logged in, and the account corner (`.shd-account`) in old reddit's
+`#header-bottom-right` spot.
 
 ## One thing the report found without naming it
 

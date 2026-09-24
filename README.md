@@ -215,7 +215,7 @@ Full detail in the [changelog](CHANGELOG.md). The most recent builds:
   your inbox, a wiki page, a moderation queue — was being sent to `www.reddit.com`, where
   those pages differ or do not exist. Those links stay on old.reddit now.
 - **Documented:** on a subreddit marked adult, Sheddit clicks Reddit's own *over 18*
-  button for you. It has done that since 0.30.0 and the privacy policy did not say so; it
+  button for you. It has done that since 0.3.0 and the privacy policy did not say so; it
   does now, including what it means if you are signed in. The same release made it much
   harder to fire on anything that is not the age gate — an "Open in app" prompt offering
   *Yes* / *Not now* previously matched.

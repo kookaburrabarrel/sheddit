@@ -420,7 +420,7 @@ is under the length ceiling rather than over it. The author's regions are skippe
 the sentence is tested, erring in the direction this project had already chosen twice: a
 tombstone over live content is the worse of the two errors.
 
-### Fixed — four things about leaving a page, and arriving at the next one
+### Fixed — three things about leaving a page, and arriving at the next one
 
 - **Navigating away from an empty listing painted "there doesn't seem to be anything here"
   over the incoming page** — and threw away the deadline that route had just armed, so a
@@ -430,10 +430,6 @@ tombstone over live content is the worse of the two errors.
 - **A failure left the reveal latch set**, so the next navigation skipped the blackout —
   native Reddit fully visible for the whole incoming load — and mounted the loading line
   with neither gate class set, which no stylesheet has a rule for.
-- **The teardown's own scroll counted as the reader.** Removing `#shd-root` collapses the
-  document, the browser clamps scrollY, and that scroll event lands after `reset()` cleared
-  the flag — so every navigation from a scrolled page began "already interacted", losing
-  the unprompted-fill bound and the held `load more` label.
 - **A load in flight wrote its verdict into the route that replaced it**, crediting a page
   that loaded nothing and clearing `busy` for a load the new page never made.
 
@@ -581,7 +577,7 @@ Those links stay where they are now; the hop applies to the pages Sheddit actual
 ### Documented — Sheddit answers Reddit's 18+ prompt for you
 
 On a subreddit marked adult, Reddit covers the page with a dialog asking whether you are
-over 18, and Sheddit has clicked its affirmative button since 0.30.0. That is deliberate:
+over 18, and Sheddit has clicked its affirmative button since 0.3.0. That is deliberate:
 a dialog that is merely hidden leaves Reddit's scroll lock in place and the session
 treated as unattested, so the page underneath half-works.
 
@@ -802,7 +798,7 @@ the rule that chose between candidates could not see it.
 
 Reddit offers a post's picture twice. `i.redd.it` serves the file as uploaded;
 `preview.redd.it` serves generated variants of it, each stating its width in a `srcset`
-descriptor. Since 0.17.0 the resolver has taken the widest stated width, which is the right
+descriptor. Since 0.19.0 the resolver has taken the widest stated width, which is the right
 answer among resizes and the wrong one here — the original states no width at all, because
 there is nothing for Reddit to state a width against, so it scored zero and every variant
 outbid it. A post with a 4000px original and a 640px preview rendered the preview.
@@ -992,7 +988,7 @@ Reddit's composer to mount, puts your text into Reddit's editor (a textarea in m
 mode; a rich-text field otherwise, fed through the browser's own editing command so the
 editor sees a real input), and clicks Reddit's submit. Then it **measures** the outcome —
 the new comment arriving under its parent — rather than assuming the click worked, which is
-the lesson of the *N more replies* control (log bug 90). Reddit's own code owns the auth,
+the lesson of the *N more replies* control (log bug 70). Reddit's own code owns the auth,
 the request and the error handling; the pipeline renders the comment Reddit inserts, nested
 where Reddit put it. Every step that can miss has the same floor: the box **stays, with
 your draft**, the status line names the step that failed, and Reddit's own composer is
@@ -2073,7 +2069,7 @@ and it is the half the fix rests on, so 9(c) stays open and live testing's P3 st
 
 ### Changed — a video post's title is its comments page; the mp4 is its own link
 
-The design half of the same day's reports, and an project decision rather than a fix: with
+The design half of the same day's reports, and a project decision rather than a fix: with
 Reddit migrating video to CMAF/HLS, a title that resolves to a packaged mp4 is a title
 that intermittently lands the reader on Chrome's `source fetch error`. So the title now
 points at the post's own comments page — which is where the `v.redd.it` bounce was going

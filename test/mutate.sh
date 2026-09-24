@@ -17,7 +17,7 @@
 # both mechanisms produce. See bug 75 — when two mechanisms produce one observable,
 # asserting the observable proves nothing about either.
 #
-#   npm run test:mutate      (~18 min)
+#   npm run test:mutate      (hours)
 #
 # RUNS ON A THROWAWAY COPY, NEVER YOUR WORKING TREE.
 #
@@ -2716,7 +2716,7 @@ printf 'rows: %s declared, %s run — %s caught, %s survived, %s anchor misses, 
 #
 # A row whose anchor stopped matching tests nothing, and it announces that by printing
 # ANCHOR MISS — which is neither a PASS nor a FAIL, so it scrolled past in a sweep that
-# ended "all caught". A review found 16 dead rows at once this way, two of them the pair
+# ended "all caught". A review found 21 dead rows at once this way, two of them the pair
 # guarding vote delegation's shadow-root piercing, anchored on a line that had moved to
 # another file entirely; the sweep had been reporting a clean run over them for releases.
 #
@@ -2735,7 +2735,7 @@ if [ "$ROWS_MISSED" -ne 0 ]; then
     "$ROWS_MISSED" "$DECLARED"
   printf 'An ANCHOR MISS is not a pass. Re-point each anchor at the code as it is now —\n'
   printf 'and note that the row you broke is rarely the row for the code you edited.\n'
-  printf 'test/anchor-check.sh lists them in about a minute, without running any suite.\033[0m\n'
+  printf 'test/anchor-check.sh lists them in seconds, without running any suite.\033[0m\n'
   exit 1
 fi
 

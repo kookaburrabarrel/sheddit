@@ -23,7 +23,8 @@ award-count, icon, feedindex
 
 As observed 2026-08-12. `award-icon-url` and `is-link-post` were in this list and have
 since been dropped from `contracts.js`: the 2026-08-14 live run found neither present on
-every post, and neither was read anywhere downstream. The *required* triad `model.js` will
+every post, and neither was read anywhere downstream. `award-count` followed on 2026-08-24
+(0/28 posts, §7e); comments still carry theirs. The *required* triad `model.js` will
 skip a post over is `id` / `post-title` / `permalink`; everything else is optional.
 
 **This is the single most important finding.** Sheddit does not need to scrape rendered text,
@@ -132,7 +133,10 @@ see §5.
 
 ```
 sheddit/
-├── manifest.json               MV3, content scripts at document_start
+├── manifest.json               MV3, content scripts at document_start + document_idle
+├── build.js                    the dev bundle (dist/sheddit.dev.js), manifest order
+├── package-extension.js        the Chrome + Firefox zips; firefoxManifest() (§5.0b)
+├── headless.js / export-icons.js   one CDP-driven Chrome for PNGs; the icon rasteriser
 ├── src/
 │   ├── config/
 │   │   ├── contracts.js        ALL selectors + attribute names. Single point of breakage.
@@ -152,8 +156,8 @@ sheddit/
 │   │   └── dom.js              tiny h() builder, escaping, number/time formatting
 │   ├── modules/
 │   │   ├── listing.js          feed & subreddit → old-reddit link rows
-│   │   ├── comments.js         comment list → nested thread tree, via `depth` (§1.4)
-│   │   ├── account.js          vote / reply / submit for a logged-in page — all delegated (§5.3)
+│   │   ├── comments.js         comment list → nested thread tree, by parent or `depth` (§6)
+│   │   ├── account.js          vote / reply / submit / corner, logged in — all delegated (§5.3)
 │   │   └── chrome.js           header bar, update control, theme switcher, tab menu, sidebar
 │   └── styles/
 │       ├── suppress.css        hides native shreddit chrome (document_start)
@@ -170,7 +174,10 @@ sheddit/
 │   ├── extension-firefox.js    the Firefox build in a real Firefox — Gecko's realm rules
 │   ├── media-sync.js           real media playback in Chromium — the audio pairing
 │   ├── live-contracts.js       re-verify contracts.js against real reddit.com
-│   └── mutate.sh               reintroduce shipped bugs, prove the suites catch them
+│   ├── capture-live.js         characterise a real page state (age gates, interstitials)
+│   ├── preview.js              the jsdom output as openable HTML
+│   ├── mutate.sh               reintroduce shipped bugs, prove the suites catch them
+│   └── anchor-check.sh         does every mutate.sh row still point at code that exists?
 ├── CHANGELOG.md                what changed, and which bugs never worked at all
 └── options/                    per-feature toggles
 ```
@@ -191,7 +198,7 @@ document_start
            DOMContentLoaded, and unblanking there flashed the native feed (log bug 83)
 
 document_idle
-   └─ pipeline.js classifies location via route.js → LISTING | COMMENTS | OTHER
+   └─ pipeline.js classifies location via route.js → LISTING | COMMENTS | PROFILE | OTHER
    └─ pipeline.js attaches MutationObserver(document.body, {childList, subtree})
         │
         ├─ node added
@@ -212,14 +219,18 @@ same element can be visited many times and will only ever be rendered once.
 
 ### Route changes
 `navigation.addEventListener('navigate')` is used where available (confirmed present on
-reddit.com), with a `history.pushState`/`replaceState` monkey-patch + `popstate` fallback.
-On route change: reset per-page state, re-classify, re-run a full sweep.
+reddit.com), with the bridge's page-realm `pushState`/`replaceState` relay (§5.0) +
+`popstate` as the fallback. On route change: reset per-page state, re-classify, re-run a
+full sweep.
 
 The window between the pre-commit teardown and the incoming page's first render is owned
-by a themed `#shd-loading` line (gate.resetForRoute) — before it existed that window was
-several seconds of suppressed-everything blank on every sort-tab click (engineering log
-bug 86). It is mounted only mid-session, where `.shd-active` is guaranteed on; every gate
-exit (reveal, unblank, fail, release, standDown) removes it.
+by the outgoing page itself, parked as an inert `#shd-outgoing` (gate.parkOutgoing, 0.47.0),
+under a themed `#shd-loading` line (gate.resetForRoute) — before the line existed that
+window was several seconds of suppressed-everything blank on every sort-tab click
+(engineering log bug 86), and before the parking the line sat over an empty viewport a busy
+main thread could not repaint. The same line also goes up at a first load's first deadline
+tick, on a route the pipeline will take; every gate exit (reveal, unblank, fail, release,
+standDown) removes both.
 
 The header and sidebar are torn down and rebuilt on every route change, because the header
 carries the current subreddit. Rebuilding them must **not** be gated on
@@ -246,7 +257,7 @@ Sheddit renders old-reddit vote arrows and links, but owns no auth state. Three 
 
 1. **Pure navigation** (post title, comments link, subreddit, user, sort tabs) —
    rendered as real `<a href>`. Zero JS needed. Works logged out.
-2. **Delegated actions** (upvote, downvote, save, hide) — the arrow's click handler finds
+2. **Delegated actions** (upvote, downvote) — the arrow's click handler finds
    the corresponding *hidden* native control inside the original `shreddit-post` and
    calls `.click()` on it. Reddit's own code then handles auth, optimistic UI, and the
    network request. Because the action bar is lazily hydrated (§1.3), the handler resolves
@@ -267,7 +278,8 @@ Sheddit renders old-reddit vote arrows and links, but owns no auth state. Three 
    real vote button when there is no session). This settles the question §5's scope split
    already assumed: delegation is retained code, not a working feature, for the primary
    logged-out case. Whether a *logged-in* session exposes the control is still unchecked —
-   `npm run verify:live -- --headed`, signed in, would answer that if it ever matters.
+   `npm run verify:live -- --headed --login`, signed in, would answer that if it ever
+   matters.
 
    **Since 0.34.0 it matters, and the tier is live code again** — see §5.3. A logged-in
    page is now expected to expose the control, and a miss there is reported once with the
@@ -288,11 +300,12 @@ Sheddit renders old-reddit vote arrows and links, but owns no auth state. Three 
    "reply" un-hides the native composer in place, via `SHD.dom.passthrough()`.
 
    This is subtler than it looks, and the first implementation was wrong twice over.
-   suppress.css clips the **direct child of `<body>`**, and `clip-path`/`opacity` apply to
-   the entire subtree — so tagging the `<shreddit-comment>` itself, seven levels down,
-   could never reveal it. And even on the correct element the escape hatch lost the
-   cascade: the suppression selector's `:not(#id)` clauses give it three ids' worth of
-   specificity, which beats a class-only rule regardless of `!important` on both.
+   suppress.css hides the **direct child of `<body>`**, and `opacity` (and, then,
+   `clip-path`) apply to the entire subtree — so tagging the `<shreddit-comment>` itself,
+   seven levels down, could never reveal it. And even on the correct element the escape
+   hatch lost the cascade: the suppression selector's `:not(#id)` clauses give it several
+   ids' worth of specificity (five today), which beats a class-only rule regardless of
+   `!important` on both.
 
    `passthrough(el)` walks the path from the target up to the body child, tags that child
    `.shd-native-passthrough` — which is **excluded from** the suppression selector rather
@@ -305,19 +318,22 @@ Sheddit renders old-reddit vote arrows and links, but owns no auth state. Three 
 `src/core/session.js` and `src/modules/account.js`. For a reader who is *already* logged in
 to Reddit, three things and no more: vote, reply, post. The architectural claim is that none
 of them needs a fourth tier. Everything is still tier 2 (a click forwarded to Reddit's own
-control) or tier 1 (a real link), and the extension's network surface stays at zero.
+control) or tier 1 (a real link), and the layer adds nothing to the extension's network
+surface (§5.1).
 
 **Who it is on for.** `SHD.session.active()` is the single gate: the reader's setting
 (`account`) AND a page that *affirmatively* reads as logged in. `C.SESSION.loggedIn` is a
-list of presence signals (the avatar button that opens Reddit's user drawer, and the
-attribute `shreddit-app` is believed to carry); `C.SESSION.loggedOut` is a veto (Reddit's
-own *Log In* control, which live captures have shown). No signal either way is logged out.
+list of presence signals (the `user-logged-in` attribute on `shreddit-app`, the avatar
+button that opens Reddit's user drawer, and the drawer's id inside the header);
+`C.SESSION.loggedOut` is a veto (Reddit's own *Log In* control, which live captures have
+shown). No signal either way is logged out.
 This is deliberately asymmetric: an absence-based test switches the layer on for the
 primary, logged-out reader the day Reddit moves a button, and a reply box that cannot post
 is worse than none; a wrong contract the other way costs a logged-in reader a feature they
-can still reach through Reddit's controls. **Every entry is a candidate as of 0.34.0** —
-the settle is one signed-in `verify:live -- --headed` run (its LOGGED-IN SESSION section
-reports which clauses match), which needs a desk, not a container.
+can still reach through Reddit's controls. **Every entry was a candidate as of 0.34.0** —
+the settle was one signed-in `verify:live -- --headed --login` run (its LOGGED-IN SESSION
+section reports which clauses match), which needs a desk, not a container. It ran
+2026-09-05: all three presence signals matched and both vetoes matched nothing.
 
 **Vote** trusts what it can verify. A click resolves `C.NATIVE.upvote/downvote` from the
 hidden source at click time (the bar hydrates late, §1.3). Through 0.46.0 it then forwarded
@@ -326,7 +342,8 @@ own statement that the session can use it. **That rule is withdrawn.** Reported 
 logged-out session on a live listing: Reddit now renders those buttons to everyone, so the
 click forwarded into nothing, the optimistic paint moved the score by one, and `settle()`
 could not take it back because a button served to a logged-out reader carries no
-`aria-pressed` for it to read. §7d's "logged out, nothing" is a stale measurement.
+`aria-pressed` for it to read. §7d's "not reachable at all" logged out is a stale
+measurement.
 
 The test is now **either** signal — a readable native state, or a session the detector
 recognises — because either one makes the vote answerable for. Neither, and the click casts
@@ -350,29 +367,39 @@ measured:
 
 1. a composer already open *for this target* — scoped by `closest(COMMENT) === target`,
    because a comment's subtree holds its descendants' composers exactly as it holds their
-   bodies (§1.4); for the post, any composer not inside a comment;
+   bodies (§1.4); for the post, any composer in the main column not inside a comment;
 2. failing that, click Reddit's reply control and wait for one to mount (a snapshot taken
    before the click keeps an unrelated open composer from being mistaken for ours);
-3. find the editor — a `<textarea>` (markdown mode) is a value and an `input` event; a
-   contenteditable is fed through `document.execCommand('insertText')` so the page's
-   rich-text editor sees a real `beforeinput`/`input`, with a direct text set as the
-   fallback — and *check the text landed* before going on;
-4. click Reddit's submit;
-5. wait for the outcome: a new `shreddit-comment` under the target (Reddit's optimistic
-   insert, which the pipeline then renders nested where Reddit put it), or Reddit's
-   composer emptied or gone.
+3. open it if Reddit shipped it collapsed ("Join the conversation") — focus, not a click,
+   is what opens it — and wait for a *visible* submit control, because a collapsed box
+   carries a hidden one (0.50.0);
+4. find the editor — a `<textarea>` (markdown mode) is a value and an `input` event; a
+   contenteditable is fed through `document.execCommand('insertText')`, one paragraph at a
+   time and only while the editor verifiably holds focus, so the page's rich-text editor
+   sees a real `beforeinput`/`input`, with a direct text set as the fallback — and *check
+   the text landed, and stayed,* before going on;
+5. click Reddit's submit;
+6. wait for the outcome: a new comment by the reader under the target (Reddit's optimistic
+   insert, which the pipeline then renders nested where Reddit put it). Nothing weaker
+   counts since 0.49.0: an emptied or vanished composer is also what a rejected insert
+   looks like.
 
 Every miss returns the step it missed and has one floor: the box stays with the draft, the
 status names the step, and Reddit's own composer is revealed in place (passthrough, §5
-tier 3) so the reader finishes there. The reply is never discarded on a failure.
+tier 3) so the reader finishes there. The one exception is a miss after the submit
+(`arrival`): Reddit's page is revealed with nothing carried into it, so a slow post cannot
+be sent twice. The reply is never discarded on a failure.
 
 **The account corner** (0.41.0, opened in 0.42.0) is the layer's only unprompted mark on
-the page: old reddit's `#header-bottom-right`, rendered last in `#shd-header` so it lands at
-the far right. `session.js` reads the reader's name and avatar out of Reddit's own header —
-scoped there, because a `/user/` link anywhere else on the page belongs to a post's author
-and naming the reader after one is the worst failure this layer can produce. Both reads are
-optional: the corner stands, and says the session is live, without either, and it caches
-only a COMPLETE reading so a name that hydrates late is picked up when the menu opens.
+the page: old reddit's `#header-bottom-right`, rendered last in `#shd-header` so it lands
+at the far right. `session.js` reads the reader's name and avatar out of Reddit's own
+header — scoped there, because a `/user/` link anywhere else on the page belongs to a
+post's author and naming the reader after one is the worst failure this layer can produce.
+Since 0.50.0 the name comes first from `C.SESSION.usernameAttr`, an attribute on a *direct
+child* of `shreddit-app` present from the first byte, with the header links as the
+fallback. Both reads are optional: the corner stands, and says the session is live,
+without either, and it caches only a COMPLETE reading so a name that hydrates late is
+picked up when the menu opens.
 
 The corner is a button onto a menu of Reddit's own account pages. Every item is tier 1 (a
 link) except **log out**, which is tier 2 and the strictest delegation in the codebase:
@@ -413,8 +440,8 @@ Tier 2 above survives this by accident of design — `.click()` is a DOM method 
 event reaches Reddit's main-world listener. Tier 3 survives because it only moves classes
 around. Pagination did not: `faceplate-partial` is a custom element Reddit defines, so
 `loadContent()` lives on a main-world prototype and `typeof fp.loadContent` is `undefined`
-from the isolated world. `loadNext()` checked for the function, did not find it, and returned false — every
-time, silently.
+from the isolated world. `loadNext()` checked for the function, did not find it, and
+returned false — every time, silently.
 
 The consequence is worth stating plainly: **infinite scroll never worked in any installed
 copy of this extension.** It worked throughout development because the dev harness is
@@ -423,10 +450,12 @@ done that way and could not have caught it.
 
 `src/core/bridge.js` is a `"world": "MAIN"` content script and the only sanctioned
 crossing. The isolated side writes the selector and method name onto `<html>` as data
-attributes and dispatches a bare event; the bridge reads them off the shared DOM, makes
-the call, and writes the result back the same way. No objects cross — `CustomEvent.detail`
-is not reliably cloned between worlds, and the DOM always is. Because the selector travels
-as data, `contracts.js` remains the single point of breakage.
+attributes (the selector matching only the partial the paginator has marked, since it
+picks by a policy the main world does not share) and dispatches a bare event; the bridge
+reads them off the shared DOM, makes the call, and writes the result back the same way. No
+objects cross — `CustomEvent.detail` is not reliably cloned between worlds, and the DOM
+always is. Because the selector travels as data, `contracts.js` remains the single point
+of breakage.
 
 If you need another Reddit-defined method later, extend the bridge. And do not let the dev
 harness tell you whether it works — only `test/extension.js` runs in the world the users get.
@@ -444,26 +473,27 @@ on the event. Primitive-only, like the load-more protocol, and asserted in step 
 
 ### 5.0b Firefox
 
-The same source runs on Firefox 140+ (the current ESR). Two manifest keys set a floor
-and the higher one wins: `world: "MAIN"` in content scripts is a Firefox 128 capability,
-and `data_collection_permissions` is a Firefox 140 one — declaring a key below the
-version that reads it is what AMO warns about, so the floor is the newest key's, not the
-oldest requirement's. The Firefox manifest is **derived** — `firefoxManifest()` in
+The same source runs on Firefox 140+ (the current ESR). Two manifest keys set a floor and
+the higher one wins: `world: "MAIN"` in content scripts is a Firefox 128 capability, and
+`data_collection_permissions` is a Firefox 140 one — declaring a key below the version
+that reads it is what AMO warns about, so the floor is the newest key's, not the oldest
+requirement's. The Firefox manifest is **derived** — `firefoxManifest()` in
 `package-extension.js` adds the gecko block (id, `strict_min_version: "140.0"`, a
-data-collection declaration of `none`), a `gecko_android` block whose
-`strict_min_version` is `"142.0"` because the same declaration landed later there (an
-absent block does not mean "no Android floor"; it means the Android floor silently
-inherits gecko's), and drops the Chrome-only version key; nothing else may differ, and a
-test asserts the content scripts come through the transform byte-identical. Measured
-while porting, in a real Firefox 154 via `test/extension-firefox.js`, on Linux and macOS
-both: the Xray boundary passes the whole bridge protocol, Gecko resolves the theme tie
-the same way Chromium does, promise-style `chrome.*` calls work, and — the ground having
-moved under the plan — current Firefox release ships the `navigation` API (it landed in
-147, after the 140 ESR), so only the ESR line rides the relay alone (the suite prefs the
-API off to pin that configuration). Two Firefox-only behaviours worth remembering: MV3 host permissions are revocable there, which the options page's access
-warning exists for; and reddit.com sits on the HSTS preload list, which is a testing
-concern only (the suite prefs it off to reach the plain-http fixture server), never a
-production one.
+data-collection declaration of `none`), a `gecko_android` block whose `strict_min_version`
+is `"142.0"` because the same declaration landed later there (an absent block does not
+mean "no Android floor"; it means the Android floor silently inherits gecko's), drops the
+Chrome-only version key, and rewrites the `service_worker` background as the
+`background.scripts` event page Gecko runs; nothing else may differ, and a test asserts
+the content scripts come through the transform byte-identical. Measured while porting, in
+a real Firefox 154 via `test/extension-firefox.js`, on Linux and macOS both: the Xray
+boundary passes the whole bridge protocol, Gecko resolves the theme tie the same way
+Chromium does, promise-style `chrome.*` calls work, and — the ground having moved under
+the plan — current Firefox release ships the `navigation` API (it landed in 147, after the
+140 ESR), so only the ESR line rides the relay alone (the suite prefs the API off to pin
+that configuration). Two Firefox-only behaviours worth remembering: MV3 host permissions
+are revocable there, which the options page's access warning exists for; and reddit.com
+sits on the HSTS preload list, which is a testing concern only (the suite prefs it off to
+reach the plain-http fixture server), never a production one.
 
 ### 5.1 Pagination and the "no API calls" constraint
 
@@ -474,7 +504,7 @@ infinite scroll, clocked by Sheddit's sentinel instead of its hidden one.
 
 If you want that read strictly — zero network activity after first paint — set
 `settings.autoPaginate = false`. The sentinel becomes a manual "load more" button and
-nothing is fetched unless the user clicks it. The extension is fully functional either way;
+no page is fetched unless the user clicks it. The extension is fully functional either way;
 you just see 3 posts per page instead of an endless feed.
 
 **Comment threads page the same way.** A thread ships a slice and leaves a partial for the
@@ -485,8 +515,15 @@ at whatever arrived in the initial HTML. `paginator.useMode(route)` now picks
 comment pages. The comment partial selector is scoped to `shreddit-comment-tree` so an
 unrelated partial elsewhere on the page cannot be mistaken for more comments.
 
+**A feed's partial is not always a continuation.** Reddit serves community hovercards as
+the same `faceplate-partial[loading="programmatic"]`, in the feed and in no post, and the
+paginator drove one instead of the feed's own (0.51.0). On a listing or profile it now
+drives only a partial that is not `C.PARTIAL_NOT_SRC` *and* that follows the last delivered
+item in document order; when none qualifies it reports no more pages rather than fetching
+something that cannot yield a row.
+
 Guardrails in `paginator.js`: 800 ms cooldown between automatic calls, 40-page hard cap,
-and a mutation-settle await so overlapping requests are never issued. Three details there
+and a mutation-settle await so overlapping requests are never issued. Four details there
 are load-bearing and were each wrong at some point:
 
 - **`settle()` starts observing before the load is triggered.** A partial that appends
@@ -505,8 +542,11 @@ are load-bearing and were each wrong at some point:
   inert `loading…` until one of the fill's real stopping points; with `autoPaginate`
   off nothing unprompted moves the page and the button is live from first paint.
 
-The extension has **zero network surface of its own**. `host_permissions` is scoped to
-`*://*.reddit.com/*` purely so content scripts can run.
+The extension has **no API and no server of its own**. Its only requests are a video's
+DASH manifest from Reddit's media CDN (`media.js`) and a static version file on GitHub —
+on a press of the update control (`update.js`) and once at browser start unless switched
+off (`background.js`) — all with `credentials: 'omit'`; PRIVACY.md describes each.
+`host_permissions` is scoped to `*://*.reddit.com/*` purely so content scripts can run.
 
 ### 5.2 old.reddit.com — the one host we leave rather than render
 
@@ -523,7 +563,7 @@ that answers with a wall instead.
 
 The problem this creates is not the wall — it is **attribution**. A reader with Sheddit
 installed follows a Reddit link, gets a dead end with no layout, no header and nothing of
-ours anywhere on it, and concludes the extension is broken. That is bug 52's argument
+ours anywhere on it, and concludes the extension is broken. That is bug 13's argument
 (*a silent hand-back is indistinguishable from an unrelated bug*) arriving through a host
 we were never on. Silence is not available to us here.
 
@@ -578,19 +618,22 @@ interstitial. Recorded as the trade that was made, not as an oversight.
 ```
 [rank] [▲ score ▼] [thumbnail] title (domain)
                     submitted <time> by <author> to <r/sub>
-                    <comment-count> comments  share  save  hide  report
+                    <comment-count> comments  share  hide
 ```
 Source fields: `score`, `post-title`, `content-href`, `domain`, `created-timestamp`,
 `author`, `subreddit-prefixed-name`, `comment-count`, `permalink`.
 
-Thumbnail: `post-type` drives the placeholder class (`self` / `link` / `image` /
-`gallery` / `video`); a real thumb URL is lifted from the first `<img>` in the source
-subtree when one exists.
+`save` and `report` are gone (§8). `share` opens a box holding the post's URL, and `hide`
+is local: it hides our row and forwards nothing.
+
+Thumbnail: a real thumb URL is lifted from the first `<img>` in the source subtree whose
+host is on `C.THUMB_HOSTS` and that is not inside `C.THUMB_EXCLUDE` (§7a); failing that,
+old reddit's placeholder class — `self` for a text post, `default` otherwise, and `nsfw`
+for adult content unless its pictures are opted in.
 
 ### Comment tree
-Flat list → tree via a depth stack (see the §1.4 warning — the "flat" premise is disputed
-as of 2026-08-14, though `depth` itself is still reliable, which is what this actually
-reads):
+Flat list → tree via a depth stack (the "flat" premise has not held since 2026-08-14 —
+§1.4 — though `depth` itself is still reliable, which is what this actually reads):
 ```
 stack[d] = node at depth d
 for each comment in document order:
@@ -601,6 +644,11 @@ for each comment in document order:
 The stack is module state that survives pipeline flushes, because a thread streams in
 batches — a late batch has to nest against comments rendered several flushes earlier, not
 restart at the root. Cleared only on route change.
+
+The stack is now the *fallback*. Replies a branch expander delivers late arrive after the
+stack has moved on to the newest chain, so `consume()` first nests a comment under its
+physical parent `shreddit-comment`'s row when it has one, and reads `stack[depth-1]` only
+for flat delivery.
 
 Collapse toggles (`[–]`) are pure local state. `sessionStorage` is mentioned as an option
 here but **nothing persists collapse state today**; toggles reset on reload.
@@ -677,7 +725,8 @@ was committed to the skin.
 §7a verified *extraction*. It could not verify *layout*: jsdom does no layout, and
 `css-lint.js` reads one declaration at a time. `test/geometry.js` now measures real boxes.
 
-**The staircase report is closed.** Rows measured at ten viewport widths, 360–1920px:
+**The staircase report is closed.** Rows measured at ten viewport widths (eleven in the
+suite today), 360–1920px:
 
 | Check | Result |
 |---|---|
@@ -708,7 +757,9 @@ directory via `--load-extension` against a loopback server mapped onto `www.redd
 confirming what only the manifest can provide: match patterns fire, the
 `document_start`/`document_idle` split holds, script order is right, and both stylesheets
 arrive (title renders at 16px `#0000ff`, body at `#dae0e6`, `shreddit-app` clipped to
-`inset(50%)`).
+`inset(50%)`). The suppression has changed shape since: 0.46.0 made the native tree a
+viewport-sized fixed box at `opacity: 0` / `visibility: hidden`, so comment action rows
+can hydrate, and that is what the suite asserts now.
 
 ---
 
@@ -774,7 +825,7 @@ connection. This is the section to update after every future run.
 | Comments are **not** flat siblings (§1.4's premise) | **Resolved, no rewrite.** `depth` matches DOM nesting 25/25 and no comment directly parents another. §1.4 rewritten. It did surface one real bug: the body lookup had to be scoped, since a comment's subtree now holds its descendants' bodies |
 | `award-icon-url` and `is-link-post` no longer on every post | Removed from `contracts.js` — neither was read downstream anyway |
 | New `post-type`: `crosspost` | Fixture added. Carries a `b.thumbs.redditmedia.com` thumbnail, which the allowlist was rejecting along with the `styles.`/`emoji.` decoys — so crossposts silently lost their thumbnail. Host added; the allowlist stays an allowlist |
-| Upvote control **not reachable at all** logged out — 21 open shadow roots searched, nothing found | Not a bug to fix. Confirms §8's scope: the arrows are decorative for the logged-out case. Whether a logged-in session exposes it is still unchecked |
+| Upvote control **not reachable at all** logged out — 21 open shadow roots searched, nothing found | Not a bug to fix. Confirms §8's scope: the arrows are decorative for the logged-out case. Whether a logged-in session exposes it is still unchecked. *Superseded:* the search never looked in the post's own shadow root (§5, 2026-09-05), and Reddit now serves the buttons logged out (§5.3) |
 
 **Half vindicated, half wrong — comment continuation.** It was built here from an *untested
 assumption* that threads lazy-load like feeds, so the live evidence cut both ways.
@@ -818,6 +869,8 @@ reputation. `verify:live` now captures page title, a body snippet and a screensh
 giving up, and distinguishes a genuine challenge from "does not look like Reddit" from "is
 Reddit but empty after 30 s". A diagnostic that names a cause it did not observe is worse
 than one that says it does not know.
+
+---
 
 ## 7e. Live re-verification (real reddit.com, 2026-08-24)
 
@@ -870,7 +923,7 @@ a probe crash, fixed alongside.
 **Unchanged:** the upvote control is still unreachable logged out (20 open shadow roots
 searched, nothing), which is the documented scope state rather than a failure — the
 verify script now reports it as a note instead of failing an otherwise-clean run over a
-settled decision.
+settled decision. (Measured through the same hole as §7d's — see §5's 2026-09-05 note.)
 
 ---
 
@@ -907,7 +960,8 @@ gave Sheddit anywhere for posts to live:
 | Posts present, none rendered | Sheddit bug | fail, show the screen |
 | No posts, document still loading | still streaming | keep waiting |
 | No posts, **no feed container** | not a page Sheddit renders | un-blank, stay out of the way, keep watching |
-| No posts, feed container present | suspicious — a renamed element looks like this | fail after `MAX_WAIT_MS` |
+| No posts, feed container an empty shell | an age gate's scaffolding, or an empty listing | un-blank; once settled, render the empty state (§7) |
+| No posts, feed container holding markup we cannot read | suspicious — a renamed element looks like this | fail after `MAX_WAIT_MS` |
 
 `unblank()` is a third state alongside `reveal()` and `standDown()`: stop hiding the page,
 but stay willing to render if content turns up. It fires off the `load` event rather than

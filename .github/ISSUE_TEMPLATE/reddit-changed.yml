@@ -21,10 +21,12 @@ body:
         Copy the whole diagnostics block, or attach a screenshot of the failure screen.
         It prints the reason, the version, and the source/stamped/rendered/rejected counts.
       placeholder: |
-        reason: render-failed
-        version: 0.10.2
-        sources: 26  stamped: 26  rendered: 0  errors: 0
-        rejected: post-title (26)
+        reason:     render-failed
+        sources:    26 shreddit-post/comment elements on the page
+        rendered:   0 rows
+        stamped:    26 processed by the renderer (0 here means the render queue never ran)
+        rejected:   post x26 missing "post-title"
+        version:    0.51.0
       render: text
     validations:
       required: true
@@ -34,10 +36,10 @@ body:
     attributes:
       label: Sheddit version
       description: >
-        From `chrome://extensions`, or the failure screen. **Please confirm you reloaded the
-        extension (the ↻ on its card) after updating** — a pushed commit is not a loaded
+        From `chrome://extensions` (Firefox: `about:addons`), or the failure screen.
+        **Please confirm you reloaded the extension (the ↻ on its card) after updating** — a pushed commit is not a loaded
         extension until the card is reloaded.
-      placeholder: "0.10.2"
+      placeholder: "0.51.0"
     validations:
       required: true
 
