@@ -20,6 +20,29 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.51.2
+
+No behaviour changed. This build republishes 0.51.1 with one fix to the test suite, so the
+download zips, the release and the version an installed copy is offered all move together.
+
+### Fixed — a test that failed without anything being wrong
+
+`rendered count matches the slice plus whatever has loaded` in `test/extension.js` failed one
+run in several, and every time under CPU load. The fixture counts a comment load when it is
+requested and delivers the batch 50ms later; the test read the thread with no wait while a
+load was already in flight, so it saw a load counted against comments that had not arrived.
+The extension had done nothing wrong. The fixture now also counts delivered batches, and the
+test compares only a reading in which every requested batch has landed and been drawn. With
+the delay widened to 1.5s the old test fails every time and the new one passes. Engineering
+log bug 116.
+
+### Known, not fixed
+
+Unchanged from 0.51.0: `load more` can still stick on your own profile overview, and a post
+on that overview is read and then not shown.
+
+---
+
 ## 0.51.1
 
 No behaviour changed. This build corrects what Sheddit says about itself, on its own pages

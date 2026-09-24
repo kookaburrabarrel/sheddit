@@ -1,6 +1,6 @@
 {
-  "version": "0.51.1",
+  "version": "0.51.2",
   "released": "2026-09-24",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.51.1 changes no behaviour; it corrects what Sheddit says about itself. The options page claimed video was the only thing that makes a request, contradicting the version check on the same page, and the header's auto-check switch said one request per twenty hours without mentioning that a failed check is retried after an hour. The privacy policy now says the same: three requests, what each one carries, and how often. Everything 0.51.0 fixed is unchanged."
+  "notes": "0.51.2 changes nothing you will see; it republishes 0.51.1 with a fix to Sheddit's own test suite. A check on loading more comments sometimes failed on a busy machine because it read the thread before the next batch had arrived. The extension was right every time; the test now waits for the batch before counting. Everything 0.51.0 and 0.51.1 changed is unchanged."
 }
