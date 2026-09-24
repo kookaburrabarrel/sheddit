@@ -301,7 +301,7 @@ stored and nothing is sent; the name and picture are read from the page and draw
 neither survives a reload.
 
 **0.43.0 — the 18+ prompt, written down.** No behaviour changed: Sheddit has clicked
-Reddit's own "over 18" button since 0.30.0, and this policy did not say so. It says so
+Reddit's own "over 18" button since 0.3.0, and this policy did not say so. It says so
 now, under **What it presses for you**, along with what it means for a signed-in reader.
 The same release narrowed what can be clicked — a promotion offering *Yes* / *Not now*
 matched the old rule — and added the **What the page can see** section, which names the

@@ -3,6 +3,3 @@ contact_links:
   - name: Security vulnerability
     url: https://github.com/kookaburrabarrel/sheddit/security/advisories/new
     about: Please report security issues privately, never as a public issue.
-  - name: Question or general discussion
-    url: https://github.com/kookaburrabarrel/sheddit/discussions
-    about: Not sure it's a bug? Ask here.

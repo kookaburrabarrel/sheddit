@@ -9,7 +9,7 @@ They are **generated**, not drawn:
 
 ```bash
 npm run icons          # rewrite all four from icon.svg
-npm run icons:check     # rebuild in memory and diff; non-zero if any is stale
+npm run icons:check    # rebuild in memory and diff; non-zero if any is stale
 ```
 
 | File | Size | Where a browser reaches for it |
@@ -67,7 +67,7 @@ waiting to be revisited. `docs/promo/README.md` records the same decision from t
 end, where the keying it costs is paid.
 
 Everything there references an icon file rather than holding a copy of the mark either way,
-so re-exporting reaches all five images on the next `npm run promo` and there is no second
-copy of the shed to keep in step by hand. That is not a hypothetical tidiness: the README
-banner shipped the aerial-less shed for a while purely because it was a hand-made PNG nobody
-had to regenerate.
+so re-exporting reaches every image that shows it on the next `npm run promo` and there is
+no second copy of the shed to keep in step by hand. That is not a hypothetical tidiness: the
+README banner shipped the aerial-less shed for a while purely because it was a hand-made PNG
+nobody had to regenerate.

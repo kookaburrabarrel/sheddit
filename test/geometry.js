@@ -19,7 +19,7 @@
  *      same left offset and painted over each other.
  *
  * It also settles the staircase-indentation report that ARCHITECTURE could not
- * reproduce: row left offsets are measured directly, at ten widths.
+ * reproduce: row left offsets are measured directly, at eleven widths.
  *
  *   node build.js && node test/geometry.js
  */

@@ -8,13 +8,13 @@
   stylesheets the extension actually ships and uses the class names src/modules/listing.js
   and src/modules/chrome.js really emit, so a change to old-reddit.css changes this page
   too and the artwork cannot drift away from the product it advertises. Rendered inside an
-  <iframe> by tile.html / marquee.html, which is what keeps `html.shd-active`'s !important
-  body rules off the promo card's own layout.
+  <iframe> by tile.html / marquee.html and both README banners, which is what keeps
+  `html.shd-active`'s !important body rules off the promo card's own layout.
 
-  The posts open with the same seven the README banner uses — same fiction, same voice, one
-  place to change it — and three more follow them. The count is load bearing: both cards
-  crop this page to a fixed height and a short list would leave the bottom of the product
-  shot as an empty white rectangle. Ten rows overfill the taller crop; do not trim it.
+  The README banners render this same page, so the posts are one fiction in one voice with
+  one place to change it. The count is load bearing: every card and banner crops this page
+  to a fixed height and a short list would leave the bottom of the product shot as an
+  empty white rectangle. Ten rows overfill the tallest crop; do not trim it.
 -->
 <link rel="stylesheet" href="../../src/styles/themes.css">
 <link rel="stylesheet" href="../../src/styles/old-reddit.css">

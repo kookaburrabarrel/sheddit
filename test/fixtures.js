@@ -12,6 +12,8 @@
  *   - <shreddit-ad-post> containing NO <shreddit-post>
  *   - <faceplate-partial loading="programmatic"> as the pagination handle
  *   - comments as FLAT siblings carrying depth=
+ *
+ * Two days later live threads were NESTED instead; that shape is nestedCommentsHtml() below.
  */
 
 /* THE EXPIRY STAMP ON A PACKAGED RENDITION, MINTED RATHER THAN WRITTEN DOWN.

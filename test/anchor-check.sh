@@ -3,9 +3,9 @@
 # anchor-check.sh — does every mutation row still point at code that exists?
 #
 # WHY THIS IS A SEPARATE TOOL. `mutate.sh` prints ANCHOR MISS for a row whose anchor
-# stopped matching, and a miss now fails the sweep — but the sweep takes about half an
-# hour, and the row you break is rarely the row for the code you edited. This answers the
-# same question in a minute, without running a single suite, so it can be run after any
+# stopped matching, and a miss now fails the sweep — but the sweep takes hours, and the
+# row you break is rarely the row for the code you edited. This answers the same
+# question in seconds, without running a single suite, so it can be run after any
 # source edit rather than discovered at the end of a long sweep.
 #
 # HOW IT WORKS, AND WHY IT IS GENERATED RATHER THAN MAINTAINED. It splices a counting

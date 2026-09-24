@@ -33,9 +33,10 @@ body:
     attributes:
       label: Sheddit version
       description: >
-        From `chrome://extensions`. **Please reload the extension (↻ on its card) and confirm
-        it still happens** — Chrome keeps running the code it read at load time.
-      placeholder: "0.10.2"
+        From `chrome://extensions` (Firefox: `about:addons`). **Please reload the extension
+        (↻ on its card) and confirm it still happens** — Chrome keeps running the code it
+        read at load time.
+      placeholder: "0.51.0"
     validations:
       required: true
 
