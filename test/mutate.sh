@@ -1724,7 +1724,7 @@ mutate "the empty-feed shortcut runs on a route change, over the outgoing page" 
 # A top-level comment has no branch, so the post path counted the whole document — and the
 # paginator is auto-loading batches of shreddit-comment inside the same 8s window. Any batch
 # read as "your comment arrived" and the form closed on it, dropping the reader's draft
-# while Reddit still held unposted text. Log 773's rule, reaching the path that lacked it.
+# while Reddit still held unposted text. Log bug 70's rule, reaching the path that lacked it.
 # Both paths share one author filter now (0.49.0), so this row reintroduces the drift on
 # both at once: every comment under the target counts, whoever wrote it.
 mutate "any comment arriving anywhere counts as the reader's comment posting" run \

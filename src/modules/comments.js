@@ -1,8 +1,9 @@
 /**
- * comments.js — rebuilds old reddit's nested thread from Reddit's FLAT comment list.
+ * comments.js — rebuilds old reddit's nested thread from Reddit's comment list.
  *
- * Recon fact: <shreddit-comment> elements are SIBLINGS. Threading exists only as a
- * `depth` attribute. So we run a depth-stack over document order:
+ * Recon fact (2026-08-12): <shreddit-comment> elements were SIBLINGS, threaded only by a
+ * `depth` attribute. They have been DOM-nested since 2026-08-14, and consume() prefers
+ * that physical parent; for flat delivery we run a depth-stack over document order:
  *
  *     stack[d] = the rendered node at depth d
  *     parent   = stack[depth - 1] ?? root
@@ -905,9 +906,10 @@ SHD.comments = (() => {
    * Old reddit's strip above the comment list: `all N comments`, then `sorted by: best`.
    *
    * Requested twice from live use. The links are ordinary hrefs onto the post's own
-   * permalink — a full navigation, exactly as old reddit sorted — so route.js needs no
-   * new machinery and a deep link (?context, a single-comment permalink) gets its escape
-   * hatch for free: `all N comments` IS the canonical page.
+   * permalink, as old reddit's were; Reddit's router takes them as a query-only navigation,
+   * which is why route.js keys on `?sort=` (bug 87). A deep link (?context, a
+   * single-comment permalink) gets its escape hatch for free: `all N comments` IS the
+   * canonical page.
    *
    * The current sort is the EMITTED one (route.sortQuery), not a raw location.search
    * read. This used to read location at consume time, which was safe while every consume

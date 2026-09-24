@@ -346,7 +346,7 @@ SHD.C = {
    * right. What is verified is the SENTENCE, from a reader who read it on the page; what is
    * NOT is the element that carries it, so this is matched by walking text rather than by a
    * selector, and a miss costs the notice and nothing else — the post renders exactly as it
-   * does today. verify:live's DELETED POSTS section is what settles it.
+   * does today. verify:live's REMOVED POSTS section is what settles it.
    *
    * The author fallback is deliberately NOT used as the signal, though it looks like one:
    * a post whose AUTHOR deleted their account also reads `[deleted]` while the post itself
@@ -551,7 +551,7 @@ SHD.C = {
    *
    * Same profile, one day apart, and the second shape is user-scoped for EVERY comment on
    * the page — which is why deriving the community from the href's first segment printed
-   * "comment in u/spez" thirty times out of thirty (live testing, bug 2). A permalink that a
+   * "comment in u/spez" thirty times out of thirty (live testing, bug 72). A permalink that a
    * profile page rewrites to be about the profile cannot tell us where the comment lives,
    * and no amount of parsing changes that.
    *
@@ -631,20 +631,21 @@ SHD.C = {
   /* The exception. Captured live: `desktop_auth_blocking_upsell`, a login/signup upsell that
      fires client-side roughly 30s after page load — not on scroll, not on any interaction,
      confirmed twice with scrollY===0. It sets the SAME rpl-scroll-lock class the age gate
-     does, so the default "stand aside" policy above would apply to it too. That is wrong
-     here specifically: unlike the age gate, this one carries no close control, and neither
-     a real Escape keypress nor clicking its own dim overlay does anything — it is marked
-     `blocking` and means it. Standing aside would trap a logged-out reader behind an
-     unremovable "Get Started" / "I already have an account" wall with no way back except
-     signing up — precisely the affordance the scope section of the README says never to add,
-     and worse than doing nothing at all: without Sheddit the reader is at least looking at
-     Reddit's own broken UX, not one we handed them.
+     does, so the "stand aside" policy this was written under (superseded above) would have
+     applied to it too. That is wrong here specifically: unlike the age gate, this one
+     carries no close control, and neither a real Escape keypress nor clicking its own dim
+     overlay does anything — it is marked `blocking` and means it. Standing aside would trap
+     a logged-out reader behind an unremovable "Get Started" / "I already have an account"
+     wall with no way back except signing up — precisely what the scope section of
+     CONTRIBUTING says this project exists to remove, and worse than doing nothing at all:
+     without Sheddit the reader is at least looking at Reddit's own broken UX, not one we
+     handed them.
 
      So this one specific, verified case is REMOVED rather than deferred to — see
-     gate.suppressKnownUpsells(). The general "stand aside" path stays the default for
-     everything else: an unknown modal might be something the user genuinely has to resolve
-     (a real content warning, a CAPTCHA), and generalising "suppress every blocking modal"
-     from this one example would be exactly the wrong lesson to take from it.
+     gate.suppressKnownUpsells(). Everything else is only HIDDEN, never deleted (the policy
+     above): deleting nodes we cannot name risks breaking a flow nobody has captured, and
+     generalising "remove every blocking modal" from this one example would be exactly the
+     wrong lesson to take from it.
 
      Delivery mechanism, for context (not selected on — see the note on why below): the page
      ships a `<template id="deferred-desktop_auth_blocking_upsell">` inert in the initial
@@ -664,7 +665,8 @@ SHD.C = {
      the portaled `#desktop-dynamic-upsell-dialog` sibling, and hiding the host alone was
      confirmed live to do nothing.
 
-     KNOWN LIMITATION, unverified because it has never been observed: an 18+ age gate and
+     FORMER LIMITATION, moot under the 2026-08-20 policy (gate.stripScrollLock() now clears
+     the lock on every page we render, age gate or not), kept as history: an 18+ age gate and
      this upsell being up AT THE SAME TIME. Removing the upsell also clears rpl-scroll-lock,
      because that is the only way to stop deferring to a wall we just deleted — but if a real
      age gate were also showing, clearing it would un-defer and re-hide the gate, which is
@@ -858,7 +860,7 @@ SHD.C = {
    * Neither is a selector problem, which is why neither lives here. Each miss has the same fail-safe: the native composer is revealed in place
    * (passthrough), and the reader finishes in Reddit's UI. account.js's `compose()`
    * measures the outcome — a new comment element arriving under the target — rather than
-   * assuming the click worked (the "N more replies" lesson, log bug 90).
+   * assuming the click worked (the "N more replies" lesson, log bug 70).
    */
   COMPOSER: {
     host: 'comment-composer-host, shreddit-composer, shreddit-async-loader[bundlename*="composer" i], ' +
@@ -957,7 +959,7 @@ SHD.settings = {
 
      The one setting no code in this file's world ever reads: it belongs to
      src/core/oldreddit.js, which ships ALONE on old.reddit.com and repeats the default
-     rather than being handed 500 lines of selectors for a page it is leaving. test/run.js
+     rather than being handed 900 lines of selectors for a page it is leaving. test/run.js
      asserts the two agree — the arrangement bridge.js has with BRIDGE. */
   redirectOldReddit: true,
   /* The account layer: vote arrows that register, an old-reddit reply box, and the

@@ -4,7 +4,7 @@
  * A theme is a palette plus a few design tokens (font stack, corner radius, whether the
  * thread lines are dotted or solid). It is ONLY paint: no theme may touch the layout
  * metrics — `--shd-side-w`, `--shd-side-gap`, `--shd-gutter` — because those are load
- * bearing and asserted by test/geometry.js at ten viewport widths. test/css-lint.js
+ * bearing and asserted by test/geometry.js at eleven viewport widths. test/css-lint.js
  * enforces that rule statically, so a theme cannot quietly reintroduce bug 6.
  *
  * The palettes themselves live in src/styles/themes.css, keyed by the same ids as the

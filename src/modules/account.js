@@ -7,14 +7,14 @@
  * followed by a click on Reddit's own submit button — ARCHITECTURE §5's delegation tier,
  * extended from "the arrow" to "the reply box", with Reddit's page code still owning the
  * auth, the network request, the error handling and the optimistic insert. The extension
- * keeps its zero network surface with this file in it.
+ * adds nothing to its network surface with this file in it.
  *
  * WHO THIS IS FOR, AND WHO IT MUST NOT TOUCH
  * SHD.session decides whether the layer is on (setting AND a logged-in page). For the
- * primary, logged-out reader every path in here collapses to 0.33.0's behaviour: arrows
- * that no-op silently (Reddit renders no vote control for a logged-out session — measured,
- * ARCHITECTURE §7d), a `reply` that hands off to Reddit's own comment via passthrough, and
- * no submit buttons. That is asserted, not assumed: test/run.js boots the same fixtures
+ * primary, logged-out reader every path in here collapses to 0.33.0's behaviour — arrows
+ * that cast nothing, except that they now say why (see VOTING below: Reddit does ship its
+ * vote buttons to a logged-out session, so a click is never forwarded), a `reply` that
+ * hands off to Reddit's own comment via passthrough, and no submit buttons. That is asserted, not assumed: test/run.js boots the same fixtures
  * logged out and checks nothing new appears.
  *
  * VOTING TRUSTS WHAT IT CAN VERIFY
@@ -40,9 +40,10 @@
  *
  * WHAT IS UNVERIFIED
  * The composer protocol (C.COMPOSER) and the per-comment reply control (C.NATIVE.reply)
- * are candidates: shaped from ordinary use of the site, driven end to end only against
- * fixtures that model them, never yet against a signed-in reddit.com — the measurement
- * needs a desk, not a container (CONTRIBUTING). So every step measures its outcome and
+ * were shaped from ordinary use of the site and first driven only against fixtures that
+ * model them. Signed-in measurement since (2026-09-05 onward, see contracts.js and log
+ * 111-113) has confirmed some of it and corrected more, and the reply control is still a
+ * candidate — the measurement needs a desk, not a container (CONTRIBUTING). So every step measures its outcome and
  * every miss has the same floor: reveal Reddit's own composer in place with whatever text
  * did land, and let the reader finish in Reddit's UI. The reply the reader typed is never
  * discarded — the form stays, draft intact, until the reply is seen to arrive.
@@ -261,7 +262,7 @@ SHD.account = (() => {
    * THE BUTTON'S PRESENCE USED TO BE THE ANSWER AND NO LONGER IS. This file's header
    * argued that Reddit renders a vote control only for a session that can use one, so the
    * control was ground truth and the session detector was only consulted about what a MISS
-   * meant (ARCHITECTURE §7d: "logged out, nothing"). Reported from a logged-out session on
+   * meant (ARCHITECTURE §7d: "not reachable at all"). Reported from a logged-out session on
    * a live listing, and it is the worst kind of bug this code can have: clicking a post's
    * up arrow moved the score 5411 -> 5412 and lit `.upmod`, with no request made and no
    * login prompt. Reddit now ships those buttons to everyone.
@@ -398,15 +399,6 @@ SHD.account = (() => {
   const hostsNow = () => new Set(document.querySelectorAll(C.COMPOSER.host));
 
   /**
-   * Reddit's reply control for THIS comment. The attribute clauses first (C.NATIVE.reply),
-   * then the shape measured live 2026-09-05: a bare light-DOM <button> whose only handle
-   * is its text, "Reply" (C.NATIVE.replyText). Every button reachable through the comment
-   * — light DOM and open shadow roots — is a candidate, and only one the comment itself
-   * owns counts: a comment's subtree holds its descendants' reply buttons as surely as it
-   * holds their bodies (§1.4), and clicking a child's control would open a composer under
-   * the wrong comment.
-   */
-  /**
    * The comment a node belongs to, THROUGH shadow roots. `closest()` stops at a shadow
    * boundary and answers null for a button inside an action row's root — which is where
    * the vote buttons live and where a named reply control would — so an ownership test
@@ -423,6 +415,15 @@ SHD.account = (() => {
     return null;
   }
 
+  /**
+   * Reddit's reply control for THIS comment. The attribute clauses first (C.NATIVE.reply),
+   * then the shape measured live 2026-09-05: a bare light-DOM <button> whose only handle
+   * is its text, "Reply" (C.NATIVE.replyText). Every button reachable through the comment
+   * — light DOM and open shadow roots — is a candidate, and only one the comment itself
+   * owns counts: a comment's subtree holds its descendants' reply buttons as surely as it
+   * holds their bodies (§1.4), and clicking a child's control would open a composer under
+   * the wrong comment.
+   */
   function replyControl(target) {
     const byAttr = SHD.dom.deepQuery(target, C.NATIVE.reply);
     if (byAttr && ownerComment(byAttr) === target) return byAttr;
@@ -451,7 +452,7 @@ SHD.account = (() => {
    * Any batch landing there read as "your comment arrived", and the form closed on it,
    * taking the reader's draft with it while Reddit still held unposted text.
    *
-   * This is the rule log 773 already wrote for the `N more replies` control — "page-wide
+   * This is the rule log bug 70 already wrote for the `N more replies` control — "page-wide
    * would credit the paginator's arrivals to our click" — reaching the one path that had
    * not been narrowed. Where the session knows who the reader is, the count is theirs
    * alone; where it does not, the old page-wide count stands rather than a guess.
@@ -460,7 +461,7 @@ SHD.account = (() => {
     /* The reader's OWN comments, on both paths now, where the session knows who they are.
        The comment path counted everything under the target, which let a paginator batch or
        another reader's reply stand in for ours; the post path was already narrowed for
-       exactly that reason (log 773's rule) and the two had drifted. Where the name is not
+       exactly that reason (log bug 70's rule) and the two had drifted. Where the name is not
        known the wider count stands, as before, rather than a guess. */
     const me = SHD.session.username && SHD.session.username();
     const mine = (n) => !me || (n.getAttribute(C.COMMENT_ATTR.author) || '') === me;
@@ -783,14 +784,6 @@ SHD.account = (() => {
   };
 
   /**
-   * Old reddit's reply box: a textarea, `save` and `cancel`, a status line. `target` is
-   * the native element the reply belongs to (the hidden <shreddit-comment>, or the post
-   * for a top-level comment). On save the text goes through compose(); on success the
-   * form goes away and the pipeline renders the comment Reddit inserted, nested where
-   * Reddit put it. On any miss the form STAYS, draft intact, the status says which step
-   * failed, and Reddit's own composer is revealed in place so the reader can finish there.
-   */
-  /**
    * Our own text surfaces. Not a Reddit contract — these are our classes, which is why
    * they are here and not in contracts.js.
    */
@@ -834,6 +827,14 @@ SHD.account = (() => {
     }
   }
 
+  /**
+   * Old reddit's reply box: a textarea, `save` and `cancel`, a status line. `target` is
+   * the native element the reply belongs to (the hidden <shreddit-comment>, or the post
+   * for a top-level comment). On save the text goes through compose(); on success the
+   * form goes away and the pipeline renders the comment Reddit inserted, nested where
+   * Reddit put it. On any miss the form STAYS, draft intact, the status says which step
+   * failed, and Reddit's own composer is revealed in place so the reader can finish there.
+   */
   function replyForm(m, { kind = 'comment', onClose } = {}) {
     guardOwnKeys();
     const ta = h('textarea.shd-reply-text', { rows: '6', 'aria-label': kind === 'post' ? 'comment' : 'reply' });
@@ -1025,15 +1026,6 @@ SHD.account = (() => {
   }
 
   /**
-   * Reddit's own log-out control, or null.
-   *
-   * The attribute clauses first. The text fallback then follows the AGE GATE's rule rather
-   * than the reply control's: it clicks only when EXACTLY ONE control in the drawer says
-   * exactly "log out". A reply button matched loosely costs a mis-click; a log-out button
-   * matched loosely ends the reader's session on something that merely mentions the words,
-   * and there is no undo for that short of signing back in.
-   */
-  /**
    * Reddit's drawer PANEL — the thing that holds the log-out control — and never the
    * avatar button that opens it.
    *
@@ -1072,6 +1064,15 @@ SHD.account = (() => {
     return [...document.querySelectorAll(C.USER_DRAWER.host)].find(usable) || null;
   }
 
+  /**
+   * Reddit's own log-out control, or null.
+   *
+   * The attribute clauses first. The text fallback then follows the AGE GATE's rule rather
+   * than the reply control's: it clicks only when EXACTLY ONE control in the drawer says
+   * exactly "log out". A reply button matched loosely costs a mis-click; a log-out button
+   * matched loosely ends the reader's session on something that merely mentions the words,
+   * and there is no undo for that short of signing back in.
+   */
   function findLogoutControl() {
     for (const root of drawerRoots()) {
       const byAttr = SHD.dom.deepQuery(root, C.NATIVE.logout);
@@ -1097,7 +1098,7 @@ SHD.account = (() => {
    * one action a reader most wants back (reported 2026-09-09).
    *
    * Sheddit does not build a logout request. It cannot: that is a POST carrying Reddit's
-   * own CSRF token, and forging one would be the first request this extension ever made.
+   * own CSRF token, and forging one would be the first request this extension ever made to Reddit.
    * So it does what the reader would do — open Reddit's user drawer and click the item in
    * it — and lets Reddit's code end the session.
    *
@@ -1121,7 +1122,7 @@ SHD.account = (() => {
        returned, so `logging out…` and every miss message below were written into a hidden
        subtree: invisible, and unannounced too, because `role="status" aria-live="polite"`
        does not fire from a hidden container. "A message nobody can read is not a fallback"
-       is this file's own rule, written for replies (line 354) and broken here.
+       is this file's own rule, written for replies (see handoff()) and broken here.
 
        It also re-armed the press it was meant to guard: re-opening the corner rebuilds the
        menu with a fresh ENABLED `log out`, so a second run could start while the first was

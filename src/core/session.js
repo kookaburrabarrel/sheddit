@@ -18,8 +18,9 @@
  * (who gets 0.33.0's behaviour, with Reddit's own controls one passthrough away) and
  * costs a logged-out reader nothing at all. That asymmetry is deliberate; keep it.
  *
- * Every C.SESSION entry is unverified live as of 0.34.0 — see the note there and the
- * LOGGED-IN SESSION section of test/live-contracts.js, which is what settles them.
+ * Every C.SESSION entry was unverified live as of 0.34.0; the logged-in/out signals were
+ * verified signed in on 2026-09-05 and the name clauses remain candidates — see the notes
+ * there and the LOGGED-IN SESSION section of test/live-contracts.js, which settles them.
  *
  * Caching: a positive answer is cached for the page (a session does not end mid-page),
  * a negative one only briefly. The header is server-rendered so it is normally present

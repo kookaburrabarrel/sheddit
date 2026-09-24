@@ -3,7 +3,7 @@
  *
  *   [rank] [▲ score ▼] [thumb] Title (domain)
  *                              submitted <ago> by <author> to <r/sub>
- *                              <n> comments  share  save  hide  report
+ *                              <n> comments  [watch]  share  hide
  */
 globalThis.SHD = globalThis.SHD || {};
 
@@ -289,9 +289,10 @@ SHD.listing = (() => {
       })),
       /* No save/report. Both need a session, and both shipped as `href: permalink`, so
          they looked like actions and silently navigated to the comments page instead.
-         This extension targets logged-out reading (README "Scope"), and old reddit did
-         not offer them to logged-out users either — so the faithful thing and the honest
-         thing agree. Restore them behind a session check if login support ever lands. */
+         This extension targets logged-out reading (CONTRIBUTING "Scope"), and old reddit
+         did not offer them to logged-out users either — so the faithful thing and the honest
+         thing agree. If they come back, they come back behind the account layer's session
+         check (SHD.session.active()), as that section says. */
       h('li', null, h('a.hide', {
         href: '#', text: 'hide',
         onclick: (e) => { e.preventDefault(); row(m.id)?.classList.add('shd-hidden'); }
@@ -491,7 +492,7 @@ SHD.listing = (() => {
     const stop = setTimeout(() => obs.disconnect(), LATE_TIME_MS);
   }
 
-  /** Called by the pipeline for each newly-seen profile comment (either candidate tag). */
+  /** Called by the pipeline for each newly-seen <shreddit-profile-comment>. */
   function consumeProfileComment(el) {
     const m = SHD.model.profileComment(el);
     if (!m) return false;

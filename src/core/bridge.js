@@ -71,10 +71,11 @@
    * Registered after the load-more listener on purpose: if patching history ever throws,
    * pagination must survive it.
    */
-  /* Marked, so a second injection of this script — an extension reload leaves the first
-     copy's patch in place on the same page — wraps the wrapper and dispatches the event
-     twice per navigation. emit() is idempotent per path, so the duplicate is survivable
-     rather than fatal, which is precisely why it would never be noticed. */
+  /* Marked, because without the mark a second injection of this script — an extension
+     reload leaves the first copy's patch in place on the same page — wraps the wrapper and
+     dispatches the event twice per navigation. emit() is idempotent per path, so the
+     duplicate is survivable rather than fatal, which is precisely why it would never be
+     noticed. */
   const PATCHED = '__shdNavPatched';
   if (!history[PATCHED]) {
     Object.defineProperty(history, PATCHED, { value: true, configurable: true });
