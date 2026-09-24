@@ -104,9 +104,9 @@ login or session. Two static files are fetched, both optional and neither about 
 manifest of a video you are watching, from Reddit's own media server, switchable off in
 the options; and a file on GitHub stating the current version — asked when you press
 "updates" in the header, and once when your browser starts unless you switch that off
-beside the button. Both are sent without cookies and without a referrer, neither carries
-anything about you, and the test suite counts those requests, so a change that quietly
-fetched more would fail the build.
+beside the button. Both are sent without cookies, the version check without a referrer
+too, neither carries anything about you, and the test suite counts those requests, so a
+change that quietly fetched more would fail the build.
 
 One thing Sheddit does press on your behalf: on a subreddit marked adult it clicks
 Reddit's own "over 18" button so the page works normally underneath the layout. If you
@@ -182,10 +182,10 @@ The extension's entire function is re-rendering Reddit's own pages, which requir
 running on those pages. Access is limited to reddit.com and used only to read the
 already-loaded document and draw a replacement layout into it. reddit.com/media is
 excluded outright in the manifest, and old.reddit.com is excluded from every script that
-reads or redraws a page. On old.reddit.com the extension runs one small script that does
-not read the page at all: that host now answers every URL with a login wall, so the
-script says so on screen and opens the same page on www.reddit.com, where the layout
-works. A checkbox turns it off. No other host is requested, and no data leaves the page.
+reads or redraws a page. On old.reddit.com the extension runs two small scripts that do
+not read the page at all: that host now answers every URL with a login wall, so they say
+so on screen and open the same page on www.reddit.com, where the layout works. A
+checkbox turns it off. No other host is requested, and no data leaves the page.
 ```
 
 This is the one a reviewer actually reads, and the reason a submission with a broad host
@@ -196,8 +196,9 @@ reassuring: the exclusions it cites are real lines in `manifest.json`.
 
 Not a text box. The requirement is satisfied by selecting **"No, I am not using remote
 code"** — the error appears because neither radio is chosen, not because prose is
-missing. Verified against the tree: `eval`, `new Function`, dynamic `import()`, `.src =`
-and `innerHTML` return zero hits across `src/` and `options/`.
+missing. Verified against the tree: `eval`, `new Function` and dynamic `import()` return
+zero hits across `src/` and `options/`; `innerHTML` appears only in comments, and the one
+`.src =` sets a `<video>` element's source.
 
 If a justification is demanded anyway:
 
@@ -214,11 +215,12 @@ and never code, both sent with credentials omitted:
 2. A static JSON file in the extension's own public GitHub repository holding the
    current version number. It is requested when the user presses the "updates" button
    in the extension's header, and once when the browser starts, rate-limited to one
-   attempt every twenty hours and switchable off from a control beside that button and
-   from the options page. This is what the background service worker exists for; it is
-   the extension's only background code and does nothing else. The response is parsed
-   for a version string and a URL, and neither is executed — the URL is only ever
-   rendered as a link, and only if it is https.
+   attempt every twenty hours (one an hour after a failed attempt) and switchable off
+   from a control beside that button and from the options page. This is what the
+   background service worker exists for; it is the extension's only background code and
+   does nothing else. The response is parsed for a version string, a URL and a release
+   note, and none is executed — the note is only ever shown as text, and the URL is only
+   ever rendered as a link, and only if it is https.
 ```
 
 ## Data usage disclosures
@@ -239,10 +241,11 @@ category applies.
 
 Expect the startup timing to be asked about, since it is the one request not preceded by
 a click. It is rate-limited to one attempt every twenty hours regardless of how often the
-browser is restarted, a failed attempt counts toward that limit so an unreachable server
-cannot produce a retry loop, and the control that disables it sits beside the button it
-belongs to as well as on the options page. It exists because the extension is distributed
-by hand as well as through the stores, and a hand-installed copy never updates itself.
+browser is restarted, a failed attempt is recorded too and waits an hour so an
+unreachable server cannot produce a retry loop, and the control that disables it sits
+beside the button it belongs to as well as on the options page. It exists because the
+extension is distributed by hand as well as through the stores, and a hand-installed copy
+never updates itself.
 
 Then certify all three:
 
@@ -339,11 +342,13 @@ one.
 
 # Submission checklist
 
-1. Bump `version` in `manifest.json`, `package.json` **and the README** (badge, header
-   line, install block), by hand — the store refuses an upload whose version is not
-   higher than the published one, and a README that still names the previous version
-   tells every reader their current copy is the new one. `npm test` asserts the four
-   agree, so run it before uploading rather than trusting the edit.
+1. Bump the version. `./refresh-zip.sh <version>` rewrites `manifest.json`,
+   `package.json`, `dist/latest.json` and `BUILT` in `src/core/update.js`; the README
+   (badge, header line, install block) and `latest.json`'s release note are by hand — the
+   store refuses an upload whose version is not higher than the published one, and a
+   README that still names the previous version tells every reader their current copy is
+   the new one. `npm test` asserts they agree, so run it before uploading rather than
+   trusting the edit.
 2. `npm run package` — runs the full suite first and stops on a red test, then writes
    `dist/sheddit.zip`.
 3. Load that zip unpacked and click through a listing, a comment page and the options
@@ -416,8 +421,7 @@ npx web-ext lint -s /tmp/shd-ff       # AMO's own linter; warnings are worth rea
 
 ## What signing changes
 
-Until the listing exists, Firefox only accepts the zip as a *temporary* install
-(about:debugging, gone on restart) — the README says so. AMO review produces a signed
-build, which installs permanently; at that point the README's Firefox section should
-point at the AMO page and keep the zip link for people who prefer to sideload the
-reviewed source.
+Unsigned, Firefox only accepts the zip as a *temporary* install (about:debugging, gone
+on restart). AMO review produces a signed build, which installs permanently. The listing
+is live now, so the README's Firefox section points at the AMO page and keeps the zip
+link, labelled as the temporary install it is, for people who prefer to sideload.

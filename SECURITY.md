@@ -42,26 +42,30 @@ Useful context for judging whether something is a real issue, and for scoping a 
   in PRIVACY.md, which covers what that means for a signed-in account and how narrowly it
   is targeted.
 - **Two permissions only.** `*://*.reddit.com/*` to run on Reddit pages, and `storage` for
-  your theme and settings via `chrome.storage.sync`. The content scripts themselves are
-  matched more narrowly than the permission: `reddit.com`, `www.reddit.com` and
-  `sh.reddit.com` are the hosts Sheddit renders, plus `old.reddit.com` for the redirect
-  notice alone. Reddit's other subdomains — `business.`, `ads.`, `mod.`, `chat.` — are
-  separate applications and nothing of Sheddit's runs on them.
+  your theme and settings via `chrome.storage.sync` (plus the last update check, in
+  `chrome.storage.local`). The content scripts themselves are matched more narrowly than
+  the permission: `reddit.com`, `www.reddit.com` and `sh.reddit.com` are the hosts Sheddit
+  renders, plus `old.reddit.com` for the redirect notice alone. Reddit's other subdomains
+  — `business.`, `ads.`, `mod.`, `chat.` — are separate applications and nothing of
+  Sheddit's runs on them.
 - **On Firefox, the host permission is revocable.** Firefox treats MV3 host permissions as
   something the user can withdraw after install. Withdrawn, the content scripts never run
   at all — and an extension whose scripts never run cannot report that from the page, so
   the options page checks separately and offers a one-click grant. Worth ruling out before
   concluding Sheddit failed silently on a page.
 - **One privileged crossing, deliberately narrow.** `src/core/bridge.js` is the only code
-  that runs in the page's own JavaScript realm (`"world": "MAIN"`). It exists solely to call
-  a method Reddit defines and a content script cannot reach. It takes its selector and
-  method name from `<html>` data attributes rather than accepting arbitrary input, and a
-  test asserts both halves of that protocol agree.
+  that runs in the page's own JavaScript realm (`"world": "MAIN"`). It exists to call a
+  method Reddit defines and a content script cannot reach, and to relay Reddit's
+  client-side navigations: it wraps the page's `history.pushState` and `replaceState` to
+  fire an event and changes nothing else about them. It takes its selector and method
+  name from `<html>` data attributes rather than accepting arbitrary input, and a test
+  asserts both halves of that protocol agree.
 - **It renders content from Reddit into its own DOM.** Post titles and metadata are set as
   text, never as HTML. Comment and post bodies are the exception: Sheddit *clones* Reddit's
   already-rendered node rather than re-parsing markdown, which keeps links and code blocks
-  intact and avoids introducing a second parser. Those nodes are Reddit's own output, moved
-  and not reinterpreted.
+  intact and avoids introducing a second parser. Those nodes are Reddit's own output,
+  copied and not reinterpreted, with any `script`, `iframe`, `object` or `embed` removed
+  from the copy.
 
 ## Things that are known, and not vulnerabilities
 
@@ -70,7 +74,7 @@ Useful context for judging whether something is a real issue, and for scoping a 
   This is a cosmetic exposure that is documented and tracked in
   [the engineering log](docs/engineering-log.md#open-questions), not a security boundary.
 - **Vote arrows delegate to Reddit's own controls.** They do not construct requests. Logged
-  out, the native control is unreachable and the arrows do nothing.
+  out, they cast nothing and the arrow says you are not logged in.
 - **The failure screen prints diagnostics.** These are page-shape details (element counts,
   attribute names), never user data.
 

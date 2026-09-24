@@ -359,7 +359,8 @@ press ↻ on the Sheddit card in `chrome://extensions`. A hand-installed extensi
 updates itself, so the **updates** button in Sheddit's header turns orange once your copy
 is 30 days old. Under it, **auto: on/off** decides whether Sheddit asks GitHub for the
 current version once when your browser starts — on by default, no more than one request
-every twenty hours, and off means nothing leaves until you press the button yourself.
+every twenty hours (an hour, after one that failed), and off means nothing leaves until
+you press the button yourself.
 Details in [PRIVACY.md](PRIVACY.md#the-short-version).
 
 </details>
@@ -472,9 +473,9 @@ is about you:
   copy never updates itself, and a notice that has to be pressed is one the people
   running a broken build never see; that is the reason it was made automatic, and it is
   worth being blunt about the cost. GitHub, who serve the file, see what any host sees:
-  an IP address and a timestamp. No more than one request every twenty hours however
-  often you restart, and a failed attempt counts, so a browser that cannot reach GitHub
-  backs off rather than retrying at every start.
+  an IP address and a timestamp. After an answer, no more than one request every twenty
+  hours however often you restart; a failed attempt counts too and waits an hour, so a
+  browser that cannot reach GitHub backs off rather than retrying at every start.
 
 **One thing Sheddit presses for you:** on a subreddit marked adult it clicks Reddit's own
 *over 18* button, without asking. If you are signed in, Reddit records that affirmation
@@ -502,7 +503,7 @@ ships a redesign and Sheddit breaks, the fix is almost always in one file. Start
 | [docs/engineering-log.md](docs/engineering-log.md) | every bug found so far, and what each one looked like |
 | [TESTING.md](TESTING.md) | how to test, and the traps worth knowing about |
 | [OLD-REDDIT.md](OLD-REDDIT.md) | the measured spec of the site this imitates |
-| [PRIVACY.md](PRIVACY.md) · [SECURITY.md](SECURITY.md) | what leaves your browser (two things), and the threat model |
+| [PRIVACY.md](PRIVACY.md) · [SECURITY.md](SECURITY.md) | what leaves your browser (three requests), and the threat model |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, and what never worked |
 
 ## License
