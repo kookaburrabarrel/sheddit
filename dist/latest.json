@@ -1,6 +1,6 @@
 {
-  "version": "0.51.0",
-  "released": "2026-09-21",
+  "version": "0.51.1",
+  "released": "2026-09-24",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.51.0 fixes infinite scroll on the front page. Reddit loads more posts through a hidden element the page normally triggers itself, and Sheddit triggers it instead — but Reddit now uses that same kind of element for the little community cards that pop up when you hover a subreddit name, and Sheddit was triggering one of those. It fetched a hovercard over and over, the list never grew, and eventually the control said there was nothing left. Measured on a live front page: 27 posts, and 52 once the right element was triggered. Sheddit now picks it two ways at once — by ruling out the hovercard, and by the rule that the thing continuing a list has to come after the list."
+  "notes": "0.51.1 changes no behaviour; it corrects what Sheddit says about itself. The options page claimed video was the only thing that makes a request, contradicting the version check on the same page, and the header's auto-check switch said one request per twenty hours without mentioning that a failed check is retried after an hour. The privacy policy now says the same: three requests, what each one carries, and how often. Everything 0.51.0 fixed is unchanged."
 }
