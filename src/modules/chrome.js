@@ -77,7 +77,7 @@ SHD.chrome = (() => {
    * place that tells you it happened — not from an options page nobody opens. The options
    * page carries it too, like every other setting, and both write the same key.
    *
-   * `aria-pressed` rather than a checkbox, matching the nsfw toggle three lines down: this
+   * `aria-pressed` rather than a checkbox, matching the nsfw toggle further down: this
    * is a two-state button in a bar of buttons, and old reddit had no checkboxes in it.
    */
   function autoToggle() {
@@ -88,7 +88,8 @@ SHD.chrome = (() => {
       class: on ? 'selected' : null,
       title: on
         ? 'Sheddit asks GitHub for the current version number once when your browser '
-          + 'starts, and no more than once every twenty hours. Nothing about you is sent, '
+          + 'starts, and no more than once every twenty hours (an hour, if the last attempt '
+          + 'failed). Nothing about you is sent, '
           + 'and there is no server '
           + 'of Sheddit\'s own — GitHub sees an IP and a timestamp, as any host does. '
           + 'Click to turn it off; the button beside this one still works on a click.'
@@ -186,7 +187,7 @@ SHD.chrome = (() => {
    * one DOES cost a re-render: the placeholder tile and the picture are different markup,
    * not different paint, and rendering the picture and hiding it with CSS would fetch the
    * image we are declining to show (bug 41's whole point). pipeline.js's storage listener
-   * handles that, and preserves scroll position across it.
+   * handles that, and the browser's scroll anchoring holds the reader's place across it.
    */
   function nsfwToggle() {
     const on = !!(SHD.settings && SHD.settings.showNsfwThumbnails);

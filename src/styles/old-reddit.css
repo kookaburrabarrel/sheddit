@@ -1,6 +1,7 @@
 /*
- * old-reddit.css — the skin. Scoped entirely under html.shd-active #shd-root
- * so it can never leak into native Reddit if the gate bails.
+ * old-reddit.css — the skin. The palette and the page-level rules are scoped under
+ * html.shd-active; most other rules are NOT, and stay out of native Reddit only because
+ * they target our own ids and old reddit's class names (.thing, .entry, .midcol, ...).
  *
  * Every colour, font and edge in this file comes from a custom property declared in the
  * block below. That block IS the `classic` theme — the palette this extension shipped
@@ -11,7 +12,7 @@
  *   - Never hard-code a colour in a rule. A literal is invisible to every theme but the
  *     one it was picked for, which is how a dark theme ends up with #0000ff links.
  *   - Never move a LAYOUT metric into themes.css. The geometry suite asserts the column
- *     arithmetic at ten viewport widths and it must hold whichever theme is on, so
+ *     arithmetic at eleven viewport widths and it must hold whichever theme is on, so
  *     --shd-side-w / --shd-side-gap / --shd-gutter stay here and css-lint fails any theme
  *     that redeclares them.
  *
@@ -133,7 +134,7 @@ html.shd-active body {
  *
  * Sits at the right end of the header row (margin-left:auto), and wraps onto its own line
  * on a narrow viewport rather than pushing the header wide — see the flex-wrap note below;
- * this row is five buttons long and is exactly the kind of thing that overflowed at 360px.
+ * this row is eight buttons long and is exactly the kind of thing that overflowed at 360px.
  *
  * Structure lives here rather than in themes.css on purpose: themes.css is palettes only,
  * so every structural rule stays under the checks in test/css-lint.js.
@@ -947,9 +948,9 @@ html.shd-active #shd-loading.shd-loading-over {
    above. Old reddit gets this for free because its midcol is a float rather than absolute. */
 .thing.comment > .entry { padding-left: 22px; }
 /* The arrows get their own narrow column, narrower than the row's 22px left padding, so
-   they cannot reach the tagline. .midcol's base width (34px) is sized for listing scores
-   and overshot here: at left:4px it spanned 4–38px against a tagline starting at 22px,
-   so the hover arrows painted over the [–] and the author name. */
+   they cannot reach the tagline. .midcol's base width (34px then, 43px now) is sized for
+   listing scores and overshot here: at left:4px it spanned 4–38px against a tagline
+   starting at 22px, so the hover arrows painted over the [–] and the author name. */
 /* Always visible. The hover-gate here was justified in a comment as old reddit's own
    behaviour, and a direct measurement of old.reddit says otherwise: its comment midcol is
    15px wide, floated, and painted at rest. Hiding them also made the arrows unfindable
@@ -1262,8 +1263,9 @@ html.shd-active #shd-loading.shd-loading-over {
  *
  * Mounted by gate.resetForRoute() when an SPA navigation tears down a rendered page and
  * the next one has not arrived (bug 86 — the window used to be an unexplained blank).
- * Scoped under .shd-active like everything here, which is guaranteed at its only mount
- * site: it is shown only when the OUTGOING page had revealed, and reveal() removes it. */
+ * Scoped under .shd-active, which that mount guarantees: it is shown only when the
+ * OUTGOING page had revealed, and reveal() removes it. Its other mount, check()'s first
+ * tick on a first load, happens under .shd-gate and is styled in suppress.css. */
 html.shd-active #shd-loading {
   padding: 90px 0;
   text-align: center;

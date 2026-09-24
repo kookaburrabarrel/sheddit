@@ -12,7 +12,7 @@
  * That wall is the problem this file solves, and the problem is NOT the wall. It is that a
  * reader with Sheddit installed sees a Reddit link fail and blames Sheddit. There is no
  * layout on that page, no header, nothing of ours — which is precisely what a broken
- * extension looks like. This is bug 52's argument (a silent hand-back reads as an
+ * extension looks like. This is bug 13's argument (a silent hand-back reads as an
  * unrelated bug) applied to a page we were never on: we cannot be silent about a failure
  * we are going to be blamed for.
  *
@@ -70,7 +70,7 @@ SHD.oldReddit = (() => {
 
   /* The default for `redirectOldReddit`. contracts.js owns the real one and is NOT
      delivered to this page — this script ships with route.js and nothing else, because a
-     page we are leaving does not need 500 lines of selectors. So the value is repeated here and asserted against
+     page we are leaving does not need 900 lines of selectors. So the value is repeated here and asserted against
      contracts.js by test/run.js, the same arrangement bridge.js has with the protocol
      literals: duplicated deliberately, and kept in step by a test rather than by memory. */
   const REDIRECT_BY_DEFAULT = true;

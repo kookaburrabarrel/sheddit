@@ -41,9 +41,9 @@ SHD.media = (() => {
 
   /* Resolutions in flight or already made, keyed by asset base. An asset is immutable, so
      a second post of the same video costs nothing — but this is MEMORY ONLY and dies with
-     the page. Reddit's media URLs carry a signature and a ~12h expiry (see C.POST_VIDEO_JSON),
-     and a cache that outlived the tab would hand back a dead URL as confidently as a live
-     one. */
+     the page. Reddit's media URLs carry a signature and an expiry measured at about four
+     hours (see C.POST_VIDEO_JSON), and a cache that outlived the tab would hand back a dead
+     URL as confidently as a live one. */
   const inflight = new Map();
 
   /** How long to wait before giving up. A player that never appears beats a page that hangs. */
@@ -103,8 +103,8 @@ SHD.media = (() => {
        full rendition still has `watch` and the permalink. */
     const byWidth = [...video].sort((a, b) => (a.width || 0) - (b.width || 0));
     const best = byWidth.find(r => (r.width || 0) >= BOX_WIDTH) || byWidth[byWidth.length - 1];
-    /* The loudest audio rung, for whoever implements MediaSource. Unused by the player
-       today and deliberately still resolved — see the header. */
+    /* The last-listed audio rung. Played alongside the video as its own element — see
+       audioUrl below and pair(). */
     const sound = audio.length ? audio[audio.length - 1] : null;
 
     return {
@@ -122,7 +122,7 @@ SHD.media = (() => {
   /**
    * Resolve a post's video to something a <video> element can play.
    *
-   * @returns {Promise<{url,width,height,audioUrl,silent}|null>} null for every failure —
+   * @returns {Promise<{url,width,height,audioUrl}|null>} null for every failure —
    *   not a video post, no asset id, the request failed, the manifest did not parse, or it
    *   listed nothing playable. The caller renders no player and the page is exactly what it
    *   was before this module existed.

@@ -449,8 +449,9 @@ SHD.gate = (() => {
    * swallowed. A themed `loading…` line is the honest occupant of that window — it says
    * the click landed and the page is coming, and reveal() replaces it with the render.
    *
-   * Only ever mounted mid-session (wasRevealed), so .shd-active is on and the styles in
-   * old-reddit.css resolve; a first load keeps the --shd-blank blackout instead.
+   * Only ever mounted under one of the two gate classes: mid-session (wasRevealed) with
+   * .shd-active on, where old-reddit.css styles it, and on a first load from check()'s
+   * first tick with .shd-gate on, where suppress.css styles it over the blackout.
    * ------------------------------------------------------------------ */
   function showLoading() {
     if (!document.body || stopped()) return;
@@ -828,7 +829,6 @@ SHD.gate = (() => {
     endTransition();
   }
 
-  /** Called by render sites on caught exceptions. Fails the page past a budget. */
   /** Message plus the first three frames of the stack, on one indented block. */
   function describeError(err) {
     if (!err) return 'none';
@@ -837,6 +837,7 @@ SHD.gate = (() => {
     return stack.length ? `${msg}\n             ${stack.join('\n             ')}` : msg;
   }
 
+  /** Called by render sites on caught exceptions. Fails the page past a budget. */
   function reportError(err) {
     errors++;
     if (!firstError) firstError = err;

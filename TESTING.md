@@ -2,7 +2,7 @@
 
 ```bash
 npm install
-npm test        # everything, ~3 min
+npm test        # everything, ~4 min
 ```
 
 Needs Node 22.22.2+ on the 22 line, 24.15+, or 26+ — jsdom's `engines` floor.
@@ -14,9 +14,9 @@ summary over this table when they disagree, and update the table when they do.)
 | # | Command | Needs | Assertions |
 |---|---|---|---|
 | 1 | `node test/css-lint.js` | nothing | 41 |
-| 2 | `node test/run.js` | jsdom | 869 |
-| 3 | `node test/geometry.js` | Chromium | 225 |
-| 4 | `node test/extension.js` | Chromium | 167 |
+| 2 | `node test/run.js` | jsdom | 1099 |
+| 3 | `node test/geometry.js` | Chromium | 232 |
+| 4 | `node test/extension.js` | Chromium | 181 |
 | 5 | `node test/extension-firefox.js` | Firefox + geckodriver | 50 |
 | 6 | `node test/media-sync.js` | Chromium | 9 |
 | 7 | `npm run verify:live` | real network | manual |

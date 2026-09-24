@@ -3467,7 +3467,7 @@ async function boot(html, url, setup) {
       ...readme.matchAll(/[Bb]eta\s+v?(\d+\.\d+\.\d+)/g)
     ].map(m => m[1]);
     check('the README states the version somewhere prominent', stated.length >= 2,
-      `found ${stated.length} statements — the badge and the install block are the two`);
+      `found ${stated.length} statements — the badge and the Beta announcement are the two`);
     check('every version the README states is the shipped one',
       stated.every(v => v === manifestV),
       `README says ${[...new Set(stated)].join(', ')}; manifest says ${manifestV}`);
@@ -7621,7 +7621,7 @@ async function boot(html, url, setup) {
        paginator is auto-loading further batches of `shreddit-comment` on a 2s heartbeat,
        inside the same 8s window. Any batch landing there read as "your comment arrived",
        and replyForm closed on it, taking the reader's draft with it while Reddit still
-       held unposted text. Log 773 wrote this rule for the `N more replies` control —
+       held unposted text. Log bug 70 wrote this rule for the `N more replies` control —
        "page-wide would credit the paginator's arrivals to our click" — and the post path
        never got it.
 

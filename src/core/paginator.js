@@ -316,9 +316,9 @@ SHD.paginator = (() => {
     // A deliberate click is not a runaway loop, and a button that silently does nothing is
     // worse than one that fetches twice. Only the automatic paths wait out the cooldown.
     if (reason !== 'manual' && Date.now() - lastAt < COOLDOWN_MS) return refuse('cooldown');
-    // Resolved here as well as in the bridge, so we can stamp the element afterwards. Both
-    // sides use the same selector string against the same document, so both pick the same
-    // node; run.js asserts the two halves of that protocol agree.
+    // Resolved here and only here: requestLoad() marks this element and hands the bridge a
+    // selector only it can match, so both worlds drive the same node and we can stamp it
+    // afterwards. run.js asserts the two halves of that protocol agree.
     const target = partial();
     if (!target) {
       /* "Nothing to drive RIGHT NOW" is not "nothing left". The successor partial can

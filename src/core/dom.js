@@ -62,7 +62,7 @@ SHD.dom = (() => {
     return 'just now';
   }
 
-  /** "self.Layoffs" -> "self.Layoffs"; strips protocol from real domains. */
+  /** "self.Layoffs" -> "self.Layoffs"; strips a leading www. from real domains. */
   function domain(d) { return (d || '').replace(/^www\./, ''); }
 
   function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
@@ -215,8 +215,8 @@ SHD.dom = (() => {
   /**
    * Reveal one native element in place, hiding everything else.
    *
-   * suppress.css clips the DIRECT CHILD OF <body> (shreddit-app). clip-path and opacity
-   * apply to the whole subtree, so tagging a deep descendant — which is what the first
+   * suppress.css hides the DIRECT CHILD OF <body> (shreddit-app). opacity applies to the
+   * whole subtree, so tagging a deep descendant — which is what the first
    * cut did to the <shreddit-comment> — cannot un-hide it: the ancestor is still clipped
    * seven levels up.
    *
@@ -250,7 +250,6 @@ SHD.dom = (() => {
     return true;
   }
 
-  /** Undo passthrough() and put our own layout back. */
   /**
    * Put a sentence in the exit bar, which is the ONE surface of ours a reader can still
    * see once a handoff is up.
@@ -258,8 +257,8 @@ SHD.dom = (() => {
    * passthrough() hides #shd-root, and the reply form — with its status line — is inside
    * it. So the sentence explaining where the reader's draft went, including the one that
    * literally reads "your text is still here, behind ← back to sheddit", was being written
-   * onto the half of the page they had just been taken off. account.js's own comment two
-   * functions up says "a message nobody can read is not a fallback"; that was written
+   * onto the half of the page they had just been taken off. account.js's own comment on
+   * handoff() says "a message nobody can read is not a fallback"; that was written
    * about the draft and the same thing was true of the message about it.
    *
    * The bar is excluded from the suppression rule and fixed at the top of the viewport, so
@@ -276,6 +275,7 @@ SHD.dom = (() => {
     return true;
   }
 
+  /** Undo passthrough() and put our own layout back. */
   function passthroughClear() {
     for (const cls of [PASS, PASS_HIDE, PASS_ROOT]) {
       document.querySelectorAll('.' + cls).forEach(e => e.classList.remove(cls));

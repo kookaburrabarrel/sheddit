@@ -2,10 +2,10 @@
  * update.js — the one question a hand-installed extension cannot answer for itself:
  * is this copy still the current one?
  *
- * Sheddit is installed by hand on both browsers — load-unpacked on Chrome, a temporary
- * add-on on Firefox — and neither path ever updates itself. `runtime.requestUpdateCheck()`
- * answers only for a store install, and a manifest `update_url` is ignored for an unpacked
- * one, so a stale copy stays stale in silence. That is not a cosmetic problem here: Reddit
+ * A hand-installed Sheddit — load-unpacked on Chrome, a temporary add-on on Firefox —
+ * never updates itself. `runtime.requestUpdateCheck()` answers only for a store install,
+ * and a manifest `update_url` is ignored for an unpacked one, so a stale copy stays stale
+ * in silence. That is not a cosmetic problem here: Reddit
  * changes its markup and this extension chases it, so "Sheddit stopped rendering comments"
  * and "you are three builds back" are frequently the same report.
  *
@@ -19,13 +19,14 @@
  *   THE CHECK is one GET of a static JSON file. This module still only ever performs it on
  *   a click — nothing here fires on load, on a timer, or from a page. Since 0.37.0 the
  *   OTHER caller is background.js, once when the browser starts, gated on
- *   `settings.autoUpdateCheck` and rate-limited to once a day; that file carries the
- *   reasoning for the change. The distinction to keep is where the request can originate:
- *   a content script must never start one by itself, because a check fired from a page
- *   would carry the referrer of the Reddit page being read, and the worker has no page to
- *   leak. Consent is the switch now rather than the click, and it is still consent.
+ *   `settings.autoUpdateCheck` and rate-limited to once in twenty hours (an hour after a
+ *   failed attempt); that file carries the reasoning for the change. The distinction to
+ *   keep is where the request can originate: a content script must never start one by
+ *   itself, because a check fired from a page would carry the referrer of the Reddit page
+ *   being read, and the worker has no page to leak. Consent is the switch now rather than
+ *   the click, and it is still consent.
  *
- * A STORE INSTALL NEEDS NONE OF THIS, AND IS NOT HARMED BY IT. Once the listings land, a
+ * A STORE INSTALL NEEDS NONE OF THIS, AND IS NOT HARMED BY IT. Both listings are live, and a
  * store-installed copy updates itself — which means its BUILT is always recent, so the nudge
  * never fires for those readers without needing to detect them (and `chrome.management` is a
  * permission this extension is not going to request in order to ask). The button still
@@ -35,7 +36,7 @@
  * referrer is the one that actually mattered: left at its default, a check run from a
  * comments page hands GitHub the URL of the thread being read — which subreddit, which post.
  * That is precisely the data this extension exists in order not to move, and it would have
- * leaked by default, from a feature whose entire payload is the four characters of a version
+ * leaked by default, from a feature whose entire payload is the few characters of a version
  * number.
  */
 globalThis.SHD = globalThis.SHD || {};

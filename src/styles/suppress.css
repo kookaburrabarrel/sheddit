@@ -6,7 +6,8 @@
  *  2. Once .shd-active is set, keep the native tree in the DOM but visually gone —
  *     we still need it alive for delegated vote clicks and for cloning comment bodies.
  *
- * If gate.js bails, both classes are removed and native Reddit returns untouched.
+ * If the reader releases the page (gate.js release()), both classes are removed and
+ * native Reddit returns untouched. A failure keeps it suppressed behind the error screen.
  */
 
 /* --- phase 1: pre-render blackout ---
@@ -117,14 +118,14 @@ html.shd-failed body > *:not(#shd-error) {
 
 /* Escape hatch: an element we deliberately hand back to native Reddit (e.g. reply box).
  *
- * This class goes on the DIRECT CHILD OF <body>, never on the target itself. clip-path
- * and opacity apply to the entire subtree, so un-clipping a deep descendant while its
+ * This class goes on the DIRECT CHILD OF <body>, never on the target itself. opacity
+ * applies to the entire subtree, so un-clipping a deep descendant while its
  * ancestor is still clipped does nothing — which is exactly what the first cut did.
  * SHD.dom.passthrough() tags this body child, marks the path down to the target
  * .shd-passthrough, and display:none's every sibling of that path.
  *
  * The class is EXCLUDED from the suppression selector above rather than overriding it.
- * Overriding is not possible: those :not(#id) clauses give the suppression rule three
+ * Overriding is not possible: those :not(#id) clauses give the suppression rule five
  * ids' worth of specificity, so it beats a class-only rule even with both marked
  * !important. The original hatch lost that cascade silently. */
 html.shd-active .shd-native-passthrough {
