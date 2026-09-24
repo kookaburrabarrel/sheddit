@@ -2079,6 +2079,25 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      breaks no assertion and the rule is decoration. Three mutation rows, one per narrowing
      and one reverting `partial()` whole.
 
+116. **The comment-pagination test raced its own fixture.** `test/extension.js` failed one
+     run in several — `rendered count matches the slice plus whatever has loaded`, with
+     `{"loads":1,"rendered":8,"sources":8}` — and passed on a re-run, so it read as flaky.
+     It was not one. The fixture counts a load when it is REQUESTED and lands the batch 50ms
+     later (a delay added on purpose, so a skipped wait cannot pass), and the renderer draws
+     it after that; the test snapshotted the thread with no wait at all, and
+     on a short page the sentinel is already in range, so a load was often in flight. Under
+     CPU load it failed 3 runs in 3. Widening the fixture's delay to 1.5s made it
+     deterministic, and found a second instance: `each load adds a full batch` read 13
+     rendered after 2 loads.
+
+     The fixture now counts `delivered` as well as `loads`, and the test compares only a
+     snapshot in which the two agree and every delivered comment is drawn — taken in one
+     `page.evaluate`, so a load cannot start between the settle test and the numbers.
+     Nothing is loosened: a duplicate still fails `exactly one node` at once, and a renderer
+     that drops a batch never settles and is asserted as it stands at the deadline. With
+     the 1.5s delay the old test fails both checks and the new one passes; 12 runs in 12
+     under the load that failed 3 in 3. A counter of requests is not a counter of results.
+
 
 ## The popup policy — supersedes bugs 30, 33 and 38
 
