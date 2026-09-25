@@ -20,6 +20,24 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.53.0
+
+### Added — edit your own comments
+
+Your own comments in a thread now have an **edit** link when the account layer is
+enabled and Reddit identifies you as their author. The link opens Reddit's native
+editor with the existing text, including its formatting. Save there, then choose
+**back to sheddit** to refresh the displayed comment.
+
+The handoff waits for the comment's own menu to hydrate, never uses a nested reply's
+menu, and focuses the editor if Reddit has mounted it but left it hidden. An editor
+that cannot be opened gets an explicit fallback explaining how to use Reddit's
+comment menu. Leaving the handoff cancels pending attempts to open it.
+
+Reddit still owns editing, saving, authentication and error handling. No API requests
+were added, and logged-out reading is unchanged. This remains part of the experimental
+signed-in account layer.
+
 ## 0.52.0
 
 ### Fixed — loading more, on any listing with ads

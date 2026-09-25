@@ -6646,6 +6646,101 @@ async function boot(html, url, setup) {
   const click = (window, el) => el.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   const voteCol = (doc, id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"] > .midcol`);
 
+  console.log('\n\x1b[1mEDITING YOUR OWN COMMENTS\x1b[0m');
+  {
+    const page = (opts = {}) => commentsPage({ loggedIn: true, ...opts })
+      .replace('author="user0"', 'author="TeStEr"');
+    for (const [opts, settings, label] of [
+      [{ loggedIn: false }, {}, 'logged out'],
+      [{ noUsername: true }, {}, 'identity unknown'],
+      [{}, { account: false }, 'account layer disabled']
+    ]) {
+      const { doc } = await boot(page(opts), COMMENTS_URL, loggedInSettings(settings));
+      check(`no edit links when ${label}`, !doc.querySelector('#shd-root a.edit'));
+    }
+
+    const { doc, window } = await boot(page(), COMMENTS_URL, loggedInSettings());
+    fastAccount(window);
+    const source = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const row = doc.querySelector('#shd-root .thing[data-fullname="t1_c0"]');
+    const edit = row.querySelector('a.edit');
+    check('only the reader\'s own comment has edit (case insensitive)',
+      !!edit && doc.querySelectorAll('#shd-root a.edit').length === 1);
+
+    function menuFor(target) {
+      const menu = doc.createElement('shreddit-overflow-menu');
+      menu.setAttribute('comment-id', target.getAttribute('thingid'));
+      const shadow = menu.attachShadow({ mode: 'open' });
+      shadow.innerHTML = '<button aria-label="Open user actions" aria-expanded="false"></button>';
+      const state = { opens: 0, edits: 0 };
+      shadow.querySelector('button').onclick = (e) => {
+        state.opens++;
+        e.currentTarget.setAttribute('aria-expanded', 'true');
+        const item = doc.createElement('li');
+        item.setAttribute('role', 'menuitem');
+        item.innerHTML = '<div tabindex="0"><svg icon-name="edit"></svg>Edit comment</div>';
+        item.firstElementChild.onclick = () => {
+          state.edits++;
+          const editor = doc.createElement('comment-composer-host');
+          editor.setAttribute('edit-mode', '');
+          editor.innerHTML = '<textarea hidden></textarea>';
+          editor.focus = () => { editor.querySelector('textarea').hidden = false; };
+          target.appendChild(editor);
+        };
+        shadow.appendChild(item);
+      };
+      target.appendChild(menu);
+      return state;
+    }
+    // A child's menu must never be used when the parent's action row is still loading.
+    const child = doc.querySelector('shreddit-comment[thingid="t1_c1"]');
+    source.appendChild(child);
+    const childState = menuFor(child);
+    click(window, edit.parentElement);
+    click(window, edit);
+    let ownState;
+    setTimeout(() => { ownState = menuFor(source); }, 40);
+    check('edit waits for the owned menu, then opens the native editor once',
+      await waitFor(() => ownState?.edits === 1));
+    check('does not open a nested comment\'s menu', childState.opens === 0 && childState.edits === 0);
+    check('repeated clicks do not toggle the menu twice', ownState?.opens === 1);
+    check('editing opens the hidden editor and explains how to return',
+      await waitFor(() => source.classList.contains('shd-passthrough') &&
+        /Edit and save/.test(doc.querySelector('.shd-passthrough-note')?.textContent || '') &&
+        !source.querySelector('comment-composer-host textarea').hidden));
+    const model = window.SHD.model.comment(source);
+    model.bodyNode.innerHTML = '<p>Edited <strong>comment</strong></p>';
+    source.querySelector('comment-composer-host[edit-mode]').remove();
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    check('returning refreshes the cloned body and preserves formatting',
+      await waitFor(() => row.querySelector('.usertext-body strong')?.textContent === 'comment'));
+
+    const stuck = doc.createElement('comment-composer-host');
+    stuck.setAttribute('edit-mode', '');
+    stuck.innerHTML = '<textarea hidden></textarea>';
+    source.appendChild(stuck);
+    click(window, edit);
+    check('a mounted but unusable editor is reported as a failure',
+      await waitFor(() => /Could not open the editor automatically/.test(
+        doc.querySelector('.shd-passthrough-note')?.textContent || '')));
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    stuck.remove();
+    await hold(20);
+    source.querySelector(':scope > shreddit-overflow-menu').remove();
+    click(window, edit);
+    check('missing own controls show an actionable fallback, not a false success',
+      await waitFor(() => /Could not open the editor automatically/.test(
+        doc.querySelector('.shd-passthrough-note')?.textContent || '')));
+    check('the fallback still never clicks the child menu', childState.opens === 0);
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    await hold(20);
+    click(window, edit);
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    const cancelled = menuFor(source);
+    await hold(400);
+    check('leaving during hydration cancels the pending edit', cancelled.opens === 0);
+  }
+
   console.log('\n\x1b[1mA SAME-PAGE URL REWRITE DOES NOT KILL THE RENDER (bug 95)\x1b[0m');
   {
     /* Reported 2026-09-05 from a logged-in thread: the failure card with 52 processed, 0

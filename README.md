@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.52.0](https://img.shields.io/badge/version-0.52.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.53.0](https://img.shields.io/badge/version-0.53.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.52.0 is out — everyone is welcome to try it
+### Beta 0.53.0 is out — everyone is welcome to try it
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
@@ -67,6 +67,9 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 > for anything you would mind losing. Reports from signed-in use are welcome and are how
 > it gets finished.
 >
+> Your own comments have an **edit** link that opens Reddit's native editor.
+> Save there, then choose **back to sheddit** to return to the updated comment.
+>
 > **It is off with one checkbox** on the options page, and turning it off changes nothing
 > else. Logged out, none of it runs at all.
 
@@ -75,6 +78,13 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
+
+**0.53.0 — edit your own comments**
+- **Added:** an **edit** link on your own comments in a thread when the signed-in
+  account layer is enabled. It opens Reddit's native editor with your existing text.
+- **Changed:** save in Reddit's editor, then choose **back to sheddit** to refresh the
+  displayed comment. If the editor cannot open automatically, the handoff explains
+  how to reach it through Reddit's comment menu.
 
 **0.52.0 — loading more, on any listing with ads**
 - **Fixed:** the hidden cards Sheddit could fetch instead of more posts turn out to sit
@@ -346,7 +356,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.52.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.53.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

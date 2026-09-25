@@ -467,6 +467,12 @@ SHD.C = {
        target), because a comment's subtree holds its descendants' reply buttons too. The
        attribute clauses stay first for the day Reddit names the control. */
     replyText: /^reply$/i,
+    // Measured signed in, 2026-09-25: comment editing lives in the overflow's open root.
+    commentOverflow: 'shreddit-overflow-menu[comment-id]',
+    commentActions: 'button[aria-label="Open user actions"]',
+    commentEdit: '[role="menuitem"]:has([icon-name="edit"]) [tabindex="0"]',
+    commentEditText: /^edit comment$/i,
+    commentEditHost: 'comment-composer-host[edit-mode]',
     overflow: 'shreddit-post-overflow-menu',
     textBody: 'shreddit-post-text-body',
     titleLink: 'a[slot="title"]',

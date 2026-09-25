@@ -166,7 +166,8 @@ SHD.comments = (() => {
                nothing. Logged in (0.34.0): an old-reddit reply box under this entry, whose
                save drives Reddit's composer and falls back to that same handoff. */
             SHD.account.reply(m, thing);
-          }}, h('a.reply', { href: '#', text: 'reply' }))
+          }}, h('a.reply', { href: '#', text: 'reply' })),
+          SHD.account.editLink(m, thing)
         ])
       ]),
       h('div.child', null, childListing)

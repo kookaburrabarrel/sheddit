@@ -1,6 +1,6 @@
 {
-  "version": "0.52.0",
+  "version": "0.53.0",
   "released": "2026-09-25",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.52.0 stops infinite scroll fetching the hidden cards inside ads instead of more posts, and makes a rule added in 0.51.0 look only at posts, so nothing else Reddit adds to a feed can end it early. The options page and the privacy notes now describe the video and version-check requests as they are."
+  "notes": "0.53.0 adds an edit link to your own comments in a thread when the signed-in account layer is enabled. It opens Reddit's native editor with your existing text; save there, then choose back to sheddit to refresh the displayed comment. If the editor cannot open automatically, the handoff explains how to use Reddit's comment menu. Logged-out reading is unchanged."
 }

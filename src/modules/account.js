@@ -1,7 +1,7 @@
 /**
  * account.js — the account layer: what changes for a reader who is ALREADY logged in.
  *
- * Three things, and only these three, by request: VOTE, REPLY, POST. Nothing here holds a
+ * Vote, reply, post, and editing the reader's own comments. Nothing here holds a
  * session, calls an endpoint or builds a request. Every action is a click forwarded to
  * the control Reddit rendered for the same purpose, or text handed to Reddit's own editor
  * followed by a click on Reddit's own submit button — ARCHITECTURE §5's delegation tier,
@@ -922,6 +922,98 @@ SHD.account = (() => {
     form.querySelector('textarea')?.focus();
   }
 
+  function ownsComment(m) {
+    if (!active()) return false;
+    const name = SHD.session.username();
+    return !!name && name.toLowerCase() === m.author.toLowerCase();
+  }
+
+  function editLink(m, thing) {
+    if (!ownsComment(m)) return null;
+    let busy = false;
+    const link = h('a.edit', { href: '#', text: 'edit' });
+    return h('li', { onclick: async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      if (!ownsComment(m)) {
+        link.textContent = 'editing unavailable: not signed in as this author';
+        return;
+      }
+      busy = true;
+      try {
+        await editComment(m, thing);
+      } catch (error) {
+        console.warn('[sheddit] could not open Reddit\'s comment editor', error);
+        link.textContent = 'could not open editor; try again';
+        SHD.dom.passthroughNote('Could not open the editor. Use Reddit\'s comment menu to edit.');
+      } finally {
+        busy = false;
+      }
+    } }, link);
+  }
+
+  async function editComment(m, thing) {
+    const source = m.source;
+    if (!SHD.dom.passthrough(source)) throw new Error('Comment is no longer on the page');
+    source.scrollIntoView?.({ block: 'center' });
+    SHD.dom.passthroughNote('Opening Reddit\'s editor for your comment...');
+
+    // The body in our layout is a clone. Re-read it when the reader returns from editing.
+    const returning = new MutationObserver(() => {
+      if (source.isConnected && source.classList.contains('shd-passthrough')) return;
+      returning.disconnect();
+      const current = [...document.querySelectorAll(C.COMMENT)]
+        .find(el => el.getAttribute(C.COMMENT_ATTR.id) === m.id);
+      const body = current && SHD.model.comment(current)?.bodyNode;
+      const shown = thing.querySelector(':scope > .entry > .usertext > .usertext-body');
+      if (thing.isConnected && body && shown) {
+        shown.replaceChildren(SHD.dom.adoptBody(body));
+        m.source = current;
+        m.bodyNode = body;
+      }
+    });
+    returning.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+    const stillHere = () => source.isConnected && source.classList.contains('shd-passthrough');
+    const owned = (selector) => [...source.querySelectorAll(selector)]
+      .find(el => ownerComment(el) === source);
+    const editor = () => owned(C.NATIVE.commentEditHost);
+    const findMenuButton = () => {
+      const menu = owned(C.NATIVE.commentOverflow);
+      return menu && SHD.dom.deepQuery(menu, C.NATIVE.commentActions);
+    };
+    const fallback = () => SHD.dom.passthroughNote(
+      'Could not open the editor automatically. Use this comment\'s menu > Edit comment.');
+
+    if (!editor()) {
+      const toggle = await waitFor(findMenuButton, timings.hydrateWaitMs);
+      if (!stillHere()) return;
+      if (!toggle) { fallback(); return; }
+      if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
+      const edit = await waitFor(() => {
+        const menu = owned(C.NATIVE.commentOverflow);
+        const item = menu && SHD.dom.deepQuery(menu, C.NATIVE.commentEdit);
+        return item && C.NATIVE.commentEditText.test(item.textContent.trim()) ? item : null;
+      }, timings.composeWaitMs);
+      if (!stillHere()) return;
+      if (!edit) { fallback(); return; }
+      edit.click();
+    }
+    const field = await waitFor(() => {
+      if (!stillHere()) return null;
+      const host = editor();
+      if (!host) return null;
+      const input = shown(SHD.dom.deepQuery(host, C.COMPOSER.editor));
+      if (input) return input;
+      // Like the reply composer, an edit host can mount with its ready slot still closed.
+      host.focus?.();
+      return null;
+    }, timings.composeWaitMs);
+    if (!stillHere()) return;
+    if (!field) { fallback(); return; }
+    SHD.dom.passthroughNote('Edit and save in Reddit\'s editor, then choose \u2190 back to sheddit.');
+  }
+
   /** The top-level comment box on a comments page — old reddit had one above the list. */
   function commentBox(m) {
     if (!active()) return null;
@@ -1248,6 +1340,6 @@ SHD.account = (() => {
 
   function reset() { missWarned = false; closeMenu(); }
 
-  return { midcol, vote, reply, replyForm, commentBox, compose, submitBox, headerAccount,
+  return { midcol, vote, reply, editLink, replyForm, commentBox, compose, submitBox, headerAccount,
            logOut, findLogoutControl, nav, reset, timings };
 })();
