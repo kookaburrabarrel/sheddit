@@ -26,9 +26,10 @@
  *   open shadow root → delegation works only because dom.deepQuery pierces it
  *   not found        → delegation CANNOT work; voting needs a different mechanism
  *
- * Run it logged in (--headed --login, sign in, then press Enter) to also confirm a real vote
- * registers. Logged out, Reddit shows a login prompt instead, which is still a pass for
- * "we found and clicked the right control".
+ * Run it logged in (--headed --login, sign in, then press Enter) to also read the vote
+ * controls a signed-in session carries. It never clicks one — a probe that votes is not a
+ * probe (ARCHITECTURE §1.2) — so whether a click REGISTERS is still the by-hand check in
+ * TESTING.md's logged-in list: vote, reload, look.
  */
 const fs = require('fs');
 const path = require('path');
@@ -272,10 +273,38 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
       adPosts: document.querySelectorAll(C.AD_POST).length,
       adsContainingPost: [...document.querySelectorAll(C.AD_POST)]
         .filter(a => a.querySelector(C.POST)).length,
-      partial: !!document.querySelector(C.FEED_PARTIAL),
-      partialLoadable: (() => {
-        const fp = document.querySelector(C.FEED_PARTIAL);
-        return !!fp && typeof fp[C.PARTIAL_LOAD_METHOD] === 'function';
+      /* THE HANDLE THE PAGINATOR WOULD DRIVE, found the way paginator.js partial() finds
+         it on a listing — not the first match of a selector. Until 0.52.0 this read
+         `querySelector(C.FEED_PARTIAL)`, and on a live slice (2026-09-25) that was the first
+         post's author hovercard: "present" and "exposes loadContent()" could not fail while
+         any post had an author, and the thin-feed drive below fetched a hovercard.
+         So: programmatic, not named by C.PARTIAL_NOT_SRC (the contract carries that), in no
+         post, wrapper or ad, and following the last post — the last such. The position
+         test is asked separately, because it is a PREMISE: paginator.js refuses a handle
+         that does not follow the posts, so the day Reddit breaks it, pagination stops and
+         this is the line that says why. Marked, so the drive below drives this element. */
+      handle: (() => {
+        const feed = document.querySelector(C.FEED);
+        const owned = `${C.POST_WRAPPER}, ${C.POST}, ${C.AD_POST}`;
+        const inFeed = [...(feed?.querySelectorAll(`${C.LAZY_LOADER}[loading="programmatic"]`) || [])];
+        const free = [...document.querySelectorAll(C.FEED_PARTIAL)].filter(p => !p.closest(owned));
+        const posts = feed ? feed.querySelectorAll(C.POST) : [];
+        const last = posts[posts.length - 1];
+        const trailing = free.filter(p =>
+          !last || !!(last.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING));
+        const h = trailing[trailing.length - 1] || null;
+        if (h) h.setAttribute('data-shd-probe-handle', '');
+        const srcOf = (p) => (p.getAttribute('src') || '(no src)').split('?')[0];
+        return {
+          candidates: free.map(srcOf),
+          follows: !!h,
+          loadable: !!h && typeof h[C.PARTIAL_LOAD_METHOD] === 'function',
+          src: h ? srcOf(h) : null,
+          named: inFeed.filter(p => p.matches(C.PARTIAL_NOT_SRC)).length,
+          namedOutsidePosts: inFeed.filter(p => p.matches(C.PARTIAL_NOT_SRC) &&
+            !p.closest(`${C.POST_WRAPPER}, ${C.POST}`)).length,
+          inAds: inFeed.filter(p => p.closest(C.AD_POST)).length
+        };
       })(),
       feed: !!document.querySelector(C.FEED),
       main: !!document.querySelector(C.MAIN),
@@ -315,17 +344,27 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   }
   check('shreddit-feed still exists', listing.feed);
   check('#main-content still exists', listing.main);
-  check('the programmatic pagination partial is present', listing.partial);
-  check('the partial still exposes loadContent()', listing.partialLoadable);
+  check('the programmatic pagination partial is present (in no post, wrapper or ad)',
+    listing.handle.candidates.length > 0,
+    'nothing but hovercards and partials inside items — C.FEED_PARTIAL or C.PARTIAL_NOT_SRC is stale');
+  check('the continuation follows the last post (paginator.js refuses one that does not)',
+    listing.handle.follows,
+    `candidates ${JSON.stringify(listing.handle.candidates)} all sit before the last post — ` +
+    'the position rule in partial() would report "no more pages" on this page');
+  check('the partial still exposes loadContent()', listing.handle.loadable);
+  console.log(`  \x1b[2mhandle: ${listing.handle.src}; free candidates: ` +
+    `${JSON.stringify(listing.handle.candidates)}; named by C.PARTIAL_NOT_SRC: ` +
+    `${listing.handle.named} (${listing.handle.namedOutsidePosts} outside every post); ` +
+    `partials inside ads: ${listing.handle.inAds}\x1b[0m`);
   /* AFTER the partial checks above — driving consumes the partial, and the first version of
      this block ran before them and failed them both on its own account (2026-09-05).
      Served thin and not streaming (measured 2026-09-05, logged in: 1 and 1). The question
      that matters for a reader is whether Sheddit's paginator can fill it — so do what the
-     paginator does, once: call the programmatic partial's loadContent() from the page
-     realm and count again. */
+     paginator does, once: call loadContent() on the handle resolved above, from the page
+     realm, and count again. */
   if (afterPause < 5) {
     const driven = await page.evaluate(async (C) => {
-      const fp = document.querySelector(C.FEED_PARTIAL);
+      const fp = document.querySelector('[data-shd-probe-handle]');
       if (!fp) return { partial: false };
       if (typeof fp[C.PARTIAL_LOAD_METHOD] !== 'function') return { partial: true, method: false };
       fp[C.PARTIAL_LOAD_METHOD]();
@@ -337,7 +376,11 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
         : ' — NOTHING ARRIVED: for this session the community feed genuinely ends here') + '\x1b[0m');
     /* Measured 2026-09-05: partial present, method present, drive delivered nothing and the
        partial consumed itself — so the reader with the extension sees a one-post feed and a
-       paginator reporting no more pages. What IS in the feed, then? Tag names only. */
+       paginator reporting no more pages. NOT EVIDENCE ABOUT THE FEED, as it turned out: that
+       run drove `querySelector(C.FEED_PARTIAL)`, which on live markup is the first post's
+       author hovercard, and a hovercard's load delivers no post — which fits the reading.
+       Re-measure before concluding a thin feed ends. What IS in the feed, then? Tag names
+       only. */
     const holds = await page.evaluate((C) => {
       const feed = document.querySelector(C.FEED);
       const tally = {};

@@ -14,7 +14,7 @@ summary over this table when they disagree, and update the table when they do.)
 | # | Command | Needs | Assertions |
 |---|---|---|---|
 | 1 | `node test/css-lint.js` | nothing | 41 |
-| 2 | `node test/run.js` | jsdom | 1099 |
+| 2 | `node test/run.js` | jsdom | 1115 |
 | 3 | `node test/geometry.js` | Chromium | 232 |
 | 4 | `node test/extension.js` | Chromium | 181 |
 | 5 | `node test/extension-firefox.js` | Firefox + geckodriver | 50 |
@@ -401,10 +401,12 @@ The automated suite covers structure; these need eyes:
 - [ ] Clicking a post title goes to the article (link posts) or the thread (self posts)
 - [ ] Comment threads indent correctly and `[–]` collapses
 - [ ] Navigating between subreddits client-side re-renders cleanly with no duplicate rows
-- [ ] Search / user pages are left as **native Reddit**, untouched
+- [ ] Search pages are left as **native Reddit**, untouched; `/user/<name>/` renders as a
+      profile (the `profiles` setting, on by default)
 - [ ] Logged out: clicking `reply` reveals the native composer, and "← back to sheddit" returns
 - [ ] **Logged in** (0.34.0, every item below is unverified live — see the changelog):
-  - [ ] the header says *logged in*; if it does not, the LOGGED-IN SESSION section of
+  - [ ] the header's corner shows your avatar and `u/<name>` (or *logged in*, if the name
+        cannot be read); if it says *logged out*, the LOGGED-IN SESSION section of
         `npm run verify:live -- --headed --login` says which `C.SESSION` signal the header carries
   - [ ] an upvote on a post row lights the arrow AND registers on Reddit's own page (reload
         and look)

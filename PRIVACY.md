@@ -37,14 +37,15 @@ One object, in `chrome.storage.sync`, holding your display preferences:
 | `redirectOldReddit` | whether an `old.reddit.com` link is sent to the same page on `www.reddit.com` |
 | `autoUpdateCheck` | whether the version check may run when your browser starts |
 
-Since 0.29.0 there is a second object, in `chrome.storage.local`, written whenever an
-update check is *attempted* — by pressing **updates** in the header, and since 0.37.0 by
-the startup check as well, which means it can appear without you having pressed anything
-(a fresh install runs one check when it is installed):
+Since 0.29.0 there is a second object, in `chrome.storage.local`. Pressing **updates** in
+the header writes it when GitHub answers; a press that gets no answer writes nothing. Since
+0.37.0 the startup check writes it on every attempt, answered or not, which means it can
+appear without you having pressed anything (a fresh install runs one check when it is
+installed):
 
 | Key | What it is |
 | --- | --- |
-| `update` | the last update check: the version number GitHub stated, the link it gave, its release note, when it was asked, and whether that attempt got an answer |
+| `update` | the last update check: the version number GitHub stated, the link it gave, its release note and when it was asked — and, from the startup check, whether that attempt got an answer and when one last did |
 
 The "when it was asked" is what stops the check repeating: an attempt that fails is
 recorded too, so a browser that cannot reach GitHub does not retry at every startup for
@@ -225,11 +226,11 @@ content, send no request, and are off entirely if you untick the option. The des
 in a login wall's `dest` parameter is followed only when it points back at reddit.com, so
 the redirect cannot be pointed at anyone else's site.
 
-**No host access to `v.redd.it` or `raw.githubusercontent.com`, despite the two requests
+**No host access to `v.redd.it` or `raw.githubusercontent.com`, despite the requests
 above.** Both servers answer with `access-control-allow-origin: *`, so those files can be
 read without any additional permission — which is why neither the video player nor the
-update check widened what Sheddit is allowed to reach. Both requests are sent with
-`credentials: 'omit'`, so your cookies never go with them, and the update check adds
+update check widened what Sheddit is allowed to reach. All three requests are sent with
+`credentials: 'omit'`, so your cookies never go with them, and the two version checks add
 `referrerPolicy: 'no-referrer'`.
 
 Sheddit requests no other permissions. Since 0.37.0 it has a background worker, and it

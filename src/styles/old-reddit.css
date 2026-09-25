@@ -1264,8 +1264,9 @@ html.shd-active #shd-loading.shd-loading-over {
  * Mounted by gate.resetForRoute() when an SPA navigation tears down a rendered page and
  * the next one has not arrived (bug 86 — the window used to be an unexplained blank).
  * Scoped under .shd-active, which that mount guarantees: it is shown only when the
- * OUTGOING page had revealed, and reveal() removes it. Its other mount, check()'s first
- * tick on a first load, happens under .shd-gate and is styled in suppress.css. */
+ * OUTGOING page had revealed, and reveal() removes it. Its other mount, check()'s ticks on
+ * a first load, happens under .shd-gate and is styled in suppress.css; showLoading()
+ * refuses to mount it under neither class, where it would have no style at all. */
 html.shd-active #shd-loading {
   padding: 90px 0;
   text-align: center;

@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.51.2](https://img.shields.io/badge/version-0.51.2-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.52.0](https://img.shields.io/badge/version-0.52.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.51.2 is out — everyone is welcome to try it
+### Beta 0.52.0 is out — everyone is welcome to try it
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
@@ -76,6 +76,18 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
 
+**0.52.0 — loading more, on any listing with ads**
+- **Fixed:** the hidden cards Sheddit could fetch instead of more posts turn out to sit
+  inside ads, which it never counted as posts — measured on a live listing, logged out.
+  An ad counts now, so nothing inside one is fetched as the next page.
+- **Fixed:** a rule added in 0.51.0 would have stopped paging outright if Reddit ever put
+  anything after its "load more" element in the feed. It only looks at posts now.
+- **Fixed:** a bare `loading…` line could sit at the bottom of Reddit's own page on a slow
+  first load.
+- **Changed:** the options page, [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md)
+  still said a few things the code does not do; corrected. See the
+  [changelog](CHANGELOG.md).
+
 **0.51.2 — the same build, with a test that no longer cries wolf**
 - **Fixed (tests only):** a check on loading more comments failed now and then on a busy
   machine. It read the thread before the next batch had arrived; the extension was right
@@ -84,8 +96,9 @@ Full detail in the [changelog](CHANGELOG.md). The most recent builds:
 **0.51.1 — what Sheddit says about itself, corrected**
 - **Fixed:** the options page said video was the only thing that makes a request, a few
   lines below the switch for the version check that also makes one. It names both now.
-- **Fixed:** the header's **auto** switch said "no more than once every twenty hours". A
-  check that failed is retried after an hour; the tooltip says so, and so does
+- **Fixed:** the header's **auto** switch said "no more than once every twenty hours".
+  After a check that failed, the limit is an hour instead, so the next browser start
+  after that asks again; the tooltip says so, and so does
   [PRIVACY.md](PRIVACY.md#the-short-version).
 - **Changed:** a full read of the documentation against the code — about 150 statements
   that had gone stale. No behaviour changed. See the [changelog](CHANGELOG.md).
@@ -333,7 +346,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.51.2**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.52.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite
