@@ -454,7 +454,7 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
   check('client-side navigation re-renders without duplicating rows',
     afterNav.rows === POSTS.length && afterNav.roots === 1 && afterNav.headers === 1,
     JSON.stringify(afterNav));
-  // Both of these were broken: reveal() latches true, so the flush that rebuilt the
+  // Both of these were broken: reveal() latched true, so the flush that rebuilt the
   // chrome never ran again after the first route.
   check('the sidebar survives a client-side navigation', afterNav.sidebar);
   check('the header follows the new subreddit',

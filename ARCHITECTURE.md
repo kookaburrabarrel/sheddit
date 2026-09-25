@@ -134,7 +134,7 @@ see §5.
 ```
 sheddit/
 ├── manifest.json               MV3, content scripts at document_start + document_idle
-├── build.js                    the dev bundle (dist/sheddit.dev.js), manifest order
+├── build.js                    the dev bundle (dist/sheddit.dev.js), load order (build.js notes the exceptions)
 ├── package-extension.js        the Chrome + Firefox zips; firefoxManifest() (§5.0b)
 ├── headless.js / export-icons.js   one CDP-driven Chrome for PNGs; the icon rasteriser
 ├── src/
@@ -157,7 +157,7 @@ sheddit/
 │   ├── modules/
 │   │   ├── listing.js          feed & subreddit → old-reddit link rows
 │   │   ├── comments.js         comment list → nested thread tree, by parent or `depth` (§6)
-│   │   ├── account.js          vote / reply / submit / corner, logged in — all delegated (§5.3)
+│   │   ├── account.js          vote + reply delegated to Reddit's controls, submit links, the account corner (§5.3)
 │   │   └── chrome.js           header bar, update control, theme switcher, tab menu, sidebar
 │   └── styles/
 │       ├── suppress.css        hides native shreddit chrome (document_start)
@@ -234,8 +234,9 @@ standDown) removes both.
 
 The header and sidebar are torn down and rebuilt on every route change, because the header
 carries the current subreddit. Rebuilding them must **not** be gated on
-`!SHD.gate.revealed` — `reveal()` latches true for the lifetime of the page, so gating
-there means they are destroyed once and never come back. That shipped: the sidebar
+`!SHD.gate.revealed` — `reveal()` latched true for the lifetime of the page when this was
+written (resetForRoute() clears it on every route now), so gating there meant they were
+destroyed once and never came back. That shipped: the sidebar
 disappeared permanently after the first client-side navigation and the header kept naming
 the previous subreddit.
 
@@ -515,12 +516,16 @@ at whatever arrived in the initial HTML. `paginator.useMode(route)` now picks
 comment pages. The comment partial selector is scoped to `shreddit-comment-tree` so an
 unrelated partial elsewhere on the page cannot be mistaken for more comments.
 
-**A feed's partial is not always a continuation.** Reddit serves community hovercards as
-the same `faceplate-partial[loading="programmatic"]`, in the feed and in no post, and the
-paginator drove one instead of the feed's own (0.51.0). On a listing or profile it now
-drives only a partial that is not `C.PARTIAL_NOT_SRC` *and* that follows the last delivered
-item in document order; when none qualifies it reports no more pages rather than fetching
-something that cannot yield a row.
+**A feed's partial is not always a continuation.** Reddit serves hovercards as the same
+`faceplate-partial[loading="programmatic"]` — one per post author inside the post, and one
+per advertiser inside each ad, which is not wrapped in an `article` — and the paginator drove
+one instead of the feed's own (0.51.0; the ads found in 0.52.0). On a listing or profile it
+now drives only a partial that is inside no post, wrapper or ad, is not `C.PARTIAL_NOT_SRC`,
+and follows the last delivered post in document order — the last such, when more than one
+does. When none qualifies it reports no more pages rather than fetching something that
+cannot yield a row. `C.FEED_PARTIAL` carries the same src exclusion, because gate.js and
+verify:live read it bare; verify:live also checks that the continuation follows the last
+post, the premise the position rule depends on.
 
 Guardrails in `paginator.js`: 800 ms cooldown between automatic calls, 40-page hard cap,
 and a mutation-settle await so overlapping requests are never issued. Four details there
@@ -544,8 +549,9 @@ are load-bearing and were each wrong at some point:
 
 The extension has **no API and no server of its own**. Its only requests are a video's
 DASH manifest from Reddit's media CDN (`media.js`) and a static version file on GitHub —
-on a press of the update control (`update.js`) and once at browser start unless switched
-off (`background.js`) — all with `credentials: 'omit'`; PRIVACY.md describes each.
+on a press of the update control (`update.js`) and, unless switched off, once at browser
+start and on install or update (`background.js`) — all with `credentials: 'omit'`;
+PRIVACY.md describes each.
 `host_permissions` is scoped to `*://*.reddit.com/*` purely so content scripts can run.
 
 ### 5.2 old.reddit.com — the one host we leave rather than render
@@ -618,7 +624,7 @@ interstitial. Recorded as the trade that was made, not as an oversight.
 ```
 [rank] [▲ score ▼] [thumbnail] title (domain)
                     submitted <time> by <author> to <r/sub>
-                    <comment-count> comments  share  hide
+                    <comment-count> comments  [watch]  share  hide
 ```
 Source fields: `score`, `post-title`, `content-href`, `domain`, `created-timestamp`,
 `author`, `subreddit-prefixed-name`, `comment-count`, `permalink`.
@@ -626,10 +632,11 @@ Source fields: `score`, `post-title`, `content-href`, `domain`, `created-timesta
 `save` and `report` are gone (§8). `share` opens a box holding the post's URL, and `hide`
 is local: it hides our row and forwards nothing.
 
-Thumbnail: a real thumb URL is lifted from the first `<img>` in the source subtree whose
-host is on `C.THUMB_HOSTS` and that is not inside `C.THUMB_EXCLUDE` (§7a); failing that,
-old reddit's placeholder class — `self` for a text post, `default` otherwise, and `nsfw`
-for adult content unless its pictures are opted in.
+Thumbnail: adult content first — unless its pictures are opted in, it gets old reddit's
+`nsfw` placeholder even when a real thumbnail exists (bug 41: the real one is Reddit's
+unblurred image). Otherwise a real thumb URL is lifted from the first `<img>` in the source
+subtree whose host is on `C.THUMB_HOSTS` and that is not inside `C.THUMB_EXCLUDE` (§7a);
+failing that, the placeholder class — `self` for a text post, `default` otherwise.
 
 ### Comment tree
 Flat list → tree via a depth stack (the "flat" premise has not held since 2026-08-14 —
@@ -661,7 +668,7 @@ here but **nothing persists collapse state today**; toggles reset on reload.
 |---|---|
 | Reddit renames an attribute | All names in `contracts.js`; `model.js` returns `null` on missing required fields and the row is **skipped, not broken** |
 | Renderer throws mid-page | Each render wrapped in try/catch; failures increment a counter, and past a threshold `gate.fail()` stops the pipeline and shows the failure screen (§7c) |
-| Failing leaves debris | `old-reddit.css` is scoped under `html.shd-active`, so anything already rendered would remain as *unstyled* markup, and the pipeline would keep appending to it. `fail()` removes `#shd-root`/`#shd-header` and fires `onStop`; the pipeline disconnects its observer, clears the queue, and both `collect()` and `flush()` refuse to run |
+| Failing leaves debris | `old-reddit.css`'s palette and page-level rules are scoped under `html.shd-active`, so anything already rendered would remain as *half-styled* markup, and the pipeline would keep appending to it. `fail()` removes `#shd-root`/`#shd-header` and fires `onStop`; the pipeline disconnects its observer, clears the queue, and both `collect()` and `flush()` refuse to run |
 | A slow page mistaken for a broken one | The deadline is content-aware — see §7c. A flat timer fired on any page whose HTML streamed past 1.5 s |
 | A failure that looks like someone else's bug | Native Reddit is never silently restored. §7c |
 | Flash of new Reddit | `suppress.css` at `document_start` + reveal on first render |
@@ -960,7 +967,7 @@ gave Sheddit anywhere for posts to live:
 | Posts present, none rendered | Sheddit bug | fail, show the screen |
 | No posts, document still loading | still streaming | keep waiting |
 | No posts, **no feed container** | not a page Sheddit renders | un-blank, stay out of the way, keep watching |
-| No posts, feed container an empty shell | an age gate's scaffolding, or an empty listing | un-blank; once settled, render the empty state (§7) |
+| No posts, feed container an empty shell | an age gate's scaffolding, or an empty listing | un-blank; render the empty state once settled — Reddit's own no-content panel, or the full wait with markup in the feed. A feed with no element children at all (an age gate's bare scaffolding) never gets it: drawing "nothing here" over the 18+ button is bug 21 (§7) |
 | No posts, feed container holding markup we cannot read | suspicious — a renamed element looks like this | fail after `MAX_WAIT_MS` |
 
 `unblank()` is a third state alongside `reveal()` and `standDown()`: stop hiding the page,

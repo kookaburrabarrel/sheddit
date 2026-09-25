@@ -1,6 +1,6 @@
 {
-  "version": "0.51.2",
-  "released": "2026-09-24",
+  "version": "0.52.0",
+  "released": "2026-09-25",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.51.2 changes nothing you will see; it republishes 0.51.1 with a fix to Sheddit's own test suite. A check on loading more comments sometimes failed on a busy machine because it read the thread before the next batch had arrived. The extension was right every time; the test now waits for the batch before counting. Everything 0.51.0 and 0.51.1 changed is unchanged."
+  "notes": "0.52.0 stops infinite scroll fetching the hidden cards inside ads instead of more posts, and makes a rule added in 0.51.0 look only at posts, so nothing else Reddit adds to a feed can end it early. The options page and the privacy notes now describe the video and version-check requests as they are."
 }

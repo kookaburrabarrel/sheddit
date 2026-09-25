@@ -40,7 +40,8 @@ SHD.chrome = (() => {
         /* LAST, so it lands at the far right — old reddit's `#header-bottom-right`, where
            an account area has been for a decade. The theme bar carries margin-left:auto,
            so it and everything after it form the right-hand cluster; the corner is the
-           end of it. Null for a logged-out reader, which is how the header says so. */
+           end of it. Null only with the account setting off; a logged-out reader gets
+           the one-word `logged out` link, which is how the header says so. */
         themeBar(),
         SHD.account.headerAccount()
       ])

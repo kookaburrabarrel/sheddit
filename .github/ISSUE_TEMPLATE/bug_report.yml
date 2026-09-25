@@ -81,7 +81,7 @@ body:
     id: console
     attributes:
       label: Console output
-      description: "Anything from the DevTools console, especially lines starting `[shd]`."
+      description: "Anything from the DevTools console, especially lines starting `[sheddit]`."
       render: text
     validations:
       required: false

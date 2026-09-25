@@ -2079,6 +2079,9 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      breaks no assertion and the rule is decoration. Three mutation rows, one per narrowing
      and one reverting `partial()` whole.
 
+     (Log 117 corrects two things here: the second decoy did not make the position rule
+     load-bearing either, and the free hovercards measured live were inside ads.)
+
 116. **The comment-pagination test raced its own fixture.** `test/extension.js` failed one
      run in several — `rendered count matches the slice plus whatever has loaded`, with
      `{"loads":1,"rendered":8,"sources":8}` — and passed on a re-run, so it read as flaky.
@@ -2097,6 +2100,68 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      that drops a batch never settles and is asserted as it stands at the deadline. With
      the 1.5s delay the old test fails both checks and the new one passes; 12 runs in 12
      under the load that failed 3 in 3. A counter of requests is not a counter of results.
+
+117. **Bug 115 was an ad, its fix's tests could not tell its rules apart, and the probe built
+     to catch Reddit changing had the same bug.** An adversarial review of 0.51.x, and one
+     live fetch that settled most of it.
+
+     WHERE THE HOVERCARDS WERE. A logged-out /r/programming slice, fetched 2026-09-25 the way
+     the partial fetches it (`Accept: text/vnd.reddit.partial+html`): 24 posts, 4 ads, 29
+     partials. 28 were `/svc/shreddit/user-hover-card/<name>` — one per post author inside
+     the post, where ITEMS already caught them, and one per advertiser inside the ad.
+     `shreddit-ad-post` is not wrapped in an `article` and ITEMS never listed it, so those
+     four were the free partials, and the first sat ahead of the continuation. 0.50.0's
+     bundle, booted on that slice, drove `user-hover-card/xfinity`; 0.51.2's drove the
+     continuation. So 115's "the hovercards moved out of the posts" is not what the markup
+     shows: the ones in posts are still in posts, and the free ones are in ads. Where the
+     reported community card sat on the signed-in front page was never recorded — but an ad
+     is an item now, so nothing inside one is driven, whatever it is called. Two more slices
+     the same day: /r/aww had the same shape (0.50.0 drove `user-hover-card/Levis_Official`,
+     an advertiser's), and the /popular feed carried a free `devvit-privacy-modal` partial
+     ahead of its posts, named by nothing — 0.50.0 drove that. 0.52.0 drives the
+     continuation on all three; the devvit one is the position rule's live case.
+
+     THE TWO RULES WERE ONE HAT. The `recommendations` decoy sat ahead of the posts AND
+     ahead of the real handle, so "take the last trailing partial" rejected it by itself:
+     replacing `free.filter(followsLastItem)` with `free` passed 1099 of 1099, and so did
+     taking the first trailing partial instead of the last. Each rule alone decides only a
+     shape the suite did not have — position, when no handle follows the posts at all;
+     taking the last, when a stray sits between the last post and the handle. Both are
+     fixtures now, with the ad and the article below, and each has a mutation row that
+     fails only its own block. The row that "reverts to 0.50.0" kept the name exclusion in
+     the selector, so it reverted nothing of the kind; it does now.
+
+     THE POSITION RULE COULD END A FEED. It measured the last delivered item against ITEM,
+     which holds a bare `article`: an `article` appended after the handle — a promoted unit,
+     any module — made the one real handle read as ahead of the content, and the paginator
+     said `no more pages` on the first click with nothing driven. Measured in the fixture,
+     not seen live: the slice ends batch, continuation, `feed-serving-event`, and the
+     continuation holds only `shreddit-feed-page-loading` and `ac-track`. It measures against
+     SOURCE now, what a load is counted by — and verify:live checks the premise, because the
+     day it breaks, this rule stops pagination outright.
+
+     THE PROBE HAD THE PAGINATOR'S BUG. verify:live found "the programmatic pagination
+     partial" with `querySelector(C.FEED_PARTIAL)`, and on the live slice that is the first
+     post's author hovercard: the check could not fail while any post had an author, and the
+     thin-feed drive fetched a hovercard. The 2026-09-05 reading in question 11 — partial
+     present, method present, "delivered nothing, consuming itself", the feed "genuinely
+     ended at one post" — fits that exactly, and is withdrawn as evidence. `C.FEED_PARTIAL`
+     carries the name exclusion now (gate.js reads it bare too), but a bare match is still a
+     first guess — on /r/aww a media overlay inside the first post, on /popular the devvit
+     modal — so the probe resolves the handle by the paginator's rules and marks the one it
+     drives.
+
+     SMALLER, SAME ROUND. `shdFresh` read the bare selector, so it said `true` beside
+     `exhausted` — the pair 115's report had to explain away; it asks `partial()` now.
+     `showLoading()` could mount with neither gate class (a tick after `unblank()`, posts
+     before the pipeline engaged): a bare `loading…` under native Reddit, the state `fail()`
+     names as a bug; it refuses that now. And the Docs QA pass's own claims, read back
+     against the code: the options page still called video the one request; PRIVACY still
+     said "two requests" in one place; "a check that failed is retried after an hour" (the
+     limit is an hour — nothing retries while the browser stays open); the release
+     checklist left out that `refresh-zip.sh <version>` commits, pushes and publishes a
+     release before any test runs; and `npm test` did not read the README's Install-section
+     version that CONTRIBUTING said it guarded.
 
 
 ## The popup policy — supersedes bugs 30, 33 and 38
@@ -2434,7 +2499,9 @@ the way a question got settled is usually more useful than the answer.
       the extension would see (one row, "no more pages"). The first signed-in load of the
       day answered 27. Unexplained; the probe now dumps the feed's direct children and the
       custom elements inside it when it is thin, so the next such page says what Reddit
-      put there instead of posts.
+      put there instead of posts. (Withdrawn as evidence by log 117: the probe drove the
+      first match of `C.FEED_PARTIAL`, which on live markup is a post author's hovercard.
+      "For that session the feed ended" is unmeasured until a run that drives the handle.)
 
     Status after five runs: session detection, both vote contracts (post and comment), the
     top-level composer and the reply control verified. Still unmeasured by a probe, by
@@ -2623,10 +2690,10 @@ the way a question got settled is usually more useful than the answer.
     mechanism is that the paginator was driving a community-hovercard partial instead of the
     feed's continuation: the rows could not grow because the thing being driven was never
     going to grow them. `unproductive=7`, `exhausted=5`, a fresh target still reported —
-    exactly the signature below. That is fixed.
+    exactly the signature the candidates above predict. That is fixed.
 
-    WHAT IS NOT ANSWERED, and why this stays open: the symptom in the two sightings below is
-    a label stuck on `loading more…`, and driving a hovercard does not produce that. It
+    WHAT IS NOT ANSWERED, and why this stays open: the symptom in both sightings — the one
+    this question opens with and the one below — is a label stuck on `loading more…`, and driving a hovercard does not produce that. It
     produces a completed load that yielded nothing — `unproductive`, `setStatus(null)`, back
     to `load more`. So the front-page case is closed and the STUCK LABEL is not. If it
     recurs after 0.51.0, the reading is unchanged and now much more likely to isolate a

@@ -169,8 +169,8 @@ boolean-or-string values in one object, in chrome.storage.sync.
 
 One further object, in chrome.storage.local: the result of the last update check — the
 version number the file stated, the link and release note it gave, when it was asked,
-and whether that attempt succeeded. It is local rather than synced because it describes
-the copy installed on that one machine.
+and, for the startup check, whether that attempt got an answer. It is local rather than
+synced because it describes the copy installed on that one machine.
 
 No identifiers, no browsing data, nothing derived from what the user reads.
 ```
@@ -342,15 +342,22 @@ one.
 
 # Submission checklist
 
-1. Bump the version. `./refresh-zip.sh <version>` rewrites `manifest.json`,
-   `package.json`, `dist/latest.json` and `BUILT` in `src/core/update.js`; the README
-   (badge, header line, install block) and `latest.json`'s release note are by hand — the
-   store refuses an upload whose version is not higher than the published one, and a
-   README that still names the previous version tells every reader their current copy is
-   the new one. `npm test` asserts they agree, so run it before uploading rather than
-   trusting the edit.
+1. Bump the version, and put nothing on `main` until the tests agree with it — the store
+   refuses an upload whose version is not higher than the published one, and a README
+   that still names the previous version tells every reader their current copy is the new
+   one. By hand: `manifest.json`, `package.json`, the README (badge, header line, install
+   block), `dist/latest.json` (`version`, `released`, and a `notes` sentence naming the new
+   version) and `BUILT` in `src/core/update.js` (the same date as `released`). Run
+   `npm test`, which asserts they all agree; commit and push; then run `./refresh-zip.sh`
+   with no argument, which rebuilds both downloads and points the GitHub release at them.
+   That is how 0.51.1 and 0.51.2 were cut. `./refresh-zip.sh <version>` can do the
+   mechanical half of the bump, but it is not only a rewrite: it refuses a dirty tree,
+   rewrites the four machine-edited files, then commits, pushes `main`, force-moves the
+   `Release` tag and publishes the GitHub release with `latest.json`'s note — all without
+   running a test. Run it before the README and the note are updated and `main` fails its
+   own version checks while the release goes out carrying the previous version's note.
 2. `npm run package` — runs the full suite first and stops on a red test, then writes
-   `dist/sheddit.zip`.
+   `dist/sheddit.zip` and `dist/sheddit-firefox.zip`.
 3. Load that zip unpacked and click through a listing, a comment page and the options
    page. The zip is what reviewers get; test the zip, not the repo.
 4. Upload it, fill the tabs above, submit.

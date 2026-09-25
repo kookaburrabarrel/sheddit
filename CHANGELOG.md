@@ -20,6 +20,81 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.52.0
+
+### Fixed — loading more, on any listing with ads
+
+0.51.0 fixed the front page by ruling out Reddit's hovercards by name. Where those cards
+actually sit is now measured, on a live /r/programming page, logged out: every post's author
+card is inside its post, where Sheddit already ignored it, and every ad carries its
+advertiser's card — inside the ad, which Reddit does not wrap the way it wraps posts, and
+which Sheddit therefore never counted as a post. The first ad's card was the first thing
+0.50.0 would fetch: run against that page, it fetched `xfinity`'s card instead of the next
+posts. So 0.50.0 was very likely fetching ad cards on every listing with ads in it, not
+only on the signed-in front page. 0.51.0's name rule already caught these cards; an ad now
+counts as a post as well, so nothing inside one is fetched as the next page whatever Reddit
+calls it. The same check on /r/aww found the same shape; the /popular feed also carries a
+hidden privacy-dialog element ahead of its posts, named by nothing, which 0.50.0 fetched
+instead of more posts — 0.51.0's position rule already skips it, and now a test proves that
+rule on its own.
+
+### Fixed — a rule that could have stopped paging for no reason
+
+0.51.0's second rule — the thing that continues a list has to come after the list — measured
+"the list" by every `article` element, not only posts. Anything Reddit appended after the
+continuation inside an `article`, a promoted unit or any other module, would have made
+Sheddit say "no more pages" at once with more to load. It measures against posts now.
+Reddit puts nothing there today, and the live check below now says so if that changes.
+
+### Fixed — the tools that check Sheddit against live Reddit
+
+- `npm run verify:live` found "the pagination partial" by taking the first match of its
+  selector — which on today's markup is the first post's author card. So "the pagination
+  partial is present" could not fail while any post had an author, and its thin-feed test
+  loaded a hovercard and concluded the feed had ended. It now finds the element the way the
+  paginator does, and checks that it follows the last post. The 2026-09-05 reading "one
+  post, and the feed genuinely ends there" is withdrawn as evidence.
+- The diagnostics on the `load more` control could say a target was still there beside
+  "no more pages" — two answers from the reading meant to settle it. They ask the
+  paginator's own rule now.
+- 0.51.0's tests could not tell its two rules apart: removing either one alone left every
+  test passing. Each rule has its own test now, with a mutation row proving it is the one
+  that fails, and so do the two added here.
+
+### Fixed — a bare `loading…` line
+
+On a first load where the page had no feed at Sheddit's first look and posts arrived before
+it started, an unstyled `loading…` paragraph could sit at the bottom of Reddit's own page.
+It is only ever shown now where it is styled — over Sheddit's blackout, or its layout.
+
+### Changed — what Sheddit says about itself, finished
+
+- The options page: the video note still opened by calling video "the one feature that makes
+  a request of its own", and the account note said Sheddit "still makes no request of its
+  own" without saying of what. Both say what is true now.
+- A failed version check is not "retried after an hour", as 0.51.1's notes said: after a
+  failure the limit is an hour instead of twenty, so the next browser start after that asks
+  again. Nothing retries while the browser stays open.
+- `PRIVACY.md` still said "two requests" in one place, and that the update record is written
+  whenever a check is attempted; a pressed check that gets no answer writes nothing.
+  `SECURITY.md` said the failure screen's diagnostics are "never user data" — they include
+  the page's URL and your browser's user agent. They stay on your screen; nothing is sent.
+- The release checklist in `docs/store-listing.md` now says what `./refresh-zip.sh
+  <version>` does — it commits, pushes and publishes the GitHub release without running a
+  test — and gives the order that keeps `main` passing.
+- `npm test` now reads the README's Install-section version, as CONTRIBUTING and the
+  checklist already said it did.
+- Smaller corrections across `ARCHITECTURE.md`, `TESTING.md`, the bug-report template
+  (console lines start `[sheddit]`, not `[shd]`), source comments and the engineering log.
+  Engineering log bug 117.
+
+### Known, not fixed
+
+Unchanged from 0.51.0: `load more` can still stick on your own profile overview, and a post
+on that overview is read and then not shown.
+
+---
+
 ## 0.51.2
 
 No behaviour changed. This build republishes 0.51.1 with one fix to the test suite, so the
@@ -53,20 +128,23 @@ and in this repository.
 - The note under *Play video on the comments page* said video "is the one feature that
   makes a request of its own" and that nothing else makes a request of any kind — a few
   lines below the switch for the version check, which also makes one. It names both now.
+  (Its second sentence did; the first still called video "the one feature" until 0.52.0.)
 - The account note had lost the sentence before "When you are, the vote arrows register…",
   so it never said *when you are what*. It reads "When you are logged in" now.
 - The header's **auto: on** tooltip promised "no more than once every twenty hours". That
-  is the limit after an answer; a check that fails is retried after an hour
-  (`RETRY_INTERVAL_MS`), so a browser that is offline at startup is not left without an
-  answer for most of a day. The tooltip says both now.
+  is the limit after an answer; after a check that fails the limit is an hour
+  (`RETRY_INTERVAL_MS`), so a browser that was offline at startup asks again at the next
+  start an hour or more later, not twenty hours later. Nothing retries while the browser
+  stays open — the check runs only at startup and on install or update. The tooltip says
+  both limits now.
 
 ### Changed — the privacy policy, to match the code
 
 `PRIVACY.md` said two things leave the browser in one place and three requests in another.
-It says three throughout, adds the one-hour retry, and discloses that the `<html>` element
-carries `data-shd-*` state while a page loads and more posts arrive, not only the scroll
-marker. Its history entry for the `old.reddit.com` redirect was dated 0.38.0; it shipped in
-0.33.0. The age-gate click has happened since 0.3.0, not 0.30.0 as two places said.
+It says three (one place still said "two requests" until 0.52.0), adds the one-hour floor
+after a failure, and discloses that the `<html>` element carries `data-shd-*` state while a
+page loads and more posts arrive, not only the scroll marker. Its history entry for the `old.reddit.com` redirect was dated 0.38.0; it shipped in
+0.33.0. The age-gate click has happened since 0.3.0, not 0.30.0 as four places said.
 
 ### Changed — the documentation, read against the code
 
@@ -101,9 +179,12 @@ the control gave up and said there was nothing left. Measured on a live front pa
 
 Sheddit now rules the hovercards out by name, and separately applies a rule that does not
 depend on knowing their name: the thing that continues a list has to come *after* the list.
-Either one alone would have fixed today's page; both are there because Reddit renames things,
-and when neither matches, the control honestly says there are no more pages rather than
-fetching something that will never produce a post.
+Both are there because Reddit renames things, and when neither matches, the control honestly
+says there are no more pages rather than fetching something that will never produce a post.
+(This entry first said either one alone would have fixed today's page. The name would have;
+whether position alone would have depends on where the hovercard sat, which the report did
+not record — the tests modelled it after the last post, where position accepts it. See
+0.52.0 for where these partials actually were.)
 
 ### Unchanged
 

@@ -7,7 +7,9 @@
  *     we still need it alive for delegated vote clicks and for cloning comment bodies.
  *
  * If the reader releases the page (gate.js release()), both classes are removed and
- * native Reddit returns untouched. A failure keeps it suppressed behind the error screen.
+ * native Reddit returns untouched. A failure keeps it suppressed behind the error screen —
+ * except on a route engaged soft (profiles, whose contract is unverified), where fail()
+ * removes both classes and hands the page back with no card, as a release does.
  */
 
 /* --- phase 1: pre-render blackout ---
@@ -183,8 +185,8 @@ html.shd-passthrough-active #shd-header { display: none !important; }
  * Native Reddit stays suppressed behind this; the "Show Reddit's own layout" button is
  * the way out, and the user presses it.
  *
- * Styled here rather than in old-reddit.css because that file is scoped under
- * .shd-active, which is exactly the class a failure removes.
+ * Styled here rather than in old-reddit.css because that file's palette and page-level
+ * rules are scoped under .shd-active, which is exactly the class a failure removes.
  *
  * Deliberately NOT themed. `fail()` drops .shd-active, so the palette tokens would not
  * resolve here anyway — but the reason to leave it that way is that this screen should look

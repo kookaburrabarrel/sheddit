@@ -75,8 +75,10 @@ Useful context for judging whether something is a real issue, and for scoping a 
   [the engineering log](docs/engineering-log.md#open-questions), not a security boundary.
 - **Vote arrows delegate to Reddit's own controls.** They do not construct requests. Logged
   out, they cast nothing and the arrow says you are not logged in.
-- **The failure screen prints diagnostics.** These are page-shape details (element counts,
-  attribute names), never user data.
+- **The failure screen prints diagnostics.** Mostly page-shape details (element counts,
+  attribute names), plus the page's URL, the first error, the version and your browser's
+  user agent, so a report can be matched to a page and a build. They are shown on your
+  screen and nowhere else — nothing is sent — and you choose what to paste into a report.
 
 ## Scope
 

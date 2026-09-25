@@ -13,7 +13,8 @@
  * SHD.session decides whether the layer is on (setting AND a logged-in page). For the
  * primary, logged-out reader every path in here collapses to 0.33.0's behaviour — arrows
  * that cast nothing, except that they now say why (see VOTING below: Reddit does ship its
- * vote buttons to a logged-out session, so a click is never forwarded), a `reply` that
+ * vote buttons to a logged-out session, but with no vote state on them, and a click is
+ * forwarded only when a button reports one or a session is recognised), a `reply` that
  * hands off to Reddit's own comment via passthrough, and no submit buttons. That is asserted, not assumed: test/run.js boots the same fixtures
  * logged out and checks nothing new appears.
  *
@@ -1098,7 +1099,9 @@ SHD.account = (() => {
    * one action a reader most wants back (reported 2026-09-09).
    *
    * Sheddit does not build a logout request. It cannot: that is a POST carrying Reddit's
-   * own CSRF token, and forging one would be the first request this extension ever made to Reddit.
+   * own CSRF token, and forging one would make this extension the sender of a request that
+   * carries the reader's session — which it never is: its only requests (a video manifest, the
+   * version file) go out with `credentials: 'omit'`.
    * So it does what the reader would do — open Reddit's user drawer and click the item in
    * it — and lets Reddit's code end the session.
    *

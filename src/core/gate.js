@@ -451,11 +451,18 @@ SHD.gate = (() => {
    *
    * Only ever mounted under one of the two gate classes: mid-session (wasRevealed) with
    * .shd-active on, where old-reddit.css styles it, and on a first load from check()'s
-   * first tick with .shd-gate on, where suppress.css styles it over the blackout.
+   * ticks with .shd-gate on, where suppress.css styles it over the blackout. The function
+   * enforces that rather than trusting its callers. check() asks on EVERY tick of a route
+   * it takes, and a tick can land after unblank() has dropped .shd-gate: the feed was not
+   * there at the first look, posts arrived before the pipeline engaged, and the `!engaged`
+   * branch returns without unblanking again. Mounted then, the line was a bare unstyled
+   * `loading…` paragraph under native Reddit — the state fail() documents as a bug.
    * ------------------------------------------------------------------ */
   function showLoading() {
     if (!document.body || stopped()) return;
     document.getElementById(LOADING_ID)?.remove();
+    const cls = document.documentElement.classList;
+    if (!cls.contains('shd-gate') && !cls.contains(SHD.C.BODY_CLASS)) return;
     const line = el('div', { id: LOADING_ID, role: 'status' },
       el('p', { textContent: 'loading…' }));
     /* Asked here as well as in parkOutgoing(), so the two are order-independent: the
@@ -775,8 +782,8 @@ SHD.gate = (() => {
       try { fn(reason); } catch (e) { console.warn('[sheddit] stop listener threw', e); }
     }
 
-    // old-reddit.css is scoped under .shd-active, so anything already rendered would
-    // otherwise sit there unstyled behind the error screen.
+    // old-reddit.css's palette and page-level rules are scoped under .shd-active, so
+    // anything already rendered would otherwise sit there half-styled behind the error screen.
     document.documentElement.classList.remove('shd-gate', SHD.C.BODY_CLASS);
     /* AND THE LATCH GOES WITH THE CLASS. resetForRoute() uses `revealed` as its proxy for
        "is .shd-active on the document" — `wasRevealed` decides between blank() and

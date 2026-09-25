@@ -68,18 +68,31 @@ SHD.C = {
      MEASURED LIVE 2026-09-21, signed in, front page: Reddit serves community hovercards as
      `faceplate-partial[loading="programmatic"]` with
      src="/svc/shreddit/community-hover-card/<sub>" — the same element and the same loading
-     mode as the feed's own continuation, sitting in the feed and in NO post, so neither the
+     mode as the feed's own continuation, sitting in the feed and in no post, so neither the
      selector nor paginator.js's `!closest(ITEM)` ownership rule could tell them apart. The
      paginator drove one instead of `/svc/shreddit/feeds/home-feed`: 27 rows in, 27 out,
-     repeatedly, then "no more pages".
+     repeatedly, then "no more pages". Measured again 2026-09-25, logged out, a
+     /r/programming slice: 28 of its 29 partials were `/svc/shreddit/user-hover-card/<name>`,
+     one per post author inside the post and one per advertiser inside the ad — which is
+     where the ones outside every post were — and the 29th was the continuation.
      A NEGATIVE test, not a positive one. Requiring the src to look like a feed endpoint
      would break silently the day Reddit renames it; naming the thing we measured and have
      proof is not a handle costs a page only if Reddit reuses that path for pagination,
-     which is the safer direction to be wrong in. Paired with a structural rule in
-     paginator.js (a continuation follows the content it continues) that does not depend on
-     knowing any src at all — see partial(). */
+     which is the safer direction to be wrong in. Paired with structural rules in
+     paginator.js (nothing inside a post or an ad continues a feed; a continuation follows
+     the content it continues) that do not depend on knowing any src at all — see partial(). */
   PARTIAL_NOT_SRC: '[src*="hover-card" i]',
-  FEED_PARTIAL: 'shreddit-feed faceplate-partial[loading="programmatic"]',
+  /* THE FEED'S CONTINUATION, and it carries PARTIAL_NOT_SRC itself (run.js asserts the two
+     agree). paginator.js adds the exclusion to every clause anyway; gate.js ("posts are still
+     on their way") reads this selector BARE, and verify:live used to — and bare, its first
+     match on the 2026-09-25 /r/programming slice was the first post's author hovercard, so
+     "the programmatic pagination partial is present" could not fail while any post had an
+     author, and the thin-feed drive fetched a hovercard. Even with the exclusion a bare read
+     is only a first guess: on /r/aww the first match is a media-overlay partial inside the
+     first post, on /popular a free `devvit-privacy-modal` partial ahead of the posts. Which
+     partial is the handle is paginator.js partial()'s question — ownership, position, the
+     last — and verify:live asks it the same way. */
+  FEED_PARTIAL: 'shreddit-feed faceplate-partial[loading="programmatic"]:not([src*="hover-card" i])',
   /* Comment threads lazy-load the same way. ARCHITECTURE §1.5 recorded 29 pending
      partials on a real thread; we only ever drove the feed's, so anything past the
      first delivered slice of a thread was unreachable. Scoped to the comment tree so a

@@ -2,7 +2,8 @@
 
 Five of the pictures this project publishes — the Chrome Web Store's three listing images and
 the README's header banner in both colour schemes — and the sources they are built from. All
-five are generated; the other images in `docs/assets/` are captures and are not built here:
+five are generated; the other images in `docs/assets/` are not built here — captures, plus
+two drawn by hand (`store-icon.png`, the store mark, and `slava-ukraini.svg`):
 
 ```bash
 npm run promo                                # writes all five into docs/assets/
