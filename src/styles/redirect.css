@@ -24,8 +24,8 @@ html.shd-redirecting body {
   margin: 0 !important;
   padding: 0 !important;
 }
-/* display, not the visually-hidden recipe suppress.css uses. Nothing on this page has to
-   stay clickable, readable by a screen reader, or alive for cloning — we are leaving. */
+/* display, not the hide-in-place rule suppress.css uses. Nothing on this page has to keep
+   its geometry, take a delegated click, or stay alive for cloning — we are leaving. */
 html.shd-redirecting body > *:not(#shd-redirect) { display: none !important; }
 
 /* --- the card --- */

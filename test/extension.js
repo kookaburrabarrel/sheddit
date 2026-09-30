@@ -5,8 +5,8 @@
  * THE GAP THIS FILLS
  * Every other suite runs dist/sheddit.dev.js, which is the same source concatenated by
  * build.js. That proves the logic but not the packaging: manifest match patterns, the
- * document_start / document_idle split, script order, and delivery of the two
- * stylesheets are all invented by the manifest and exercised by nothing. TESTING.md
+ * document_start / document_idle split, script order, and delivery of every
+ * stylesheet are all invented by the manifest and exercised by nothing. TESTING.md
  * listed "not yet run as a packed extension end-to-end" as a known gap.
  *
  * HOW
@@ -454,7 +454,7 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
   check('client-side navigation re-renders without duplicating rows',
     afterNav.rows === POSTS.length && afterNav.roots === 1 && afterNav.headers === 1,
     JSON.stringify(afterNav));
-  // Both of these were broken: reveal() latches true, so the flush that rebuilt the
+  // Both of these were broken: reveal() latched true, so the flush that rebuilt the
   // chrome never ran again after the first route.
   check('the sidebar survives a client-side navigation', afterNav.sidebar);
   check('the header follows the new subreddit',
@@ -671,6 +671,7 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     const all = [...document.querySelectorAll('#shd-root .thing.comment')];
     return {
       loads: (window.__shdCommentPager || {}).loads || 0,
+      delivered: (window.__shdCommentPager || {}).delivered || 0,
       rendered: all.length,
       unique: new Set(all.map(c => c.dataset.fullname)).size,
       sources: document.querySelectorAll('shreddit-comment').length,
@@ -684,7 +685,24 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     };
   });
 
-  const t0 = await threadState();
+  // A load is counted when it is REQUESTED, its batch lands 50ms later (fixtures.js), and
+  // the renderer draws it after that. A snapshot taken inside that window reads a load
+  // against the old slice — measured under CPU load, 3 runs in 3:
+  // {"loads":1,"rendered":8,"sources":8}. So compare only a snapshot in which every requested
+  // batch has landed and every landed comment is drawn. It is one page.evaluate, so a load
+  // cannot start between the settle test and the numbers. A renderer that never catches up
+  // still fails: the last snapshot is returned at the deadline and asserted as it stands.
+  const settledThread = async () => {
+    const deadline = Date.now() + 15000;
+    for (;;) {
+      const s = await threadState();
+      const settled = s.loads === s.delivered && s.rendered >= s.sources;
+      if (settled || Date.now() >= deadline) return s;
+      await new Promise(r => setTimeout(r, 100));
+    }
+  };
+
+  const t0 = await settledThread();
   // On a short page the sentinel is already inside the trigger margin, so a load may have
   // fired before this first look. Assert the invariant instead of a fixed baseline:
   // whatever the load count, rendered == the delivered slice + loads * batch.
@@ -699,7 +717,7 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await settle(1100);
   }
-  const t1 = await threadState();
+  const t1 = await settledThread();
 
   check('scrolling a thread loads more comments (bridge + sentinel on COMMENTS)',
     t1.loads > 0 && t1.rendered > t0.rendered,

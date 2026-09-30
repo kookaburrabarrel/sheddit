@@ -1,6 +1,6 @@
 # Privacy Policy — Sheddit
 
-**Last updated:** 10 September 2026
+**Last updated:** 24 September 2026
 **Applies to:** the Sheddit browser extension, all versions, Chrome and Firefox alike.
 The Firefox build also declares this in its manifest, in the form Mozilla surfaces on
 the listing: data collection **none**.
@@ -11,12 +11,13 @@ Sheddit collects nothing, transmits nothing, and contacts no server of its own �
 there is no such server. It reads the Reddit page already open in your browser and
 re-draws it. That is the whole program.
 
-Two things leave your browser at all, both of them optional, neither of them about you: the
-manifest of a video you are watching, and a file on GitHub stating the current version
-number. The version check happens when you press the **updates** button, and — since
-0.37.0, unless you switch it off right beside that button — once when your browser starts,
-no more often than once every twenty hours. Both are described in full below, including
-what GitHub can see and how to stop it.
+Three requests can leave your browser, for two files, all of them optional and none of
+them about you: the manifest of a video you are watching, and a file on GitHub stating the
+current version number. The version check happens when you press the **updates** button,
+and — since 0.37.0, unless you switch it off right beside that button — once when your
+browser starts, no more often than once every twenty hours (an hour, after an attempt that
+failed). All three are described in full below, including what GitHub can see and how to
+stop it.
 
 One thing Sheddit *presses* for you, and it is named here rather than buried: on a
 subreddit marked adult it clicks Reddit's own "over 18" button, without asking. That is
@@ -36,14 +37,15 @@ One object, in `chrome.storage.sync`, holding your display preferences:
 | `redirectOldReddit` | whether an `old.reddit.com` link is sent to the same page on `www.reddit.com` |
 | `autoUpdateCheck` | whether the version check may run when your browser starts |
 
-Since 0.29.0 there is a second object, in `chrome.storage.local`, written whenever an
-update check is *attempted* — by pressing **updates** in the header, and since 0.37.0 by
-the startup check as well, which means it can appear without you having pressed anything
-(a fresh install runs one check when it is installed):
+Since 0.29.0 there is a second object, in `chrome.storage.local`. Pressing **updates** in
+the header writes it when GitHub answers; a press that gets no answer writes nothing. Since
+0.37.0 the startup check writes it on every attempt, answered or not, which means it can
+appear without you having pressed anything (a fresh install runs one check when it is
+installed):
 
 | Key | What it is |
 | --- | --- |
-| `update` | the last update check: the version number GitHub stated, the link it gave, its release note, when it was asked, and whether that attempt got an answer |
+| `update` | the last update check: the version number GitHub stated, the link it gave, its release note and when it was asked — and, from the startup check, whether that attempt got an answer and when one last did |
 
 The "when it was asked" is what stops the check repeating: an attempt that fails is
 recorded too, so a browser that cannot reach GitHub does not retry at every startup for
@@ -188,7 +190,9 @@ those scripts can see that it is there. They always could — the layout is in t
 but two specifics are worth naming rather than leaving to be found. The `<html>` element
 carries `data-shd-version` (which build you are running) and `data-shd-theme` (which of
 the five palettes you chose), and while a page is loading more posts the scroll marker
-carries a set of `data-shd-*` values describing that.
+and `<html>` carry a set of `data-shd-*` values describing that. `<html>` also gets a
+`data-shd-*` value naming the reason when Sheddit waits on a page, finds it empty, or hands
+it back.
 
 None of it leaves your browser and none of it is about you — it is the extension's own
 state, written where a bug report can read it back. But a site can read it too, which
@@ -199,8 +203,8 @@ Both are recorded here so the trade is visible rather than implied.
 
 ## Permissions, and why each one exists
 
-**`storage`** — to remember the preferences listed above, and the last update-check answer
-if you have asked for one. Nothing else is written.
+**`storage`** — to remember the preferences listed above, and the record of the last
+update check, whether you pressed for it or the startup check ran. Nothing else is written.
 
 **Host access to `*://*.reddit.com/*`** — Sheddit's entire function is rewriting Reddit's
 own pages into the old.reddit.com layout, which cannot be done without running on those
@@ -217,23 +221,24 @@ path and nothing else: it is what decides that a page Sheddit does not render �
 preferences, your inbox, a wiki page, a moderation queue — is left on `old.reddit.com`
 where it works. Together they read the URL in your address bar, read your
 `redirectOldReddit` preference, write one entry to that tab's `sessionStorage` so two
-redirectors cannot bounce you between hosts for ever, and navigate. It reads no page
-content, sends no request, and is off entirely if you untick the option. The destination
+redirectors cannot bounce you between hosts for ever, and navigate. They read no page
+content, send no request, and are off entirely if you untick the option. The destination
 in a login wall's `dest` parameter is followed only when it points back at reddit.com, so
 the redirect cannot be pointed at anyone else's site.
 
-**No host access to `v.redd.it` or `raw.githubusercontent.com`, despite the two requests
+**No host access to `v.redd.it` or `raw.githubusercontent.com`, despite the requests
 above.** Both servers answer with `access-control-allow-origin: *`, so those files can be
 read without any additional permission — which is why neither the video player nor the
-update check widened what Sheddit is allowed to reach. Both requests are sent with
-`credentials: 'omit'`, so your cookies never go with them, and the update check adds
+update check widened what Sheddit is allowed to reach. All three requests are sent with
+`credentials: 'omit'`, so your cookies never go with them, and the two version checks add
 `referrerPolicy: 'no-referrer'`.
 
 Sheddit requests no other permissions. Since 0.37.0 it has a background worker, and it
 exists for exactly one thing: asking GitHub for a version number when your browser starts,
 if you have left that switch on. It does not read pages, watch tabs, or run while you
-browse — it wakes at startup, asks or doesn't, and stops. Sheddit has no tabs access, no
-cookie access, and no host access to any other site.
+browse — it wakes at startup (and when the extension is installed or updated), asks or
+doesn't, and stops. Sheddit has no tabs access, no cookie access, and no host access to
+any other site.
 
 ## Your data rights
 
@@ -272,6 +277,12 @@ version number, sent only when the reader presses **updates** in the header; and
 stored object, `update` in `chrome.storage.local`, holding that answer. Nothing about the
 reader is sent or stored by either. This is the first change to this policy.
 
+**0.33.0 — the old.reddit redirect.** A link to `old.reddit.com` is sent to the same page
+on `www.reddit.com`, behind a notice that says so. One `sessionStorage` entry per tab
+stops two redirectors bouncing a reader between hosts. A new setting,
+`redirectOldReddit`. From 0.43.0 this applies only to the paths Sheddit renders;
+everything else is left on `old.reddit.com`.
+
 **0.34.0 — the account layer.** For readers already signed in to Reddit, the vote arrows,
 reply box and submit links began working by clicking the controls Reddit had already put
 on the page. No new request, no new stored data, no session or cookie read by Sheddit —
@@ -284,12 +295,6 @@ updates button is off. Same request, same file, same absence of anything about t
 reader; what changed is that it can happen without a press. A new setting,
 `autoUpdateCheck`, and the `update` record can now be written without one.
 
-**0.38.0 — the old.reddit redirect.** A link to `old.reddit.com` is sent to the same page
-on `www.reddit.com`, behind a notice that says so. One `sessionStorage` entry per tab
-stops two redirectors bouncing a reader between hosts. A new setting,
-`redirectOldReddit`. From 0.43.0 this applies only to the paths Sheddit renders;
-everything else is left on `old.reddit.com`.
-
 **0.41.0 / 0.42.0 — the account corner.** The header shows the signed-in reader's own
 username and avatar, read from Reddit's own header on the page, and offers a menu of
 Reddit's account pages plus a log out that presses Reddit's own control. Nothing is
@@ -297,7 +302,7 @@ stored and nothing is sent; the name and picture are read from the page and draw
 neither survives a reload.
 
 **0.43.0 — the 18+ prompt, written down.** No behaviour changed: Sheddit has clicked
-Reddit's own "over 18" button since 0.30.0, and this policy did not say so. It says so
+Reddit's own "over 18" button since 0.3.0, and this policy did not say so. It says so
 now, under **What it presses for you**, along with what it means for a signed-in reader.
 The same release narrowed what can be clicked — a promotion offering *Yes* / *Not now*
 matched the old rule — and added the **What the page can see** section, which names the

@@ -60,6 +60,9 @@ npm run package    # rebuilds both download zips the README links (Chrome + Fire
 npm run package:check   # fails if either zip no longer matches the source
 ```
 
+Node 22.22.2+ on the 22 line, 24.15+, or 26+ (jsdom's floor). None of this is needed to
+*run* the extension — `build` only makes the dev harness the tests execute.
+
 To run the extension itself: `chrome://extensions` → Developer mode → Load unpacked → this
 folder. **A pushed commit is not a loaded extension** — Chrome keeps running the code it
 read at load time, so hit the ↻ on the extension card before testing anything. The failure
@@ -83,16 +86,17 @@ machine without one. A fork's CI can set `SHEDDIT_REQUIRE_BROWSER=1` (and
 ### Mutation testing
 
 ```bash
-npm run test:mutate   # ~30 min, runs on a throwaway copy — your working tree is never touched
+npm run test:mutate   # hours, runs on a throwaway copy — your working tree is never touched
 ```
 
 Each row reintroduces a bug this project shipped. Before you
 trust a green sweep, know the three ways a row can look like proof while proving nothing:
 
-1. **A dead anchor reads as silence.** `ANCHOR MISS` is neither a pass nor a failure, and the
-   summary only counts `FAIL` lines. Editing *any* source file can break a row belonging to
-   an unrelated bug — check the anchors after every change, including for duplicates, since
-   the replacement only hits the first occurrence.
+1. **A dead anchor reads as silence.** `ANCHOR MISS` is neither a pass nor a failure; the
+   sweep now exits non-zero on one, but only at the end of a run that takes hours. Editing
+   *any* source file can break a row belonging to an unrelated bug — run
+   `bash test/anchor-check.sh` (seconds, no suite) after every change; it flags duplicates
+   too, since the replacement only hits the first occurrence.
 2. **The mutated branch may be unreachable.** One row gutted a function to `return false` and
    the suite stayed green, because an earlier condition short-circuited before it was ever
    consulted.
@@ -104,9 +108,10 @@ trust a green sweep, know the three ways a row can look like proof while proving
 - **Branch from `main`.** Keep the change focused on one thing.
 - **Run `npm test` and say so in the PR.** If a browser suite skipped, say that too.
 - **Add a mutation row** for any new assertion, and confirm it catches.
-- **Bump the version** in `manifest.json`, `package.json` and the README (badge, header
-  line, install block) if a tester might load your build. It is the only build identity
-  anyone has, and `npm test` fails if the four disagree.
+- **Bump the version** in `manifest.json`, `package.json`, the README (badge, header
+  line, install block) and `dist/latest.json` (whose `notes` must name it, and whose
+  `released` date `BUILT` in `src/core/update.js` must match) if a tester might load your
+  build. It is the only build identity anyone has, and `npm test` fails if they disagree.
 - **Write the commit message long-form**, explaining *what the wrong behaviour looked like*
   rather than only what changed. The engineering log is assembled from these, and a
   description you can match against a symptom is worth far more than "fixed pagination".
@@ -119,8 +124,9 @@ trust a green sweep, know the three ways a row can look like proof while proving
 - A new assertion with no mutation row
 - Touching an unhandled route. Search, modmail, chat and the post composer must be left
   *completely* untouched — deleting an element counts as touching it
-- Anything that makes a network request of its own. There are none, and that is a feature
-  — the account layer included: it clicks Reddit's buttons, it does not call Reddit
+- Anything that adds a network request of its own. The only ones are the video manifest
+  and the version check [PRIVACY.md](PRIVACY.md) lists, and that is a feature — the
+  account layer included: it clicks Reddit's buttons, it does not call Reddit
 - An account-layer affordance that shows for a logged-out reader, or a session check that
   is absence-based (see *Scope*)
 - A version number in a commit subject. GitHub prints that subject beside every file the

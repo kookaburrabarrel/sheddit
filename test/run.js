@@ -1538,7 +1538,7 @@ async function boot(html, url, setup) {
     check('the placeholder leaves with the reveal',
       !doc.querySelector('#shd-loading'), 'stale #shd-loading under the new render');
 
-    // Both of these regressed on the first SPA navigation: gate.reveal() latches true for
+    // Both of these regressed on the first SPA navigation: gate.reveal() latched true for
     // the life of the page, and the flush that built the chrome was gated on !revealed —
     // so onRoute tore the chrome down and nothing ever rebuilt it.
     check('sidebar survives a client-side navigation',
@@ -1570,6 +1570,39 @@ async function boot(html, url, setup) {
     // page we just promised to leave alone is a broken promise in eleven characters.
     check('the placeholder does not survive onto a handed-back page',
       !doc.querySelector('#shd-loading'));
+  }
+
+  /* THE LOADING LINE NEEDS A GATE CLASS TO STAND UNDER. Its only styles live under
+     html.shd-gate (suppress.css) and html.shd-active (old-reddit.css), and gate.js's check()
+     mounts it on every tick of a route the pipeline takes. A tick can come after unblank()
+     has dropped .shd-gate: no feed at the first look, then posts before the pipeline has
+     engaged — the `!engaged` branch returns without unblanking again. The line then stood
+     bare and unstyled under native Reddit, the state fail() documents as a bug. Here the
+     pipeline never engages because chrome.storage never answers. */
+  console.log('\n\x1b[1mTHE LOADING LINE NEVER STANDS WITHOUT A GATE CLASS\x1b[0m');
+  {
+    const feed = listingPage().match(/<shreddit-feed>[\s\S]*<\/shreddit-feed>/)[0];
+    const shell = listingPage().replace(feed, '');
+    const storageHangs = (win) => {
+      win.chrome = { storage: {
+        sync: { get: () => new Promise(() => {}) },
+        onChanged: { addListener() {} }
+      } };
+    };
+    const { doc, window } = await boot(shell, 'https://www.reddit.com/r/programming/', storageHangs);
+    const html = doc.documentElement;
+    check('setup: with no feed at the first look, the blackout is dropped',
+      !html.classList.contains('shd-gate') && !html.classList.contains('shd-active'),
+      html.className);
+    doc.querySelector('#main-content').insertAdjacentHTML('beforeend', feed);
+    await hold(1800);   // past FIRST_CHECK_MS: a tick with posts and no engaged pipeline
+    check('setup: posts arrived and nothing of ours has rendered or failed',
+      doc.querySelectorAll('shreddit-post').length > 0 && !doc.querySelector('#shd-root') &&
+      !window.SHD.gate.revealed && !window.SHD.gate.failed);
+    check('no bare loading line under native Reddit',
+      !doc.querySelector('#shd-loading') ||
+      html.classList.contains('shd-gate') || html.classList.contains('shd-active'),
+      `#shd-loading mounted with classes "${html.className}"`);
   }
 
   {
@@ -3464,10 +3497,14 @@ async function boot(html, url, setup) {
       ...readme.matchAll(/[Cc]urrent version:?\*{0,2}:?\s*\*{0,2}(\d+\.\d+\.\d+)/g),
       // The release announcement names it too, and an announcement for a build nobody
       // can download is the worst of the three to leave stale.
-      ...readme.matchAll(/[Bb]eta\s+v?(\d+\.\d+\.\d+)/g)
+      ...readme.matchAll(/[Bb]eta\s+v?(\d+\.\d+\.\d+)/g),
+      // And the Install section ("Version **x.y.z**, beta."), which no pattern here read
+      // until 0.52.0 while CONTRIBUTING and the release checklist said npm test did.
+      ...readme.matchAll(/Version \*\*(\d+\.\d+\.\d+)\*\*/g)
     ].map(m => m[1]);
-    check('the README states the version somewhere prominent', stated.length >= 2,
-      `found ${stated.length} statements — the badge and the install block are the two`);
+    check('the README states the version somewhere prominent', stated.length >= 3,
+      `found ${stated.length} statements — the badge, the Beta announcement and the ` +
+      'Install section are the three');
     check('every version the README states is the shipped one',
       stated.every(v => v === manifestV),
       `README says ${[...new Set(stated)].join(', ')}; manifest says ${manifestV}`);
@@ -3591,6 +3628,191 @@ async function boot(html, url, setup) {
       !('minimum_chrome_version' in ff), String(ff.minimum_chrome_version));
     check('the canonical manifest stays Chrome\'s — no gecko block in the tree',
       !('browser_specific_settings' in m));
+  }
+
+  /* --- A HOVERCARD PARTIAL IN THE FEED IS NOT THE FEED'S CONTINUATION ---
+     Reported live 2026-09-21, signed in, front page: a
+     `/svc/shreddit/community-hover-card/oldreddit` partial sat in the feed and in no item,
+     EARLIER in document order than the real `/svc/shreddit/feeds/home-feed` continuation.
+     It passed the ownership test, querySelector returned it first, and the paginator drove
+     it — 27 rows in, 27 rows out, repeatedly, then "no more pages" with unproductive=7,
+     exhausted=5, a fresh target still being reported. Driving the real partial by hand on
+     the same page: 27 rows to 52. Measured 2026-09-25 on a logged-out /r/programming
+     slice, the partials outside every post were the ADS' hovercards: C.AD_POST is not
+     wrapped in an `article`, and was not an item.
+     paginator.js partial() has four rules for this, and each block below is the one that
+     fails when that rule ALONE is removed: ownership (now including ads), the measured
+     src, position (a continuation follows the posts it continues) and the last of what
+     follows. The first cut had two blocks; removing either rule left the suite green. */
+  console.log('\n\x1b[1mPAGINATION PICKS THE FEED\'S OWN CONTINUATION\x1b[0m');
+  const sentinelData = (doc) => doc.querySelector('.shd-sentinel')?.dataset || {};
+  {
+    const { doc, window } = await boot(listingPage({ hovercard: true }),
+      'https://www.reddit.com/', noAuto);
+    window.eval(PAGER_SCRIPT);
+    const st = () => window.__shdPager;
+    const C = window.SHD.C;
+
+    const parts = [...doc.querySelectorAll('shreddit-feed faceplate-partial')];
+    check('setup: the decoy is in the feed, in no post, and ahead of the real handle',
+      parts.length === 2 &&
+      /hover-card/.test(parts[0].getAttribute('src')) &&
+      /feed\/next/.test(parts[1].getAttribute('src')) &&
+      !parts[0].closest('article, shreddit-post'),
+      parts.map(p => p.getAttribute('src')).join(' | '));
+    check('setup: ...so the old ownership test alone would have handed back the decoy',
+      /hover-card/.test(
+        doc.querySelector('shreddit-feed faceplate-partial[loading="programmatic"]')
+          .getAttribute('src')));
+    /* gate.js ("posts are still on their way") reads C.FEED_PARTIAL bare, and verify:live
+       did. Bare, it matched the hovercard — so the contract carries the measured exclusion.
+       It is still only a first guess on live markup (see C.FEED_PARTIAL); the handle itself
+       is partial()'s answer, asserted below. */
+    check('C.FEED_PARTIAL itself carries C.PARTIAL_NOT_SRC',
+      C.FEED_PARTIAL.includes(C.PARTIAL_NOT_SRC), C.FEED_PARTIAL);
+    check('...so read bare in this feed, its first match is the continuation, not the hovercard',
+      /feed\/next/.test(doc.querySelector(C.FEED_PARTIAL)?.getAttribute('src') || ''),
+      doc.querySelector(C.FEED_PARTIAL)?.getAttribute('src'));
+
+    const before = doc.querySelectorAll('#shd-root .thing.link').length;
+    const ok = await window.SHD.paginator.loadNext('manual');
+    check('the load drives the continuation and not the hovercard',
+      ok === true && st().decoyDrives === 0 && st().loads === 1,
+      `driven=${JSON.stringify(st().driven)} decoy=${st().decoyDrives}`);
+    check('...so the rows actually grow',
+      doc.querySelectorAll('#shd-root .thing.link').length === before + PAGER_PAGE_SIZE,
+      `${before} -> ${doc.querySelectorAll('#shd-root .thing.link').length}`);
+
+    /* And it keeps working once the real handle has replaced itself — the decoy is still
+       sitting there, still fresh, still first in document order. */
+    const second = await window.SHD.paginator.loadNext('manual');
+    check('a second page still skips the decoy still sitting in front of it',
+      second === true && st().decoyDrives === 0 && st().loads === 2,
+      `driven=${JSON.stringify(st().driven)}`);
+    check('...and the rows grow again',
+      doc.querySelectorAll('#shd-root .thing.link').length === before + PAGER_PAGE_SIZE * 2,
+      String(doc.querySelectorAll('#shd-root .thing.link').length));
+    check('the sentinel reports a target while one is there to drive',
+      sentinelData(doc).shdFresh === 'true', sentinelData(doc).shdFresh);
+    window.close();
+  }
+  {
+    /* THE NEXT ONE, whatever it turns out to be: a src the contract does NOT exclude, ahead
+       of the posts, with the real handle after them. Position rejects it and so does taking
+       the last trailing partial, so this block pins the PAIR — remove both and it fails.
+       Each rule alone is pinned by the two blocks after it. */
+    const { doc, window } = await boot(listingPage({ strayPartial: true }),
+      'https://www.reddit.com/', noAuto);
+    window.eval(PAGER_SCRIPT);
+    const first = doc.querySelector('shreddit-feed faceplate-partial');
+    check('setup: an unnamed non-handle partial leads the feed, and the contract does not exclude it',
+      /recommendations/.test(first.getAttribute('src') || '') &&
+      !first.matches(window.SHD.C.PARTIAL_NOT_SRC) &&
+      !first.closest('article, shreddit-post'),
+      first.getAttribute('src'));
+    const before = doc.querySelectorAll('#shd-root .thing.link').length;
+    const ok = await window.SHD.paginator.loadNext('manual');
+    check('a partial ahead of the content cannot be the thing that continues it',
+      ok === true && window.__shdPager.decoyDrives === 0 &&
+      doc.querySelectorAll('#shd-root .thing.link').length === before + PAGER_PAGE_SIZE,
+      `driven=${JSON.stringify(window.__shdPager.driven)}`);
+    window.close();
+  }
+  {
+    /* THE POSITION RULE, ALONE. The same stray ahead of the posts, and NO handle — the feed
+       has ended, or the next handle has not landed yet. Nothing trails the posts, so there is
+       no "last" to prefer, and only position stands between the stray and a wasted load. */
+    const { doc, window } = await boot(listingPage({ strayPartial: true, noHandle: true }),
+      'https://www.reddit.com/', noAuto);
+    window.eval(PAGER_SCRIPT);
+    check('setup: the only partial in the feed is the stray, ahead of the posts',
+      doc.querySelectorAll('shreddit-feed faceplate-partial').length === 1 &&
+      /recommendations/.test(doc.querySelector('shreddit-feed faceplate-partial').getAttribute('src')));
+    const ok = await window.SHD.paginator.loadNext('manual');
+    check('a partial ahead of every post is not driven when nothing follows the posts',
+      ok === false && window.__shdPager.decoyDrives === 0,
+      `ok=${ok} driven=${JSON.stringify(window.__shdPager.driven)}`);
+    check('...the sentinel says exhausted',
+      sentinelData(doc).shdRefusal === 'exhausted', sentinelData(doc).shdRefusal);
+    /* And its diagnostics agree with it. shdFresh read the bare selector, which still
+       matched the stray, so bug 115's report showed a fresh target beside `exhausted` —
+       two answers to one question, from the one field meant to settle it. */
+    check('...and shdFresh agrees there is nothing to drive',
+      sentinelData(doc).shdFresh === 'false', sentinelData(doc).shdFresh);
+    window.close();
+  }
+  {
+    /* TAKING THE LAST, ALONE. The stray between the last post and the handle: position
+       accepts it, the contract does not name it, and it is first in document order. */
+    const { doc, window } = await boot(listingPage({ strayAfterPosts: true }),
+      'https://www.reddit.com/', noAuto);
+    window.eval(PAGER_SCRIPT);
+    const parts = [...doc.querySelectorAll('shreddit-feed faceplate-partial')];
+    check('setup: the stray sits after the posts and before the handle',
+      parts.length === 2 && /recommendations/.test(parts[0].getAttribute('src')) &&
+      /feed\/next/.test(parts[1].getAttribute('src')),
+      parts.map(p => p.getAttribute('src')).join(' | '));
+    const before = doc.querySelectorAll('#shd-root .thing.link').length;
+    const ok = await window.SHD.paginator.loadNext('manual');
+    check('of the partials that follow the posts, the last one is driven',
+      ok === true && window.__shdPager.decoyDrives === 0 &&
+      doc.querySelectorAll('#shd-root .thing.link').length === before + PAGER_PAGE_SIZE,
+      `driven=${JSON.stringify(window.__shdPager.driven)}`);
+    window.close();
+  }
+  {
+    /* OWNERSHIP, FOR ADS. A partial inside an ad with a src nothing names, after the last
+       post, and no handle: position accepts it and it is the last, so only "an ad is an
+       item" rejects it. On the live slice the ads' partials were hovercards the name also
+       catches; this stands in for the next thing an ad carries. */
+    const { doc, window } = await boot(listingPage({ adPartial: true, noHandle: true }),
+      'https://www.reddit.com/', noAuto);
+    window.eval(PAGER_SCRIPT);
+    const inAd = doc.querySelector('shreddit-ad-post faceplate-partial');
+    check('setup: the only partial is inside the ad, unnamed, and not inside an article',
+      doc.querySelectorAll('shreddit-feed faceplate-partial').length === 1 && !!inAd &&
+      !inAd.matches(window.SHD.C.PARTIAL_NOT_SRC) && !inAd.closest('article, shreddit-post'));
+    const ok = await window.SHD.paginator.loadNext('manual');
+    check('a partial inside an ad is never driven as the feed\'s continuation',
+      ok === false && window.__shdPager.decoyDrives === 0,
+      `ok=${ok} driven=${JSON.stringify(window.__shdPager.driven)}`);
+    window.close();
+  }
+  {
+    /* POSITION IS MEASURED AGAINST POSTS, not against every `article`. A module that is not
+       a post, appended after the handle, must not make the one real handle look like it
+       comes before the content — keyed on ITEM, this stopped at `no more pages` on the first
+       click with nothing driven. */
+    const { doc, window } = await boot(listingPage({ articleAfterHandle: true }),
+      'https://www.reddit.com/', noAuto);
+    window.eval(PAGER_SCRIPT);
+    const handle = doc.querySelector('shreddit-feed faceplate-partial');
+    check('setup: an article that is not a post follows the handle',
+      !!handle && !!handle.nextElementSibling?.matches('article') &&
+      !handle.nextElementSibling.querySelector('shreddit-post'));
+    const before = doc.querySelectorAll('#shd-root .thing.link').length;
+    const ok = await window.SHD.paginator.loadNext('manual');
+    check('an article after the handle does not stop pagination',
+      ok === true && window.__shdPager.loads === 1 &&
+      doc.querySelectorAll('#shd-root .thing.link').length === before + PAGER_PAGE_SIZE,
+      `ok=${ok} refusal=${sentinelData(doc).shdRefusal} driven=${JSON.stringify(window.__shdPager.driven)}`);
+    window.close();
+  }
+  {
+    /* THE FLOOR, and the half the parentage test could not give: with no continuation at
+       all, a feed full of hovercards must report exhausted rather than drive one. */
+    const { doc, window } = await boot(listingPage({ hovercard: true, noHandle: true }),
+      'https://www.reddit.com/', noAuto);
+    window.eval(PAGER_SCRIPT);
+    check('setup: the only partial left in the feed is the hovercard',
+      doc.querySelectorAll('shreddit-feed faceplate-partial').length === 1);
+    const ok = await window.SHD.paginator.loadNext('manual');
+    check('with no continuation, a hovercard is not driven as a page',
+      ok === false && window.__shdPager.decoyDrives === 0,
+      `ok=${ok} decoy=${window.__shdPager.decoyDrives}`);
+    check('...and the sentinel says so rather than spinning',
+      sentinelData(doc).shdRefusal === 'exhausted', sentinelData(doc).shdRefusal);
+    window.close();
   }
 
   console.log('\n\x1b[1mPAGINATION\x1b[0m');
@@ -6424,6 +6646,101 @@ async function boot(html, url, setup) {
   const click = (window, el) => el.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   const voteCol = (doc, id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"] > .midcol`);
 
+  console.log('\n\x1b[1mEDITING YOUR OWN COMMENTS\x1b[0m');
+  {
+    const page = (opts = {}) => commentsPage({ loggedIn: true, ...opts })
+      .replace('author="user0"', 'author="TeStEr"');
+    for (const [opts, settings, label] of [
+      [{ loggedIn: false }, {}, 'logged out'],
+      [{ noUsername: true }, {}, 'identity unknown'],
+      [{}, { account: false }, 'account layer disabled']
+    ]) {
+      const { doc } = await boot(page(opts), COMMENTS_URL, loggedInSettings(settings));
+      check(`no edit links when ${label}`, !doc.querySelector('#shd-root a.edit'));
+    }
+
+    const { doc, window } = await boot(page(), COMMENTS_URL, loggedInSettings());
+    fastAccount(window);
+    const source = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const row = doc.querySelector('#shd-root .thing[data-fullname="t1_c0"]');
+    const edit = row.querySelector('a.edit');
+    check('only the reader\'s own comment has edit (case insensitive)',
+      !!edit && doc.querySelectorAll('#shd-root a.edit').length === 1);
+
+    function menuFor(target) {
+      const menu = doc.createElement('shreddit-overflow-menu');
+      menu.setAttribute('comment-id', target.getAttribute('thingid'));
+      const shadow = menu.attachShadow({ mode: 'open' });
+      shadow.innerHTML = '<button aria-label="Open user actions" aria-expanded="false"></button>';
+      const state = { opens: 0, edits: 0 };
+      shadow.querySelector('button').onclick = (e) => {
+        state.opens++;
+        e.currentTarget.setAttribute('aria-expanded', 'true');
+        const item = doc.createElement('li');
+        item.setAttribute('role', 'menuitem');
+        item.innerHTML = '<div tabindex="0"><svg icon-name="edit"></svg>Edit comment</div>';
+        item.firstElementChild.onclick = () => {
+          state.edits++;
+          const editor = doc.createElement('comment-composer-host');
+          editor.setAttribute('edit-mode', '');
+          editor.innerHTML = '<textarea hidden></textarea>';
+          editor.focus = () => { editor.querySelector('textarea').hidden = false; };
+          target.appendChild(editor);
+        };
+        shadow.appendChild(item);
+      };
+      target.appendChild(menu);
+      return state;
+    }
+    // A child's menu must never be used when the parent's action row is still loading.
+    const child = doc.querySelector('shreddit-comment[thingid="t1_c1"]');
+    source.appendChild(child);
+    const childState = menuFor(child);
+    click(window, edit.parentElement);
+    click(window, edit);
+    let ownState;
+    setTimeout(() => { ownState = menuFor(source); }, 40);
+    check('edit waits for the owned menu, then opens the native editor once',
+      await waitFor(() => ownState?.edits === 1));
+    check('does not open a nested comment\'s menu', childState.opens === 0 && childState.edits === 0);
+    check('repeated clicks do not toggle the menu twice', ownState?.opens === 1);
+    check('editing opens the hidden editor and explains how to return',
+      await waitFor(() => source.classList.contains('shd-passthrough') &&
+        /Edit and save/.test(doc.querySelector('.shd-passthrough-note')?.textContent || '') &&
+        !source.querySelector('comment-composer-host textarea').hidden));
+    const model = window.SHD.model.comment(source);
+    model.bodyNode.innerHTML = '<p>Edited <strong>comment</strong></p>';
+    source.querySelector('comment-composer-host[edit-mode]').remove();
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    check('returning refreshes the cloned body and preserves formatting',
+      await waitFor(() => row.querySelector('.usertext-body strong')?.textContent === 'comment'));
+
+    const stuck = doc.createElement('comment-composer-host');
+    stuck.setAttribute('edit-mode', '');
+    stuck.innerHTML = '<textarea hidden></textarea>';
+    source.appendChild(stuck);
+    click(window, edit);
+    check('a mounted but unusable editor is reported as a failure',
+      await waitFor(() => /Could not open the editor automatically/.test(
+        doc.querySelector('.shd-passthrough-note')?.textContent || '')));
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    stuck.remove();
+    await hold(20);
+    source.querySelector(':scope > shreddit-overflow-menu').remove();
+    click(window, edit);
+    check('missing own controls show an actionable fallback, not a false success',
+      await waitFor(() => /Could not open the editor automatically/.test(
+        doc.querySelector('.shd-passthrough-note')?.textContent || '')));
+    check('the fallback still never clicks the child menu', childState.opens === 0);
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    await hold(20);
+    click(window, edit);
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    const cancelled = menuFor(source);
+    await hold(400);
+    check('leaving during hydration cancels the pending edit', cancelled.opens === 0);
+  }
+
   console.log('\n\x1b[1mA SAME-PAGE URL REWRITE DOES NOT KILL THE RENDER (bug 95)\x1b[0m');
   {
     /* Reported 2026-09-05 from a logged-in thread: the failure card with 52 processed, 0
@@ -7529,7 +7846,7 @@ async function boot(html, url, setup) {
        paginator is auto-loading further batches of `shreddit-comment` on a 2s heartbeat,
        inside the same 8s window. Any batch landing there read as "your comment arrived",
        and replyForm closed on it, taking the reader's draft with it while Reddit still
-       held unposted text. Log 773 wrote this rule for the `N more replies` control —
+       held unposted text. Log bug 70 wrote this rule for the `N more replies` control —
        "page-wide would credit the paginator's arrivals to our click" — and the post path
        never got it.
 

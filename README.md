@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.50.0](https://img.shields.io/badge/version-0.50.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.53.0](https://img.shields.io/badge/version-0.53.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.50.0 is out — everyone is welcome to try it
+### Beta 0.53.0 is out — everyone is welcome to try it
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
@@ -67,6 +67,9 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 > for anything you would mind losing. Reports from signed-in use are welcome and are how
 > it gets finished.
 >
+> Your own comments have an **edit** link that opens Reddit's native editor.
+> Save there, then choose **back to sheddit** to return to the updated comment.
+>
 > **It is off with one checkbox** on the options page, and turning it off changes nothing
 > else. Logged out, none of it runs at all.
 
@@ -75,6 +78,50 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
+
+**0.53.0 — edit your own comments**
+- **Added:** an **edit** link on your own comments in a thread when the signed-in
+  account layer is enabled. It opens Reddit's native editor with your existing text.
+- **Changed:** save in Reddit's editor, then choose **back to sheddit** to refresh the
+  displayed comment. If the editor cannot open automatically, the handoff explains
+  how to reach it through Reddit's comment menu.
+
+**0.52.0 — loading more, on any listing with ads**
+- **Fixed:** the hidden cards Sheddit could fetch instead of more posts turn out to sit
+  inside ads, which it never counted as posts — measured on a live listing, logged out.
+  An ad counts now, so nothing inside one is fetched as the next page.
+- **Fixed:** a rule added in 0.51.0 would have stopped paging outright if Reddit ever put
+  anything after its "load more" element in the feed. It only looks at posts now.
+- **Fixed:** a bare `loading…` line could sit at the bottom of Reddit's own page on a slow
+  first load.
+- **Changed:** the options page, [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md)
+  still said a few things the code does not do; corrected. See the
+  [changelog](CHANGELOG.md).
+
+**0.51.2 — the same build, with a test that no longer cries wolf**
+- **Fixed (tests only):** a check on loading more comments failed now and then on a busy
+  machine. It read the thread before the next batch had arrived; the extension was right
+  every time. Nothing you use changed.
+
+**0.51.1 — what Sheddit says about itself, corrected**
+- **Fixed:** the options page said video was the only thing that makes a request, a few
+  lines below the switch for the version check that also makes one. It names both now.
+- **Fixed:** the header's **auto** switch said "no more than once every twenty hours".
+  After a check that failed, the limit is an hour instead, so the next browser start
+  after that asks again; the tooltip says so, and so does
+  [PRIVACY.md](PRIVACY.md#the-short-version).
+- **Changed:** a full read of the documentation against the code — about 150 statements
+  that had gone stale. No behaviour changed. See the [changelog](CHANGELOG.md).
+
+**0.51.0 — the front page loads more posts again**
+- **Fixed:** infinite scroll on the front page stopped after the first batch. Reddit hands
+  the page a hidden element to fetch the next posts, and Sheddit triggers it because
+  Reddit's own layout is hidden — but Reddit now uses that same kind of element for the
+  community cards that pop up when you hover a subreddit name, and Sheddit was triggering
+  one of those instead. Measured live: stuck at 27 posts, 52 once the right one was
+  triggered. Ruled out two ways now, so renaming one of them does not bring it back.
+- **Known:** `load more` can still stick on your own profile overview — a second cause,
+  still open. See the [changelog](CHANGELOG.md).
 
 **0.50.0 — the signed-in corner, against today's Reddit**
 - **Fixed:** `log out` never found Reddit's control. Reddit's item is a plain focusable box
@@ -205,7 +252,7 @@ Full detail in the [changelog](CHANGELOG.md). The most recent builds:
   your inbox, a wiki page, a moderation queue — was being sent to `www.reddit.com`, where
   those pages differ or do not exist. Those links stay on old.reddit now.
 - **Documented:** on a subreddit marked adult, Sheddit clicks Reddit's own *over 18*
-  button for you. It has done that since 0.30.0 and the privacy policy did not say so; it
+  button for you. It has done that since 0.3.0 and the privacy policy did not say so; it
   does now, including what it means if you are signed in. The same release made it much
   harder to fire on anything that is not the age gate — an "Open in app" prompt offering
   *Yes* / *Not now* previously matched.
@@ -309,7 +356,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.50.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.53.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite
@@ -349,7 +396,8 @@ press ↻ on the Sheddit card in `chrome://extensions`. A hand-installed extensi
 updates itself, so the **updates** button in Sheddit's header turns orange once your copy
 is 30 days old. Under it, **auto: on/off** decides whether Sheddit asks GitHub for the
 current version once when your browser starts — on by default, no more than one request
-every twenty hours, and off means nothing leaves until you press the button yourself.
+every twenty hours (an hour, after one that failed), and off means nothing leaves until
+you press the button yourself.
 Details in [PRIVACY.md](PRIVACY.md#the-short-version).
 
 </details>
@@ -462,9 +510,9 @@ is about you:
   copy never updates itself, and a notice that has to be pressed is one the people
   running a broken build never see; that is the reason it was made automatic, and it is
   worth being blunt about the cost. GitHub, who serve the file, see what any host sees:
-  an IP address and a timestamp. No more than one request every twenty hours however
-  often you restart, and a failed attempt counts, so a browser that cannot reach GitHub
-  backs off rather than retrying at every start.
+  an IP address and a timestamp. After an answer, no more than one request every twenty
+  hours however often you restart; a failed attempt counts too and waits an hour, so a
+  browser that cannot reach GitHub backs off rather than retrying at every start.
 
 **One thing Sheddit presses for you:** on a subreddit marked adult it clicks Reddit's own
 *over 18* button, without asking. If you are signed in, Reddit records that affirmation
@@ -492,7 +540,7 @@ ships a redesign and Sheddit breaks, the fix is almost always in one file. Start
 | [docs/engineering-log.md](docs/engineering-log.md) | every bug found so far, and what each one looked like |
 | [TESTING.md](TESTING.md) | how to test, and the traps worth knowing about |
 | [OLD-REDDIT.md](OLD-REDDIT.md) | the measured spec of the site this imitates |
-| [PRIVACY.md](PRIVACY.md) · [SECURITY.md](SECURITY.md) | what leaves your browser (two things), and the threat model |
+| [PRIVACY.md](PRIVACY.md) · [SECURITY.md](SECURITY.md) | what leaves your browser (three requests), and the threat model |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, and what never worked |
 
 ## License

@@ -12,6 +12,8 @@
  *   - <shreddit-ad-post> containing NO <shreddit-post>
  *   - <faceplate-partial loading="programmatic"> as the pagination handle
  *   - comments as FLAT siblings carrying depth=
+ *
+ * Two days later live threads were NESTED instead; that shape is nestedCommentsHtml() below.
  */
 
 /* THE EXPIRY STAMP ON A PACKAGED RENDITION, MINTED RATHER THAN WRITTEN DOWN.
@@ -228,10 +230,18 @@ const COMMENT_DEPTHS = [0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 2, 0, 1, 2, 3, 0, 1, 0, 0,
 const PAGER_SCRIPT = `
 (() => {
   const PAGE_SIZE = 3;
-  window.__shdPager = { loads: 0, times: [] };
+  window.__shdPager = { loads: 0, times: [], decoyDrives: 0, driven: [] };
   class ShdFakePartial extends HTMLElement {
     loadContent() {
       const st = window.__shdPager;
+      const src = this.getAttribute('src') || '';
+      st.driven.push(src);
+      /* A HOVERCARD YIELDS NOTHING, which is the whole of the live failure: the paginator
+         drove one, it appended no posts, and the row count sat still while the chain
+         burned its budget. One custom element serves every faceplate-partial on the page,
+         so without this branch the decoy would helpfully append a page like the real
+         handle and the test could not tell the two apart. */
+      if (/hover-card|recommendations|promoted/.test(src)) { st.decoyDrives++; return; }
       st.loads++; st.times.push(Date.now());
       const feed = document.querySelector('shreddit-feed');
       if (!feed) return;
@@ -279,7 +289,9 @@ const PAGER_PAGE_SIZE = 3;
 const COMMENT_PAGER_SCRIPT = `
 (() => {
   const BATCH = [0, 1, 1, 2, 0];
-  window.__shdCommentPager = { loads: 0 };
+  // loads counts REQUESTS; delivered counts batches that have landed. The gap between them
+  // is the 50ms below, and a test that reads one without the other is racing it.
+  window.__shdCommentPager = { loads: 0, delivered: 0 };
   window.__shdDecoyLoads = 0;
   class ShdFakeCommentPartial extends HTMLElement {
     loadContent() {
@@ -329,6 +341,7 @@ const COMMENT_PAGER_SCRIPT = `
       next.setAttribute('loading', 'programmatic');
       next.setAttribute('src', '/more-comments');
       tree.appendChild(next);
+      window.__shdCommentPager.delivered++;
   }
   if (!customElements.get('faceplate-partial')) {
     customElements.define('faceplate-partial', ShdFakeCommentPartial);
@@ -471,10 +484,14 @@ function listingPage(opts = {}) {
     ${SR_OUTLET}
     <div><div id="subgrid-container"><div><main id="main-content">
       <shreddit-feed>
+        ${opts.strayPartial ? STRAY_PARTIAL : ''}
         ${POSTS.map((p, i) => postHtml(
           opts.removed && i === 0 ? { ...p, removed: opts.removed } : p)).join('')}
-        <shreddit-ad-post><div>sponsored, contains no shreddit-post</div></shreddit-ad-post><hr>
-        <faceplate-partial loading="programmatic" src="/feed/next"></faceplate-partial>
+        <shreddit-ad-post><div>sponsored, contains no shreddit-post</div>${opts.adPartial ? AD_PARTIAL : ''}</shreddit-ad-post><hr>
+        ${opts.hovercard ? HOVERCARD_PARTIAL : ''}
+        ${opts.strayAfterPosts ? STRAY_PARTIAL : ''}
+        ${opts.noHandle ? '' : '<faceplate-partial loading="programmatic" src="/feed/next"></faceplate-partial>'}
+        ${opts.articleAfterHandle ? NON_POST_ARTICLE : ''}
       </shreddit-feed>
     </main></div></div></div>
     <div id="right-sidebar-container"></div>
@@ -504,6 +521,51 @@ const EMPTY_FEED_PANEL = `
           <p>Make one and get this feed started.</p>
           <a href="/r/911truth/submit">Create a post</a>
         </div>`;
+
+/* A community hovercard's partial, IN the feed and in no post — the shape reported live
+   2026-09-21 that defeated the `!closest(ITEM)` ownership test. It is deliberately placed
+   BEFORE the continuation and after the last post's wrapper, because that is the ordering
+   that made querySelector hand it back first. Same `loading="programmatic"` the real
+   continuation carries, so nothing but its src and its place ahead of the handle tells
+   them apart. Note what that place is: AFTER the last post, where the position rule accepts
+   it — in this fixture only the name rejects it, or failing that, taking the last trailing
+   partial rather than the first. */
+const HOVERCARD_PARTIAL =
+  '<faceplate-partial loading="programmatic" ' +
+  'src="/svc/shreddit/community-hover-card/oldreddit"></faceplate-partial>';
+
+/* THE NEXT ONE, whatever it turns out to be. C.PARTIAL_NOT_SRC names the hovercard because
+   it was measured; it cannot name a partial Reddit has not shipped yet, so this decoy
+   carries a src the contract does NOT exclude. Live, the next one has already shipped: a
+   `/svc/shreddit/devvit-privacy-modal/…` partial, free and ahead of the posts in the
+   /popular feed (2026-09-25) — 0.50.0 drove it. Where the decoy sits decides which rule
+   can reject it, and the suite uses both places:
+     strayPartial     ahead of the posts. With no handle at all, only the position rule
+                      rejects it. With the handle present, taking the last trailing partial
+                      rejects it too — which is why that shape alone pinned neither rule.
+     strayAfterPosts  between the last post and the handle. Position accepts it, so only
+                      taking the LAST trailing partial rather than the first rejects it. */
+const STRAY_PARTIAL =
+  '<faceplate-partial loading="programmatic" ' +
+  'src="/svc/shreddit/recommendations/feed"></faceplate-partial>';
+
+/* A partial INSIDE AN AD, with a src nothing names. Measured 2026-09-25 on a live
+   /r/programming slice, logged out: each ad carries its advertiser's
+   `/svc/shreddit/user-hover-card/<name>` partial, and C.AD_POST is not wrapped in an
+   `article` — so until ads counted as items, those were the partials outside every post,
+   and 0.50.0 drove the first one. The live src is named by C.PARTIAL_NOT_SRC; this
+   stand-in is not, so only the ownership rule (ads are items) can reject it. */
+const AD_PARTIAL =
+  '<faceplate-partial loading="programmatic" ' +
+  'src="/svc/shreddit/promoted-post-actions/xfinity"></faceplate-partial>';
+
+/* An `article` that is not a post, AFTER the continuation — a promoted unit, or any module
+   Reddit might append behind the handle. ITEM holds a bare `article`, and while position
+   was measured against ITEM this alone made the one real handle read as ahead of the
+   content: `no more pages` on the first click, nothing driven. Position is measured
+   against delivered posts (SOURCE) now. */
+const NON_POST_ARTICLE =
+  '<article><div>a module that is not a post</div></article>';
 
 const emptyListingPage = () =>
   listingPage().replace(/<shreddit-feed>[\s\S]*<\/shreddit-feed>/,

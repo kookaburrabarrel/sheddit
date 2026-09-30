@@ -444,7 +444,7 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     override — `.flat-list.buttons a.comments { color: var(--shd-accent) }` — made the first
     item of every row accent blue, so the row competed with the title instead of receding
     under it. Measured as the most noticeable per-row departure from the real thing. Related
-    palette-level departures fixed in the same pass, all from `old-reddit.md`: the header was
+    palette-level departures fixed in the same pass, all from `OLD-REDDIT.md`: the header was
     grey where old reddit's is `#cee3f8` on `#5f99cf`; unselected sort tabs were flat blue
     pills, inverting the folder-tab metaphor (old reddit draws *every* tab bordered and white
     with orangered text, and only the **bottom** border distinguishes the selected one); the
@@ -1426,7 +1426,7 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
     script `exclude_matches` `old.reddit.com` — correctly, since old reddit is the
     thing this extension imitates — so on the one host where a reader most needs to be
     told *this is not us*, there was nothing of ours that could say it. That is bug
-    52's argument ("a silent hand-back is indistinguishable from an unrelated bug")
+    13's argument ("a silent hand-back is indistinguishable from an unrelated bug")
     arriving through a door the exclusion held open.
 
     The fix is one script and one stylesheet on that host and nothing else
@@ -1450,7 +1450,7 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
 
 97. **The extension answered Reddit's 18+ prompt for you, and three documents said it
     could not.** `answerAgeGate()` has clicked Reddit's own affirmative button since
-    0.30.0, deliberately: a merely hidden gate leaves Reddit's scroll lock in place and
+    0.3.0, deliberately: a merely hidden gate leaves Reddit's scroll lock in place and
     the session unattested, so the page underneath the layout half-works. That decision
     stands. What was wrong was everything around it. PRIVACY.md said Sheddit "never acts
     on your behalf", SECURITY.md said "it cannot act on your account", and the Chrome
@@ -1912,7 +1912,7 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      reader's own comment appearing under the target and nothing weaker; a slow post that
      misses the window goes the safe way — `arrival`, reveal-only, draft kept, "check the
      thread before sending it again". The comment path is narrowed to the reader's author the
-     way the post path already was (log 773), so a paginator batch or a stranger's reply
+     way the post path already was (log 70), so a paginator batch or a stranger's reply
      cannot stand in either.
 
      **Why the suite never saw it, which is the finding worth keeping.** The fixture posted
@@ -2040,6 +2040,130 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      the body rule beneath it already was.
 
 
+115. **The paginator drove Reddit's hovercards instead of its feed — again, and the guard
+     written for exactly that could not see it.** Reported live 2026-09-21, signed in, front
+     page: 27 rows, scroll, 27 rows, repeatedly; then `no more pages` with unproductive=7 and
+     exhausted=5 while a fresh target was still being reported. The target it had chosen was
+     `/svc/shreddit/community-hover-card/oldreddit`. Driving the real
+     `/svc/shreddit/feeds/home-feed` partial by hand on the same page: 27 rows to 52.
+
+     WHAT MAKES THIS WORTH AN ENTRY is that the defence already existed and had a mutation
+     row. `partial()` rejects any partial inside an ITEM, and `ITEMS.LISTING` is
+     `article, shreddit-post`, with a comment recording the first time this happened ("40
+     pages burned, ZERO new rows") and a row named *hovercard partials inside posts are
+     driven as pages again*. Every word of that is still true and none of it fired, because
+     **the hovercards moved out of the posts.** The one measured this time sat in the feed
+     and in no post at all, earlier in document order than the real handle, so it passed the
+     ownership test and `querySelector` returned it first. A guard keyed to where a thing
+     was is not a guard against the thing.
+
+     So the fix is two narrowings that fail differently, neither sufficient alone — the
+     shape the age-gate fix already uses. `C.PARTIAL_NOT_SRC` excludes the hovercard by the
+     src we measured, wherever it sits; that is what fixes the reported page, and on its own
+     it is a string against a path Reddit can rename. `partial()` adds the structural half,
+     which needs no src: **a continuation follows the content it continues.** Reddit appends
+     the next slice's handle after the slice it is continuing, while a partial belonging to
+     something already delivered hangs off a link inside it. That one catches the next
+     non-handle partial nobody has named, in the position this one was found — and it is
+     also insufficient alone, because a partial appended past the end of the slice passes
+     it. Both fail safe: nothing qualifies, and the sentinel says `no more pages` rather
+     than driving something that was never going to yield a row.
+
+     WRITING THE TEST EXPOSED THE WEAKER HALF OF MY OWN FIX, which is the part worth
+     keeping. The first cut was the structural rule alone, and its three assertions passed —
+     but only because the fixture's decoy sat after the last post, so what actually saved it
+     was "take the last handle", not the position rule. The floor case (a feed whose ONLY
+     partial is a hovercard) failed immediately and said so. Two decoys now: the measured
+     hovercard, and a `recommendations` partial ahead of the posts carrying a src the
+     contract deliberately does NOT exclude — without the second, removing the position rule
+     breaks no assertion and the rule is decoration. Three mutation rows, one per narrowing
+     and one reverting `partial()` whole.
+
+     (Log 117 corrects two things here: the second decoy did not make the position rule
+     load-bearing either, and the free hovercards measured live were inside ads.)
+
+116. **The comment-pagination test raced its own fixture.** `test/extension.js` failed one
+     run in several — `rendered count matches the slice plus whatever has loaded`, with
+     `{"loads":1,"rendered":8,"sources":8}` — and passed on a re-run, so it read as flaky.
+     It was not one. The fixture counts a load when it is REQUESTED and lands the batch 50ms
+     later (a delay added on purpose, so a skipped wait cannot pass), and the renderer draws
+     it after that; the test snapshotted the thread with no wait at all, and
+     on a short page the sentinel is already in range, so a load was often in flight. Under
+     CPU load it failed 3 runs in 3. Widening the fixture's delay to 1.5s made it
+     deterministic, and found a second instance: `each load adds a full batch` read 13
+     rendered after 2 loads.
+
+     The fixture now counts `delivered` as well as `loads`, and the test compares only a
+     snapshot in which the two agree and every delivered comment is drawn — taken in one
+     `page.evaluate`, so a load cannot start between the settle test and the numbers.
+     Nothing is loosened: a duplicate still fails `exactly one node` at once, and a renderer
+     that drops a batch never settles and is asserted as it stands at the deadline. With
+     the 1.5s delay the old test fails both checks and the new one passes; 12 runs in 12
+     under the load that failed 3 in 3. A counter of requests is not a counter of results.
+
+117. **Bug 115 was an ad, its fix's tests could not tell its rules apart, and the probe built
+     to catch Reddit changing had the same bug.** An adversarial review of 0.51.x, and one
+     live fetch that settled most of it.
+
+     WHERE THE HOVERCARDS WERE. A logged-out /r/programming slice, fetched 2026-09-25 the way
+     the partial fetches it (`Accept: text/vnd.reddit.partial+html`): 24 posts, 4 ads, 29
+     partials. 28 were `/svc/shreddit/user-hover-card/<name>` — one per post author inside
+     the post, where ITEMS already caught them, and one per advertiser inside the ad.
+     `shreddit-ad-post` is not wrapped in an `article` and ITEMS never listed it, so those
+     four were the free partials, and the first sat ahead of the continuation. 0.50.0's
+     bundle, booted on that slice, drove `user-hover-card/xfinity`; 0.51.2's drove the
+     continuation. So 115's "the hovercards moved out of the posts" is not what the markup
+     shows: the ones in posts are still in posts, and the free ones are in ads. Where the
+     reported community card sat on the signed-in front page was never recorded — but an ad
+     is an item now, so nothing inside one is driven, whatever it is called. Two more slices
+     the same day: /r/aww had the same shape (0.50.0 drove `user-hover-card/Levis_Official`,
+     an advertiser's), and the /popular feed carried a free `devvit-privacy-modal` partial
+     ahead of its posts, named by nothing — 0.50.0 drove that. 0.52.0 drives the
+     continuation on all three; the devvit one is the position rule's live case.
+
+     THE TWO RULES WERE ONE HAT. The `recommendations` decoy sat ahead of the posts AND
+     ahead of the real handle, so "take the last trailing partial" rejected it by itself:
+     replacing `free.filter(followsLastItem)` with `free` passed 1099 of 1099, and so did
+     taking the first trailing partial instead of the last. Each rule alone decides only a
+     shape the suite did not have — position, when no handle follows the posts at all;
+     taking the last, when a stray sits between the last post and the handle. Both are
+     fixtures now, with the ad and the article below, and each has a mutation row that
+     fails only its own block. The row that "reverts to 0.50.0" kept the name exclusion in
+     the selector, so it reverted nothing of the kind; it does now.
+
+     THE POSITION RULE COULD END A FEED. It measured the last delivered item against ITEM,
+     which holds a bare `article`: an `article` appended after the handle — a promoted unit,
+     any module — made the one real handle read as ahead of the content, and the paginator
+     said `no more pages` on the first click with nothing driven. Measured in the fixture,
+     not seen live: the slice ends batch, continuation, `feed-serving-event`, and the
+     continuation holds only `shreddit-feed-page-loading` and `ac-track`. It measures against
+     SOURCE now, what a load is counted by — and verify:live checks the premise, because the
+     day it breaks, this rule stops pagination outright.
+
+     THE PROBE HAD THE PAGINATOR'S BUG. verify:live found "the programmatic pagination
+     partial" with `querySelector(C.FEED_PARTIAL)`, and on the live slice that is the first
+     post's author hovercard: the check could not fail while any post had an author, and the
+     thin-feed drive fetched a hovercard. The 2026-09-05 reading in question 11 — partial
+     present, method present, "delivered nothing, consuming itself", the feed "genuinely
+     ended at one post" — fits that exactly, and is withdrawn as evidence. `C.FEED_PARTIAL`
+     carries the name exclusion now (gate.js reads it bare too), but a bare match is still a
+     first guess — on /r/aww a media overlay inside the first post, on /popular the devvit
+     modal — so the probe resolves the handle by the paginator's rules and marks the one it
+     drives.
+
+     SMALLER, SAME ROUND. `shdFresh` read the bare selector, so it said `true` beside
+     `exhausted` — the pair 115's report had to explain away; it asks `partial()` now.
+     `showLoading()` could mount with neither gate class (a tick after `unblank()`, posts
+     before the pipeline engaged): a bare `loading…` under native Reddit, the state `fail()`
+     names as a bug; it refuses that now. And the Docs QA pass's own claims, read back
+     against the code: the options page still called video the one request; PRIVACY still
+     said "two requests" in one place; "a check that failed is retried after an hour" (the
+     limit is an hour — nothing retries while the browser stays open); the release
+     checklist left out that `refresh-zip.sh <version>` commits, pushes and publishes a
+     release before any test runs; and `npm test` did not read the README's Install-section
+     version that CONTRIBUTING said it guarded.
+
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
@@ -2076,7 +2200,7 @@ carries the unanswered-pagination question below.
 Measured directly: 7 rows × 10 viewport widths from 360–1920px, every
 `#siteTable > .thing.link` reports an **identical** `left`, with zero horizontal overflow;
 comment indentation is a uniform 25px per depth (31px until it was measured against
-old.reddit — see old-reddit.md). This is now a standing assertion
+old.reddit — see OLD-REDDIT.md). This is now a standing assertion
 ("every row shares one left offset, at every width"), so a regression fails the build
 rather than becoming folklore again.
 
@@ -2375,7 +2499,9 @@ the way a question got settled is usually more useful than the answer.
       the extension would see (one row, "no more pages"). The first signed-in load of the
       day answered 27. Unexplained; the probe now dumps the feed's direct children and the
       custom elements inside it when it is thin, so the next such page says what Reddit
-      put there instead of posts.
+      put there instead of posts. (Withdrawn as evidence by log 117: the probe drove the
+      first match of `C.FEED_PARTIAL`, which on live markup is a post author's hovercard.
+      "For that session the feed ended" is unmeasured until a run that drives the handle.)
 
     Status after five runs: session detection, both vote contracts (post and comment), the
     top-level composer and the reply control verified. Still unmeasured by a probe, by
@@ -2559,6 +2685,20 @@ the way a question got settled is usually more useful than the answer.
     carries three reverts that came from reasoning about it instead of measuring it, and
     question 14 above is the standing note saying so.
 
+    **LARGELY ANSWERED, 2026-09-21 — see log 115, and read this entry knowing that.** A live
+    round on the front page produced the reading this question kept asking for, and the
+    mechanism is that the paginator was driving a community-hovercard partial instead of the
+    feed's continuation: the rows could not grow because the thing being driven was never
+    going to grow them. `unproductive=7`, `exhausted=5`, a fresh target still reported —
+    exactly the signature the candidates above predict. That is fixed.
+
+    WHAT IS NOT ANSWERED, and why this stays open: the symptom in both sightings — the one
+    this question opens with and the one below — is a label stuck on `loading more…`, and driving a hovercard does not produce that. It
+    produces a completed load that yielded nothing — `unproductive`, `setStatus(null)`, back
+    to `load more`. So the front-page case is closed and the STUCK LABEL is not. If it
+    recurs after 0.51.0, the reading is unchanged and now much more likely to isolate a
+    second mechanism rather than this one.
+
     **A second sighting, 2026-09-17**, on the reader's OWN profile overview
     (`/user/<me>/`): 18 comments render, then `loading more…` indefinitely — polled at 9s
     and again later, and `SETTLE_CEILING_MS` is 6s, so this is not the ceiling. Another
@@ -2569,41 +2709,6 @@ the way a question got settled is usually more useful than the answer.
     calls the partial's `loadContent()` directly. The reading is the same one line, and it
     IS reachable from page-context JS, because `diag()` writes to DOM attributes:
     `document.querySelector('.shd-sentinel').dataset`. Two sightings and still no dataset.
-
-20. **A post on the reader's own profile overview is consumed and not drawn.** Native
-    overview held 1 `shreddit-post` + 18 `shreddit-profile-comment`; Sheddit rendered the
-    18. The post carries `data-shd=done`, so `pipeline.js` reached it and
-    `listing.consume()` returned false — which means `model.post()` rejected it, and that
-    rejects only for a missing id, title or permalink. Old reddit interleaves posts in an
-    overview, so this is a real omission, and it is one attribute away from a fix. No
-    capture of a profile-overview `shreddit-post` exists; the one on the page the report
-    came from is the reading, and it needs nothing from the extension's world:
-    `[...document.querySelector('shreddit-post').attributes].map(a => a.name)` on
-    `/user/<me>/`, plus whether `document.querySelector('shreddit-post a[slot="full-post-link"]')`
-    and `shreddit-post [slot="title"]` exist. Whichever of the triad is absent names the
-    clause to add.
-
-
-18. **Why the reply control is sometimes not there at all.** Three saves on one comment in
-    one live thread reached three different steps: `insert`, a false `done`, and
-    `reply-control` — the last on a fresh page load, meaning `C.NATIVE.reply` resolved to
-    nothing even after `resolveLate()` scrolled the native comment into the suppressed box
-    and waited `hydrateWaitMs`. The action row is lazily hydrated (log 107), so the chain
-    is non-deterministic on the same comment, and 3s may simply be short on a cold load —
-    or the nudge may fire before the native tree has laid out enough for the row to be
-    inside the box. Not measured, and not tuned blind: the reading is
-    `data-shd-step` across several saves on one comment, with the time since load noted,
-    and whether `SHD.dom.deepQuery(comment, SHD.C.NATIVE.reply)` resolves by hand a moment
-    after a `reply-control` failure. If it does, the wait is short; if it does not, the
-    row is not hydrating and the nudge is the thing to look at.
-
-19. **A comment rendered twice in the tree.** Reported in passing from the same session,
-    not chased: one comment appeared twice in Sheddit's rendering. Every dedupe in the
-    pipeline keys on the source element's stamp, so the likeliest cause is the same
-    comment arriving twice as two distinct elements — a paginator batch overlapping the
-    served slice, or a history traversal re-inserting one — but that is a guess. Needs the
-    thread URL and which comment, and `document.querySelectorAll('[data-fullname="<id>"]')`
-    counted against the native `shreddit-comment[thingid="<id>"]` count on the same page.
 
 17. ~~**Whether the per-comment composer has the same trusted-gesture ceiling the top-level
     one does.**~~ **ANSWERED: no — see log 112.** A save on a comment reached `insert`,
@@ -2630,6 +2735,40 @@ the way a question got settled is usually more useful than the answer.
     the ceiling is there too and this entry becomes a log. Anything past it — `editor`,
     `insert`, or a posted reply — means the reply control is not gated and only the
     top-level composer is.
+
+18. **Why the reply control is sometimes not there at all.** Three saves on one comment in
+    one live thread reached three different steps: `insert`, a false `done`, and
+    `reply-control` — the last on a fresh page load, meaning `C.NATIVE.reply` resolved to
+    nothing even after `resolveLate()` scrolled the native comment into the suppressed box
+    and waited `hydrateWaitMs`. The action row is lazily hydrated (log 107), so the chain
+    is non-deterministic on the same comment, and 3s may simply be short on a cold load —
+    or the nudge may fire before the native tree has laid out enough for the row to be
+    inside the box. Not measured, and not tuned blind: the reading is
+    `data-shd-step` across several saves on one comment, with the time since load noted,
+    and whether `SHD.dom.deepQuery(comment, SHD.C.NATIVE.reply)` resolves by hand a moment
+    after a `reply-control` failure. If it does, the wait is short; if it does not, the
+    row is not hydrating and the nudge is the thing to look at.
+
+19. **A comment rendered twice in the tree.** Reported in passing from the same session,
+    not chased: one comment appeared twice in Sheddit's rendering. Every dedupe in the
+    pipeline keys on the source element's stamp, so the likeliest cause is the same
+    comment arriving twice as two distinct elements — a paginator batch overlapping the
+    served slice, or a history traversal re-inserting one — but that is a guess. Needs the
+    thread URL and which comment, and `document.querySelectorAll('[data-fullname="<id>"]')`
+    counted against the native `shreddit-comment[thingid="<id>"]` count on the same page.
+
+20. **A post on the reader's own profile overview is consumed and not drawn.** Native
+    overview held 1 `shreddit-post` + 18 `shreddit-profile-comment`; Sheddit rendered the
+    18. The post carries `data-shd=done`, so `pipeline.js` reached it and
+    `listing.consume()` returned false — which means `model.post()` rejected it, and that
+    rejects only for a missing id, title or permalink. Old reddit interleaves posts in an
+    overview, so this is a real omission, and it is one attribute away from a fix. No
+    capture of a profile-overview `shreddit-post` exists; the one on the page the report
+    came from is the reading, and it needs nothing from the extension's world:
+    `[...document.querySelector('shreddit-post').attributes].map(a => a.name)` on
+    `/user/<me>/`, plus whether `document.querySelector('shreddit-post a[slot="full-post-link"]')`
+    and `shreddit-post [slot="title"]` exist. Whichever of the triad is absent names the
+    clause to add.
 
 
 Two settled things, so nobody reopens them: the **staircase indentation report does not

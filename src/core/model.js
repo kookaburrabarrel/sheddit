@@ -276,15 +276,6 @@ SHD.model = (() => {
   }
 
   /**
-   * No `thumbnail` attribute exists on modern posts — recon confirmed. We lift the first
-   * CONTENT image out of the source subtree instead.
-   *
-   * Verified 2026-08-12 over 28 live posts: 22/22 non-text posts resolved, 0 false
-   * positives. An earlier, looser rule matched `styles.redditmedia.com` (subreddit icons)
-   * and `emoji.redditmedia.com` (flair emoji) and gave every text post a bogus thumbnail —
-   * hence the host allowlist plus the ancestor exclusion below.
-   */
-  /**
    * Is this post flagged adult?
    *
    * Written to survive both spellings a custom element can use for a boolean. A framework
@@ -295,7 +286,8 @@ SHD.model = (() => {
    * the second wrong (`nsfw="false"` reads as adult, so EVERY post gets a placeholder).
    * So: absent is safe, "false"/"0" is safe, present-with-anything-else is adult.
    *
-   * See C.NSFW_ATTRS for why this consults several names and what confirms it.
+   * See C.NSFW_ATTRS for why the list is down to one name (and stays a list) and what
+   * confirms it.
    */
   function nsfwOf(el) {
     return C.NSFW_ATTRS.some(name => {
@@ -310,7 +302,7 @@ SHD.model = (() => {
    * Reddit's own "this post was deleted / removed" line, or null.
    *
    * Matched by walking TEXT rather than by a selector, because the sentence is what was
-   * captured and the element carrying it was not (C.POST_REMOVED_TEXT). Three rules, each
+   * captured and the element carrying it was not (C.POST_REMOVED_TEXT). Four rules, each
    * of which the obvious version gets wrong:
    *
    *  - INNERMOST wins. Every ancestor of the notice contains its text, so a first-match
@@ -376,6 +368,15 @@ SHD.model = (() => {
     img.getAttribute(C.GALLERY_LAZY_SRC)
   ];
 
+  /**
+   * No `thumbnail` attribute exists on modern posts — recon confirmed. We lift the first
+   * CONTENT image out of the source subtree instead.
+   *
+   * Verified 2026-08-12 over 28 live posts: 22/22 non-text posts resolved, 0 false
+   * positives. An earlier, looser rule matched `styles.redditmedia.com` (subreddit icons)
+   * and `emoji.redditmedia.com` (flair emoji) and gave every text post a bogus thumbnail —
+   * hence the host allowlist plus the ancestor exclusion below.
+   */
   function thumbnailFor(el, type) {
     if (!SHD.settings.showThumbnails) return null;
     if (type === 'text') return null;
@@ -390,14 +391,6 @@ SHD.model = (() => {
     return null;
   }
 
-  /**
-   * Every URL an <img> offers, with the width it claims.
-   *
-   * srcset is where a full-size version lives when there is one: Reddit serves a
-   * responsive set and `src` is usually the small member of it. A `w` descriptor states
-   * the width outright; anything else — a bare URL, an `x` descriptor — scores zero, so a
-   * set whose sizes cannot be read never outranks one whose sizes can.
-   */
   /** Is this URL the file as uploaded, rather than a generated resize of it? */
   const isOriginal = (u) =>
     C.ORIGINAL_HOST.test((String(u || '')).split('/')[2] || '');
@@ -408,6 +401,14 @@ SHD.model = (() => {
     return c.w > bestW;
   }
 
+  /**
+   * Every URL an <img> offers, with the width it claims.
+   *
+   * srcset is where a full-size version lives when there is one: Reddit serves a
+   * responsive set and `src` is usually the small member of it. A `w` descriptor states
+   * the width outright; anything else — a bare URL, an `x` descriptor — scores zero, so a
+   * set whose sizes cannot be read never outranks one whose sizes can.
+   */
   function imageCandidates(img) {
     const out = [];
     for (const part of (img.getAttribute('srcset') || '').split(',')) {
@@ -528,7 +529,7 @@ SHD.model = (() => {
          thing that can, and C.COMMENT_SCORE_HIDDEN says how confident to be in it. */
       scoreHidden: el.hasAttribute(C.COMMENT_SCORE_HIDDEN),
       created: attr(el, A.created),
-      // Comments are FLAT siblings; depth is the only threading signal.
+      // Flat siblings or DOM-nested, depth is the threading signal that holds in both.
       depth: num(el, A.depth) ?? 0,
       position: num(el, A.position),
       permalink: attr(el, A.permalink),
@@ -587,19 +588,18 @@ SHD.model = (() => {
    * A comment as it appears on a USER PROFILE page — flat, standalone, each one linking
    * back to the thread it lives in.
    *
-   * Everything here is defensive because the profile comment CONTRACT IS UNVERIFIED (see
-   * C.PROFILE_COMMENT). The attribute names are shreddit-comment's — the only comment
-   * attribute set ever captured — and the required pair is id + permalink: a profile
-   * comment row is navigation to a thread as much as it is text, and a page of comments
-   * we cannot link is not worth rendering over the native one. A reject here is not
-   * tolerated the way a listing tolerates one: pipeline.js hands the whole page back to
-   * native Reddit on the first profile reject, because on an unverified route a single
-   * unreadable element is evidence the contract does not hold, not an outlier.
+   * Everything here is defensive because part of the profile comment CONTRACT IS STILL
+   * UNVERIFIED (see C.PROFILE_COMMENT). The attribute names are the element's own,
+   * captured live 2026-08-21 (C.PROFILE_COMMENT_ATTR — NOT shreddit-comment's), and the
+   * required set is id + href + body: a profile comment row is navigation to a thread as
+   * much as it is text, and a page of comments we cannot link is not worth rendering over
+   * the native one. pipeline.js hands the whole page back to native Reddit only when
+   * EVERY profile comment rejects (bug 68) — the contract is verified enough now that a
+   * lone reject is likelier an outlier than a broken contract.
    *
-   * The subreddit and the thread URL are DERIVED from the permalink
-   * (/r/<sub>/comments/<post>/<slug>/<comment>/) rather than trusted to exist as
-   * attributes — the permalink shape is a contract every capture has agreed on, and it
-   * spares this model two more guessed attribute names.
+   * The subreddit and the thread URL are DERIVED from the href (two live shapes — see
+   * below) rather than trusted to exist as attributes, which spares this model two more
+   * guessed attribute names.
    */
   function profileComment(el) {
     const A = C.PROFILE_COMMENT_ATTR;

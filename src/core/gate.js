@@ -449,12 +449,20 @@ SHD.gate = (() => {
    * swallowed. A themed `loading…` line is the honest occupant of that window — it says
    * the click landed and the page is coming, and reveal() replaces it with the render.
    *
-   * Only ever mounted mid-session (wasRevealed), so .shd-active is on and the styles in
-   * old-reddit.css resolve; a first load keeps the --shd-blank blackout instead.
+   * Only ever mounted under one of the two gate classes: mid-session (wasRevealed) with
+   * .shd-active on, where old-reddit.css styles it, and on a first load from check()'s
+   * ticks with .shd-gate on, where suppress.css styles it over the blackout. The function
+   * enforces that rather than trusting its callers. check() asks on EVERY tick of a route
+   * it takes, and a tick can land after unblank() has dropped .shd-gate: the feed was not
+   * there at the first look, posts arrived before the pipeline engaged, and the `!engaged`
+   * branch returns without unblanking again. Mounted then, the line was a bare unstyled
+   * `loading…` paragraph under native Reddit — the state fail() documents as a bug.
    * ------------------------------------------------------------------ */
   function showLoading() {
     if (!document.body || stopped()) return;
     document.getElementById(LOADING_ID)?.remove();
+    const cls = document.documentElement.classList;
+    if (!cls.contains('shd-gate') && !cls.contains(SHD.C.BODY_CLASS)) return;
     const line = el('div', { id: LOADING_ID, role: 'status' },
       el('p', { textContent: 'loading…' }));
     /* Asked here as well as in parkOutgoing(), so the two are order-independent: the
@@ -774,8 +782,8 @@ SHD.gate = (() => {
       try { fn(reason); } catch (e) { console.warn('[sheddit] stop listener threw', e); }
     }
 
-    // old-reddit.css is scoped under .shd-active, so anything already rendered would
-    // otherwise sit there unstyled behind the error screen.
+    // old-reddit.css's palette and page-level rules are scoped under .shd-active, so
+    // anything already rendered would otherwise sit there half-styled behind the error screen.
     document.documentElement.classList.remove('shd-gate', SHD.C.BODY_CLASS);
     /* AND THE LATCH GOES WITH THE CLASS. resetForRoute() uses `revealed` as its proxy for
        "is .shd-active on the document" — `wasRevealed` decides between blank() and
@@ -828,7 +836,6 @@ SHD.gate = (() => {
     endTransition();
   }
 
-  /** Called by render sites on caught exceptions. Fails the page past a budget. */
   /** Message plus the first three frames of the stack, on one indented block. */
   function describeError(err) {
     if (!err) return 'none';
@@ -837,6 +844,7 @@ SHD.gate = (() => {
     return stack.length ? `${msg}\n             ${stack.join('\n             ')}` : msg;
   }
 
+  /** Called by render sites on caught exceptions. Fails the page past a budget. */
   function reportError(err) {
     errors++;
     if (!firstError) firstError = err;

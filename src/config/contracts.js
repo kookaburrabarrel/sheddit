@@ -64,7 +64,35 @@ SHD.C = {
      self-trigger on scroll; Reddit's feed JS calls it. We call it ourselves via its
      public loadContent(). Verified live: 3 posts -> 28 posts in one call. */
   LAZY_LOADER: 'faceplate-partial',
-  FEED_PARTIAL: 'shreddit-feed faceplate-partial[loading="programmatic"]',
+  /* A partial that is NOT a pagination handle, by what it fetches.
+     MEASURED LIVE 2026-09-21, signed in, front page: Reddit serves community hovercards as
+     `faceplate-partial[loading="programmatic"]` with
+     src="/svc/shreddit/community-hover-card/<sub>" — the same element and the same loading
+     mode as the feed's own continuation, sitting in the feed and in no post, so neither the
+     selector nor paginator.js's `!closest(ITEM)` ownership rule could tell them apart. The
+     paginator drove one instead of `/svc/shreddit/feeds/home-feed`: 27 rows in, 27 out,
+     repeatedly, then "no more pages". Measured again 2026-09-25, logged out, a
+     /r/programming slice: 28 of its 29 partials were `/svc/shreddit/user-hover-card/<name>`,
+     one per post author inside the post and one per advertiser inside the ad — which is
+     where the ones outside every post were — and the 29th was the continuation.
+     A NEGATIVE test, not a positive one. Requiring the src to look like a feed endpoint
+     would break silently the day Reddit renames it; naming the thing we measured and have
+     proof is not a handle costs a page only if Reddit reuses that path for pagination,
+     which is the safer direction to be wrong in. Paired with structural rules in
+     paginator.js (nothing inside a post or an ad continues a feed; a continuation follows
+     the content it continues) that do not depend on knowing any src at all — see partial(). */
+  PARTIAL_NOT_SRC: '[src*="hover-card" i]',
+  /* THE FEED'S CONTINUATION, and it carries PARTIAL_NOT_SRC itself (run.js asserts the two
+     agree). paginator.js adds the exclusion to every clause anyway; gate.js ("posts are still
+     on their way") reads this selector BARE, and verify:live used to — and bare, its first
+     match on the 2026-09-25 /r/programming slice was the first post's author hovercard, so
+     "the programmatic pagination partial is present" could not fail while any post had an
+     author, and the thin-feed drive fetched a hovercard. Even with the exclusion a bare read
+     is only a first guess: on /r/aww the first match is a media-overlay partial inside the
+     first post, on /popular a free `devvit-privacy-modal` partial ahead of the posts. Which
+     partial is the handle is paginator.js partial()'s question — ownership, position, the
+     last — and verify:live asks it the same way. */
+  FEED_PARTIAL: 'shreddit-feed faceplate-partial[loading="programmatic"]:not([src*="hover-card" i])',
   /* Comment threads lazy-load the same way. ARCHITECTURE §1.5 recorded 29 pending
      partials on a real thread; we only ever drove the feed's, so anything past the
      first delivered slice of a thread was unreachable. Scoped to the comment tree so a
@@ -331,7 +359,7 @@ SHD.C = {
    * right. What is verified is the SENTENCE, from a reader who read it on the page; what is
    * NOT is the element that carries it, so this is matched by walking text rather than by a
    * selector, and a miss costs the notice and nothing else — the post renders exactly as it
-   * does today. verify:live's DELETED POSTS section is what settles it.
+   * does today. verify:live's REMOVED POSTS section is what settles it.
    *
    * The author fallback is deliberately NOT used as the signal, though it looks like one:
    * a post whose AUTHOR deleted their account also reads `[deleted]` while the post itself
@@ -439,6 +467,12 @@ SHD.C = {
        target), because a comment's subtree holds its descendants' reply buttons too. The
        attribute clauses stay first for the day Reddit names the control. */
     replyText: /^reply$/i,
+    // Measured signed in, 2026-09-25: comment editing lives in the overflow's open root.
+    commentOverflow: 'shreddit-overflow-menu[comment-id]',
+    commentActions: 'button[aria-label="Open user actions"]',
+    commentEdit: '[role="menuitem"]:has([icon-name="edit"]) [tabindex="0"]',
+    commentEditText: /^edit comment$/i,
+    commentEditHost: 'comment-composer-host[edit-mode]',
     overflow: 'shreddit-post-overflow-menu',
     textBody: 'shreddit-post-text-body',
     titleLink: 'a[slot="title"]',
@@ -536,7 +570,7 @@ SHD.C = {
    *
    * Same profile, one day apart, and the second shape is user-scoped for EVERY comment on
    * the page — which is why deriving the community from the href's first segment printed
-   * "comment in u/spez" thirty times out of thirty (live testing, bug 2). A permalink that a
+   * "comment in u/spez" thirty times out of thirty (live testing, bug 72). A permalink that a
    * profile page rewrites to be about the profile cannot tell us where the comment lives,
    * and no amount of parsing changes that.
    *
@@ -616,20 +650,21 @@ SHD.C = {
   /* The exception. Captured live: `desktop_auth_blocking_upsell`, a login/signup upsell that
      fires client-side roughly 30s after page load — not on scroll, not on any interaction,
      confirmed twice with scrollY===0. It sets the SAME rpl-scroll-lock class the age gate
-     does, so the default "stand aside" policy above would apply to it too. That is wrong
-     here specifically: unlike the age gate, this one carries no close control, and neither
-     a real Escape keypress nor clicking its own dim overlay does anything — it is marked
-     `blocking` and means it. Standing aside would trap a logged-out reader behind an
-     unremovable "Get Started" / "I already have an account" wall with no way back except
-     signing up — precisely the affordance the scope section of the README says never to add,
-     and worse than doing nothing at all: without Sheddit the reader is at least looking at
-     Reddit's own broken UX, not one we handed them.
+     does, so the "stand aside" policy this was written under (superseded above) would have
+     applied to it too. That is wrong here specifically: unlike the age gate, this one
+     carries no close control, and neither a real Escape keypress nor clicking its own dim
+     overlay does anything — it is marked `blocking` and means it. Standing aside would trap
+     a logged-out reader behind an unremovable "Get Started" / "I already have an account"
+     wall with no way back except signing up — precisely what the scope section of
+     CONTRIBUTING says this project exists to remove, and worse than doing nothing at all:
+     without Sheddit the reader is at least looking at Reddit's own broken UX, not one we
+     handed them.
 
      So this one specific, verified case is REMOVED rather than deferred to — see
-     gate.suppressKnownUpsells(). The general "stand aside" path stays the default for
-     everything else: an unknown modal might be something the user genuinely has to resolve
-     (a real content warning, a CAPTCHA), and generalising "suppress every blocking modal"
-     from this one example would be exactly the wrong lesson to take from it.
+     gate.suppressKnownUpsells(). Everything else is only HIDDEN, never deleted (the policy
+     above): deleting nodes we cannot name risks breaking a flow nobody has captured, and
+     generalising "remove every blocking modal" from this one example would be exactly the
+     wrong lesson to take from it.
 
      Delivery mechanism, for context (not selected on — see the note on why below): the page
      ships a `<template id="deferred-desktop_auth_blocking_upsell">` inert in the initial
@@ -649,7 +684,8 @@ SHD.C = {
      the portaled `#desktop-dynamic-upsell-dialog` sibling, and hiding the host alone was
      confirmed live to do nothing.
 
-     KNOWN LIMITATION, unverified because it has never been observed: an 18+ age gate and
+     FORMER LIMITATION, moot under the 2026-08-20 policy (gate.stripScrollLock() now clears
+     the lock on every page we render, age gate or not), kept as history: an 18+ age gate and
      this upsell being up AT THE SAME TIME. Removing the upsell also clears rpl-scroll-lock,
      because that is the only way to stop deferring to a wall we just deleted — but if a real
      age gate were also showing, clearing it would un-defer and re-hide the gate, which is
@@ -843,7 +879,7 @@ SHD.C = {
    * Neither is a selector problem, which is why neither lives here. Each miss has the same fail-safe: the native composer is revealed in place
    * (passthrough), and the reader finishes in Reddit's UI. account.js's `compose()`
    * measures the outcome — a new comment element arriving under the target — rather than
-   * assuming the click worked (the "N more replies" lesson, log bug 90).
+   * assuming the click worked (the "N more replies" lesson, log bug 70).
    */
   COMPOSER: {
     host: 'comment-composer-host, shreddit-composer, shreddit-async-loader[bundlename*="composer" i], ' +
@@ -942,7 +978,7 @@ SHD.settings = {
 
      The one setting no code in this file's world ever reads: it belongs to
      src/core/oldreddit.js, which ships ALONE on old.reddit.com and repeats the default
-     rather than being handed 500 lines of selectors for a page it is leaving. test/run.js
+     rather than being handed 900 lines of selectors for a page it is leaving. test/run.js
      asserts the two agree — the arrangement bridge.js has with BRIDGE. */
   redirectOldReddit: true,
   /* The account layer: vote arrows that register, an old-reddit reply box, and the

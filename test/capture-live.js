@@ -6,7 +6,7 @@
  *   npm run capture:live -- --path=/r/SomeSub/ --headed --click
  *
  * WHY THIS EXISTS
- * TESTING.md's first known gap: "Real logged-out page states are approximated, not
+ * One of TESTING.md's known gaps: "Real logged-out page states are approximated, not
  * captured." Age gates, quarantine notices, private communities and rate-limit pages are
  * routine when logged out, and every one of them is represented in the suite by
  * `/r/gated/` — a stand-in someone wrote from memory. Whether our handling is right is

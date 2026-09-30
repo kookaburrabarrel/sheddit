@@ -227,9 +227,9 @@ globalThis.SHD = globalThis.SHD || {};
       }
     }
 
-    // NOT gated on !gate.revealed. reveal() latches true for the lifetime of the page and
-    // is never reset, but onRoute() tears the header and sidebar down on every SPA
-    // navigation — so gating here meant they were removed once and never rebuilt. Both
+    // NOT gated on !gate.revealed. reveal() used to latch true for the lifetime of the
+    // page, while onRoute() tears the header and sidebar down on every SPA navigation —
+    // so gating here meant they were removed once and never rebuilt. Both
     // builders are no-ops when their element is already present, so this is cheap.
     if (rendered > 0) {
       // A feed that was empty when we asked and streams a post afterwards is an ordinary
@@ -339,8 +339,8 @@ globalThis.SHD = globalThis.SHD || {};
     SHD.gate.parkOutgoing();
     SHD.listing.reset();
     SHD.comments.reset();
-    /* Media resolutions are memoised per asset and the URLs behind them expire (~12h with
-       a signature), so they must not outlive the layout that asked for them. */
+    /* Media resolutions are memoised per asset and the URLs behind them expire (about four
+       hours, with a signature), so they must not outlive the layout that asked for them. */
     SHD.media.reset();
     SHD.chrome.reset();
     SHD.paginator.reset();
@@ -495,13 +495,6 @@ globalThis.SHD = globalThis.SHD || {};
     if (queue.size) { scheduled = false; schedule(); }
   });
 
-  /* The deadline's escape hatch. Two reports (rounds 4 and 6) hit "sources present,
-     stamped: 0" cards whose common thread was a starved rendering pipeline — live testing's
-     coincided with a main thread the automation had frozen for 45+ seconds. The gate's
-     deadline is a setTimeout and runs on recovery; the flush it is about to blame is
-     parked on a rAF that may not have fired yet. A deadline must not accuse a queue it
-     has not tried to drain, so gate.js calls this first: flush() is idempotent and
-     synchronous, and if there is queued work this renders it instead of failing. */
   /**
    * Write one setting, from our own UI.
    *
@@ -570,6 +563,13 @@ globalThis.SHD = globalThis.SHD || {};
     return n;
   }
 
+  /* The deadline's escape hatch. Two reports (rounds 4 and 6) hit "sources present,
+     stamped: 0" cards whose common thread was a starved rendering pipeline — live testing's
+     coincided with a main thread the automation had frozen for 45+ seconds. The gate's
+     deadline is a setTimeout and runs on recovery; the flush it is about to blame is
+     parked on a rAF that may not have fired yet. A deadline must not accuse a queue it
+     has not tried to drain, so gate.js calls this first: flush() is idempotent and
+     synchronous, and if there is queued work this renders it instead of failing. */
   SHD.pipeline = { kick() { if (queue.size) flush(); }, readopt, setSetting, renderEmpty };
 
   (async function boot() {

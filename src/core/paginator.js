@@ -122,14 +122,22 @@ SHD.paginator = (() => {
      inside the posts (testing counted 82 partials on one page, most of them hovercards).
      Once the real feed partial was spent, the paginator drove hovercard after hovercard:
      40 pages burned, ZERO new rows, sentinel still reading "load more". No partial inside
-     a post ever continues a feed, so on a listing there is no fallback at all. */
+     a post ever continues a feed, so on a listing there is no fallback at all.
+
+     AN AD IS AN ITEM TOO, and leaving it out is the likeliest reading of bug 115. Measured
+     2026-09-25 on a live /r/programming slice, logged out: every post's author hovercard
+     was inside its shreddit-post, exactly as above — but the four ads carried one each,
+     `/svc/shreddit/user-hover-card/<advertiser>`, and C.AD_POST is not wrapped in an
+     `article`. So those four passed the ownership test, the first sat ahead of the real
+     continuation in document order, and 0.50.0's bundle, booted on that slice, drove it.
+     Nothing inside an ad continues a feed any more than anything inside a post does. */
   const ITEMS = {
-    LISTING: `${C.POST_WRAPPER}, ${C.POST}`,
+    LISTING: `${C.POST_WRAPPER}, ${C.POST}, ${C.AD_POST}`,
     COMMENTS: C.COMMENT,
     /* Hovercard partials live inside posts on profiles exactly as they do on listings
        (they hang off author/subreddit links, which profile rows carry too), so the
        no-fallback rule is the same: nothing inside an item ever continues a profile. */
-    PROFILE: `${C.POST_WRAPPER}, ${C.POST}, ${C.COMMENT}, ${C.PROFILE_COMMENT}`
+    PROFILE: `${C.POST_WRAPPER}, ${C.POST}, ${C.AD_POST}, ${C.COMMENT}, ${C.PROFILE_COMMENT}`
   };
   const ITEM_FALLBACK = { LISTING: false, COMMENTS: true, PROFILE: false };
   /* What a productive load produces, per route — see the unproductive guard in loadNext. */
@@ -168,8 +176,12 @@ SHD.paginator = (() => {
    * not depend on the answer.
    */
   const FRESH = `:not([${C.MARK}="done"])`;
+  /* ...and that is not something we have measured is never a handle. Applied to every
+     clause on every route, because an author hovercard can hang off a comment as readily
+     as a community one hangs off a post. See C.PARTIAL_NOT_SRC. */
+  const NOT_A_HANDLE = `:not(${C.PARTIAL_NOT_SRC})`;
   const selectorFor = (mode) =>
-    (SELECTORS[mode] || SELECTORS.LISTING).map(s => s + FRESH).join(', ');
+    (SELECTORS[mode] || SELECTORS.LISTING).map(s => s + FRESH + NOT_A_HANDLE).join(', ');
 
   let SEL = selectorFor('LISTING');
   let CONTAINER = CONTAINERS.LISTING;
@@ -198,10 +210,67 @@ SHD.paginator = (() => {
      expander in document order, so the paginator would spend its pages expanding branch
      after branch and never continue the thread. Branch expanders are still the fallback —
      bug 27's stamping keeps them advancing rather than spinning. */
+  /**
+   * A CONTINUATION FOLLOWS THE THING IT CONTINUES. That is what tells it from a hovercard.
+   *
+   * Reported live 2026-09-21 on the signed-in front page: a
+   * `/svc/shreddit/community-hover-card/oldreddit` partial sat in the feed and in no item,
+   * EARLIER in document order than the real `/svc/shreddit/feeds/home-feed` continuation —
+   * so it passed the ownership test, `querySelector` returned it first, and the paginator
+   * drove it. Measured: 27 rows in, 27 rows out, repeatedly, then `no more pages` with
+   * unproductive=7 and exhausted=5 while a fresh target was still being reported. Driving
+   * the real partial by hand on the same page took 27 rows to 52. Where such a partial sits
+   * was answered on 2026-09-25 for the logged-out case: inside an ad, which ITEMS above
+   * did not count as an item until then.
+   *
+   * THREE NARROWINGS AFTER OWNERSHIP, because none is sufficient and they fail differently.
+   * Each has a test in run.js that fails when that one alone is removed; the first cut of
+   * this function had two, and removing either left all 1099 assertions green.
+   *
+   *   C.PARTIAL_NOT_SRC  excludes the thing we measured, wherever it sits — a string
+   *                      against a service path Reddit can rename.
+   *   position           the structural half, which needs no src: a continuation FOLLOWS
+   *                      the content it continues. Reddit appends the next slice's handle
+   *                      after the slice it continues, while a partial belonging to
+   *                      something already delivered hangs off a link inside it. Alone it
+   *                      only decides when no handle follows the posts at all — a feed that
+   *                      has ended, or the gap before the next handle lands. Live, it is the
+   *                      rule that rejects /popular's free `devvit-privacy-modal` partial
+   *                      (2026-09-25): in no post, named by nothing, ahead of the posts.
+   *   the last of those  a partial between the last post and the handle passes the
+   *                      position test; the handle is appended after it.
+   *
+   * Position is measured against what a load DELIVERS (SOURCE, the count the productivity
+   * guard reads), not against ITEM. ITEM holds a bare `article` and ads, and a continuation
+   * owes nothing to either: keyed on ITEM, an `article` placed after the handle stopped the
+   * fixture at `no more pages` on the first click with nothing driven. The premise is
+   * verify:live's to check ("the continuation follows the last post"), because the day it
+   * stops being true this rule stops pagination outright.
+   *
+   * They fail SAFE, which the parentage test could not. When nothing qualifies we report
+   * exhausted — `no more pages`, the honest floor this file already uses for an unverified
+   * profile feed — instead of driving something that was never going to yield a row.
+   */
+  const lastDelivered = () => {
+    const box = document.querySelector(CONTAINER);
+    const got = box ? box.querySelectorAll(SOURCE) : [];
+    return got[got.length - 1] || null;
+  };
+  // Nothing delivered yet: any free partial may be the handle.
+  const follows = (last) => (p) =>
+    !last || !!(last.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING);
+
   const partial = () => {
-    const all = document.querySelectorAll(SEL);
-    for (const p of all) if (!p.closest(ITEM)) return p;
-    return ITEM_FALLBACK[MODE] ? (all[0] || null) : null;
+    const all = [...document.querySelectorAll(SEL)];
+    const free = all.filter(p => !p.closest(ITEM));
+    /* COMMENTS keeps first-free-wins: there a per-branch expander IS a legitimate thing to
+       drive once the top-level partial is spent (bug 53), and those sit inside their own
+       comment, so the position test would disqualify exactly the fallback the route wants. */
+    if (ITEM_FALLBACK[MODE]) return free[0] || all[0] || null;
+    const trailing = free.filter(follows(lastDelivered()));
+    // The last one, not the first: if Reddit ever ships more than one handle past the end
+    // of the slice, the newest is the one that continues from where the page now stops.
+    return trailing[trailing.length - 1] || null;
   };
 
   /** Point the paginator at a route's partials. Called by pipeline.js before attach(). */
@@ -266,9 +335,9 @@ SHD.paginator = (() => {
     // A deliberate click is not a runaway loop, and a button that silently does nothing is
     // worse than one that fetches twice. Only the automatic paths wait out the cooldown.
     if (reason !== 'manual' && Date.now() - lastAt < COOLDOWN_MS) return refuse('cooldown');
-    // Resolved here as well as in the bridge, so we can stamp the element afterwards. Both
-    // sides use the same selector string against the same document, so both pick the same
-    // node; run.js asserts the two halves of that protocol agree.
+    // Resolved here and only here: requestLoad() marks this element and hands the bridge a
+    // selector only it can match, so both worlds drive the same node and we can stamp it
+    // afterwards. run.js asserts the two halves of that protocol agree.
     const target = partial();
     if (!target) {
       /* "Nothing to drive RIGHT NOW" is not "nothing left". The successor partial can
@@ -742,9 +811,11 @@ SHD.paginator = (() => {
     d.shdObserving = String(!!io);
     d.shdSinceLast = lastAt ? String(Date.now() - lastAt) : 'never';
     d.shdPumpArmed = String(pumpTimer !== null);
-    // Whether there is anything left to drive, by the SAME selector loadNext() uses —
-    // so a mismatch between this and a hand-written probe is itself informative.
-    try { d.shdFresh = String(!!document.querySelector(SEL)); } catch { d.shdFresh = 'error'; }
+    // Whether there is anything left to drive, by the SAME resolver loadNext() uses —
+    // ownership, position and all — so a mismatch between this and a hand-written probe
+    // is itself informative. It read the bare selector until 0.52.0, which is how bug 115's
+    // report came to show `true` beside an `exhausted` refusal: two answers to one question.
+    try { d.shdFresh = String(!!partial()); } catch { d.shdFresh = 'error'; }
     // Why the last attempt declined. This is the field that separates the explanations a
     // stalled sentinel cannot: 'exhausted' and 'cooldown' and 'busy' all leave the same DOM.
     d.shdRefusal = lastRefusal;
