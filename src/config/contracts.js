@@ -62,9 +62,13 @@ SHD.C = {
 
   /* Pagination. The trailing partial carries loading="programmatic" — it does NOT
      self-trigger on scroll; Reddit's feed JS calls it. We call it ourselves via its
-     public loadContent(). Verified live: 3 posts -> 28 posts in one call. */
+     public loadContent(). It must be the feed's LAST CHILD: logged-in Reddit now puts a
+     direct-child Devvit privacy-modal partial before the continuation, while every post
+     also carries nested hovercard partials. The old descendant selector drove that modal
+     and eventually declared "no more pages" with the real continuation still untouched.
+     Verified live: driving the trailing partial grew both native and rendered rows 27 -> 52. */
   LAZY_LOADER: 'faceplate-partial',
-  FEED_PARTIAL: 'shreddit-feed faceplate-partial[loading="programmatic"]',
+  FEED_PARTIAL: 'shreddit-feed > faceplate-partial[loading="programmatic"]:last-child',
   /* Comment threads lazy-load the same way. ARCHITECTURE §1.5 recorded 29 pending
      partials on a real thread; we only ever drove the feed's, so anything past the
      first delivered slice of a thread was unreachable. Scoped to the comment tree so a
@@ -76,8 +80,7 @@ SHD.C = {
      selector matches real elements again. Either way it cannot do more than the broader
      `COMMENT_TREE LAZY_LOADER` clause: it is a strict SUBSET of it, and
      `querySelector('a, b')` returns the first match in DOCUMENT order, not the first
-     clause with a match — so listing it first buys no preference. FEED_PARTIAL above
-     sits in the same relationship to its own fallback.
+     clause with a match — so listing it first buys no preference.
 
      A THIRD observation, 2026-09-05 on a logged-in 2370-comment thread: 88 in-tree
      partials, ZERO programmatic. verify:live reports the count as a note now rather than

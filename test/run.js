@@ -4300,6 +4300,24 @@ async function boot(html, url, setup) {
     window.SHD.paginator.reset();
   }
 
+  /* Logged-in Reddit added a direct-child Devvit privacy-modal partial before the real
+     trailing feed continuation. Both are programmatic and both expose loadContent(), so
+     "direct child" alone still drives unrelated furniture and eventually lies that the
+     feed is exhausted. The continuation is the trailing partial — pin that anatomy here. */
+  console.log('\n\x1b[1mTHE TRAILING FEED PARTIAL IS THE CONTINUATION\x1b[0m');
+  {
+    const { window, doc } = await boot(listingPage(), 'https://www.reddit.com/', noAuto);
+    const direct = doc.querySelectorAll(
+      'shreddit-feed > faceplate-partial[loading="programmatic"]');
+    const selected = doc.querySelector(window.SHD.C.FEED_PARTIAL);
+    check('setup: unrelated furniture precedes the feed continuation',
+      direct.length === 2 && /devvit-privacy-modal/.test(direct[0].getAttribute('src') || ''),
+      [...direct].map(el => el.getAttribute('src')).join(' | '));
+    check('the feed contract selects the trailing continuation, not the modal',
+      selected === direct[1] && selected?.getAttribute('src') === '/feed/next',
+      selected?.getAttribute('src'));
+  }
+
   /* Live testing's front page: 40 pages driven, ZERO new rows, sentinel reading "load more".
      `shreddit-feed faceplate-partial` also matches Reddit's hovercard partials — one per
      author and subreddit link, INSIDE the posts — so once the real feed partial was spent

@@ -94,19 +94,20 @@ SHD.paginator = (() => {
      loadContent(); only their container differs. The feed variant was hardcoded, so
      comment threads never paginated at all.
 
-     The first clause of each pair is a strict subset of the second and so changes nothing
-     about what gets matched — `querySelector` picks the first match in DOCUMENT order, not
-     from the first clause that has one. See the note on COMMENT_PARTIAL in contracts.js for
-     why the narrow forms are kept regardless.
+     Comments retain a broad fallback because branch expanders are legitimate continuation
+     controls. Listings do not: live Reddit places unrelated direct-child modal partials
+     before the trailing feed continuation, and descendant fallbacks also include the
+     hovercards inside posts. C.FEED_PARTIAL is therefore the entire listing/profile
+     contract rather than merely a preference.
 
      Each clause excludes partials we have already driven — see FRESH below. */
   const SELECTORS = {
-    LISTING: [C.FEED_PARTIAL, C.FEED + ' ' + C.LAZY_LOADER],
+    LISTING: [C.FEED_PARTIAL],
     COMMENTS: [C.COMMENT_PARTIAL, C.COMMENT_TREE + ' ' + C.LAZY_LOADER],
     /* UNVERIFIED, like everything about profiles (C.PROFILE_COMMENT): assumes the profile
        feed is a shreddit-feed like a listing's. If it is not, partial() finds nothing and
        the manual button answers "no more pages" — the honest floor, not a hang. */
-    PROFILE: [C.FEED_PARTIAL, C.FEED + ' ' + C.LAZY_LOADER]
+    PROFILE: [C.FEED_PARTIAL]
   };
 
   /* Where the newly loaded content lands, per route — what settle() has to watch. Keyed the

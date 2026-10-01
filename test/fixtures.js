@@ -474,6 +474,10 @@ function listingPage(opts = {}) {
         ${POSTS.map((p, i) => postHtml(
           opts.removed && i === 0 ? { ...p, removed: opts.removed } : p)).join('')}
         <shreddit-ad-post><div>sponsored, contains no shreddit-post</div></shreddit-ad-post><hr>
+        <!-- Logged-in Reddit puts unrelated direct-child programmatic partials before the
+             trailing feed continuation. The paginator must not drive this one. -->
+        <faceplate-partial loading="programmatic"
+          src="/svc/shreddit/devvit-privacy-modal/:subredditId/:postId/:appSlug/:appOwnerId"></faceplate-partial>
         <faceplate-partial loading="programmatic" src="/feed/next"></faceplate-partial>
       </shreddit-feed>
     </main></div></div></div>
