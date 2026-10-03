@@ -8,14 +8,17 @@ body:
       value: |
         Before writing, two scope facts that decide most requests:
 
-        - **Sheddit is built for logged-out reading.** Anything needing a session is out —
-          `save` and `report` were *removed* because they could never work and shipping them
-          as links made them look like actions. Voting is deliberately unsupported.
-        - **Sheddit makes no network requests of its own.** No API, no OAuth, no endpoints.
-          Anything requiring one is out by design, not by omission.
+        - **Sheddit is built for logged-out reading.** Since 0.34.0 an account layer lets a
+          reader who is *already* logged in vote, reply and reach the composer — each a click
+          forwarded to Reddit's own control. Anything else needing a session (save,
+          hide-on-the-server, moderation) is out for now.
+        - **Sheddit calls no API of its own.** No Reddit API, no OAuth, no endpoints; the
+          only requests it makes are a video manifest and a version check (PRIVACY.md).
+          Anything requiring more is out by design, not by omission.
 
-        In scope today: the home feed, `/r/*` listings, comment pages, user profiles, and
-        the chrome around them. Out for now: search, modmail, chat, the composer.
+        In scope today: the home feed, `/r/*` listings, comment pages, user profiles, the
+        chrome around them, and — logged in — voting, replying and the way to the composer.
+        Out for now: search, modmail, chat, the composer itself.
 
   - type: textarea
     id: problem
@@ -37,7 +40,7 @@ body:
     attributes:
       label: Did old.reddit.com do this?
       description: >
-        Sheddit's north star is fidelity to old Reddit, and `docs/old-reddit.md` is a measured
+        Sheddit's north star is fidelity to old Reddit, and `OLD-REDDIT.md` is a measured
         spec of it recorded while the site was briefly back. "Old reddit did this, here's
         roughly how" is the strongest possible case for a feature.
     validations:
@@ -48,6 +51,6 @@ body:
     attributes:
       label: Does it fit the constraints?
       options:
-        - label: "It works logged out"
-        - label: "It needs no network request of its own"
+        - label: "It works logged out (or is a click forwarded to Reddit's own control)"
+        - label: "It needs no new network request of its own"
         - label: "It's on a route Sheddit already handles"

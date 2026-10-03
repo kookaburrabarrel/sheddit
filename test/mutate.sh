@@ -17,7 +17,7 @@
 # both mechanisms produce. See bug 75 — when two mechanisms produce one observable,
 # asserting the observable proves nothing about either.
 #
-#   npm run test:mutate      (~18 min)
+#   npm run test:mutate      (hours)
 #
 # RUNS ON A THROWAWAY COPY, NEVER YOUR WORKING TREE.
 #
@@ -891,9 +891,11 @@ mutate "the chain starts only if the observer speaks first" run \
 # partial. Document order puts the branches first, so without the placement preference the
 # paginator spends its pages expanding branch after branch and never continues the thread.
 mutate "document order beats placement and the thread never continues" run \
-  src/core/paginator.js "    const all = document.querySelectorAll(SEL);
-    for (const p of all) if (!p.closest(ITEM)) return p;
-    return ITEM_FALLBACK[MODE] ? (all[0] || null) : null;" "    return document.querySelector(SEL);"
+  src/core/paginator.js "    const all = [...document.querySelectorAll(SEL)];
+    const free = all.filter(p => !p.closest(ITEM));" \
+                        "    return document.querySelector(SEL); // eslint-disable-line
+    const all = [...document.querySelectorAll(SEL)];
+    const free = all.filter(p => !p.closest(ITEM));"
 
 # The pick crosses the bridge as a selector only the chosen element matches. Reverting to
 # "both sides querySelector the same string" re-splits the two worlds: the isolated world
@@ -989,9 +991,8 @@ mutate "the mp4 pick stops preferring the best rendition" run \
 # subreddit link INSIDE the posts, so once the real feed partial was spent the chain drove
 # hovercard after hovercard. No partial inside a post ever continues a feed.
 mutate "hovercard partials inside posts are driven as pages again" run \
-  src/core/paginator.js "    for (const p of all) if (!p.closest(ITEM)) return p;
-    return ITEM_FALLBACK[MODE] ? (all[0] || null) : null;" \
-                        "    return all[0] || null;"
+  src/core/paginator.js "    const free = all.filter(p => !p.closest(ITEM));" \
+                        "    const free = all;"
 
 # The second guard on the same failure: a load that yields no new sources is a dead end,
 # whatever it was we drove. Without this the chain keeps paying for nothing. The mutation
@@ -1723,7 +1724,7 @@ mutate "the empty-feed shortcut runs on a route change, over the outgoing page" 
 # A top-level comment has no branch, so the post path counted the whole document — and the
 # paginator is auto-loading batches of shreddit-comment inside the same 8s window. Any batch
 # read as "your comment arrived" and the form closed on it, dropping the reader's draft
-# while Reddit still held unposted text. Log 773's rule, reaching the path that lacked it.
+# while Reddit still held unposted text. Log bug 70's rule, reaching the path that lacked it.
 # Both paths share one author filter now (0.49.0), so this row reintroduces the drift on
 # both at once: every comment under the target counts, whoever wrote it.
 mutate "any comment arriving anywhere counts as the reader's comment posting" run \
@@ -2561,6 +2562,81 @@ mutate "paragraphs are typed as one run" run \
 # a future false negative in insertText(), and this note stays so nobody adds the row and
 # reads its survival as a hole.
 
+# LOG 115 — the paginator drove hovercards instead of the feed, AGAIN, and the guard written
+# for exactly that could not see it. Measured live: 27 rows in, 27 out, then "no more pages"
+# with unproductive=7. Log 117 found where those partials were — inside ADS, which were not
+# items — and that the first cut's two rows could not tell its two rules apart: the stray
+# decoy was rejected by position AND by taking the last trailing partial, so removing either
+# alone left the suite green. One guard wearing two hats, exactly as this note used to warn.
+# One row per rule now, each caught by the run.js block written for that rule alone.
+#
+# The measured exclusion. Without it, a feed whose only partial is a hovercard drives it.
+mutate "the measured hovercard src is driven as a page again" run \
+  src/config/contracts.js "  PARTIAL_NOT_SRC: '[src*=\"hover-card\" i]'," \
+                          "  PARTIAL_NOT_SRC: '[src*=\"__never_matches__\" i]',"
+
+# The same exclusion in the contract gate.js and verify:live read bare. Without it their
+# first match is a hovercard, and verify:live's handle checks can never fail.
+mutate "the feed's own contract reads a hovercard as the handle again" run \
+  src/config/contracts.js "  FEED_PARTIAL: 'shreddit-feed faceplate-partial[loading=\"programmatic\"]:not([src*=\"hover-card\" i])'," \
+                          "  FEED_PARTIAL: 'shreddit-feed faceplate-partial[loading=\"programmatic\"]',"
+
+# Ownership, for ads: C.AD_POST is not wrapped in an article, so a partial inside one was free.
+mutate "partials inside ads count as free again" run \
+  src/core/paginator.js '    LISTING: `${C.POST_WRAPPER}, ${C.POST}, ${C.AD_POST}`,' \
+                        '    LISTING: `${C.POST_WRAPPER}, ${C.POST}`,'
+
+# Position alone. Caught only where no handle follows the posts: with one there, taking the
+# last trailing partial rejects a stray ahead of the posts by itself.
+mutate "the position rule is gone" run \
+  src/core/paginator.js "    const trailing = free.filter(follows(lastDelivered()));" \
+                        "    const trailing = free;"
+
+# Taking the last alone: a stray between the last post and the handle passes position.
+mutate "the first trailing partial is driven, not the last" run \
+  src/core/paginator.js "    return trailing[trailing.length - 1] || null;" \
+                        "    return trailing[0] || null;"
+
+# Both structural rules at once: the stray ahead of the posts is driven with the handle there.
+mutate "a partial ahead of the content is driven as a continuation" run \
+  src/core/paginator.js "    const trailing = free.filter(follows(lastDelivered()));
+    // The last one, not the first: if Reddit ever ships more than one handle past the end
+    // of the slice, the newest is the one that continues from where the page now stops.
+    return trailing[trailing.length - 1] || null;" \
+                        "    return free[0] || null;"
+
+# Position measured against every ITEM (a bare article, an ad) instead of what a load
+# delivers: an article appended after the handle stops pagination with nothing driven.
+mutate "position is measured against wrappers and ads again" run \
+  src/core/paginator.js "    const got = box ? box.querySelectorAll(SOURCE) : [];" \
+                        "    const got = box ? box.querySelectorAll(ITEM) : [];"
+
+# The diagnostic that must agree with the resolver: back on the bare selector, it reads a
+# fresh target beside an `exhausted` refusal, which is how bug 115's report read.
+mutate "shdFresh reads the bare selector again" run \
+  src/core/paginator.js "    try { d.shdFresh = String(!!partial()); } catch { d.shdFresh = 'error'; }" \
+                        "    try { d.shdFresh = String(!!document.querySelector(SEL)); } catch { d.shdFresh = 'error'; }"
+
+# ...and the resolver whole, back to the 0.50.0 behaviour that shipped the bug: first free
+# partial wins, nothing excluded by name in the selector or the contract, ads not items.
+mutate "partial() reverts to first-free-wins" run \
+  src/core/paginator.js "    const all = [...document.querySelectorAll(SEL)];
+    const free = all.filter(p => !p.closest(ITEM));" \
+                        "    const all = [...document.querySelectorAll(SEL)];
+    const free = all.filter(p => !p.closest(ITEM));
+    if (true) return free[0] || (ITEM_FALLBACK[MODE] ? all[0] : null);" \
+  src/core/paginator.js "map(s => s + FRESH + NOT_A_HANDLE)" "map(s => s + FRESH)" \
+  src/core/paginator.js '    LISTING: `${C.POST_WRAPPER}, ${C.POST}, ${C.AD_POST}`,' \
+                        '    LISTING: `${C.POST_WRAPPER}, ${C.POST}`,' \
+  src/core/paginator.js '    PROFILE: `${C.POST_WRAPPER}, ${C.POST}, ${C.AD_POST}, ${C.COMMENT}, ${C.PROFILE_COMMENT}`' \
+                        '    PROFILE: `${C.POST_WRAPPER}, ${C.POST}, ${C.COMMENT}, ${C.PROFILE_COMMENT}`' \
+  src/config/contracts.js ":not([src*=\"hover-card\" i])'," "',"
+
+# LOG 117 — the loading line mounted with neither gate class on a tick after unblank(),
+# bare and unstyled under native Reddit. showLoading() refuses that state now.
+mutate "the loading line mounts under neither gate class" run \
+  src/core/gate.js "    if (!cls.contains('shd-gate') && !cls.contains(SHD.C.BODY_CLASS)) return;" ""
+
 # A post keeping its picture URL in a responsive srcset rather than in `src` got no
 # thumbnail at all, which on a live listing read as several rows missing their picture and
 # a ragged empty column beside them. The sibling resolver had read all three places since
@@ -2687,7 +2763,7 @@ printf 'rows: %s declared, %s run — %s caught, %s survived, %s anchor misses, 
 #
 # A row whose anchor stopped matching tests nothing, and it announces that by printing
 # ANCHOR MISS — which is neither a PASS nor a FAIL, so it scrolled past in a sweep that
-# ended "all caught". A review found 16 dead rows at once this way, two of them the pair
+# ended "all caught". A review found 21 dead rows at once this way, two of them the pair
 # guarding vote delegation's shadow-root piercing, anchored on a line that had moved to
 # another file entirely; the sweep had been reporting a clean run over them for releases.
 #
@@ -2706,7 +2782,7 @@ if [ "$ROWS_MISSED" -ne 0 ]; then
     "$ROWS_MISSED" "$DECLARED"
   printf 'An ANCHOR MISS is not a pass. Re-point each anchor at the code as it is now —\n'
   printf 'and note that the row you broke is rarely the row for the code you edited.\n'
-  printf 'test/anchor-check.sh lists them in about a minute, without running any suite.\033[0m\n'
+  printf 'test/anchor-check.sh lists them in seconds, without running any suite.\033[0m\n'
   exit 1
 fi
 

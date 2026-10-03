@@ -1,6 +1,6 @@
 {
-  "version": "0.50.0",
-  "released": "2026-09-17",
+  "version": "0.53.0",
+  "released": "2026-09-25",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.50.0 fixes the signed-in account corner against today's Reddit. Log out could not find Reddit's control, and its fallback showed your avatar on a dark page instead of Reddit's menu; both now find the right thing. Your username was never read, so the corner said only 'logged in' — Reddit stamps the name on the page from the first byte, and Sheddit reads it there and only there. The top-level reply box is now opened for you: Reddit's collapsed box had started shipping a hidden post button, which fooled the 'is it open' check, and it turns out focusing the field inside the box opens it where a click did not. Blank lines in a reply post as paragraphs. And a black band under short pages in the classic theme is gone."
+  "notes": "0.53.0 adds an edit link to your own comments in a thread when the signed-in account layer is enabled. It opens Reddit's native editor with your existing text; save there, then choose back to sheddit to refresh the displayed comment. If the editor cannot open automatically, the handoff explains how to use Reddit's comment menu. Logged-out reading is unchanged."
 }

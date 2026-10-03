@@ -36,10 +36,11 @@
  *
  *   brew install geckodriver        # Firefox itself from firefox.com, if not installed
  *
- * WHAT THIS SUITE CANNOT SEE
+ * WHAT WEBDRIVER CANNOT SEE
  * document_start CSS *timing* — whether Gecko delivers suppress.css before first paint.
  * WebDriver returns after load, so a flash of native Reddit is over before anything can
- * be measured from here. That one is assessed by eye on a real machine.
+ * be read from here. The /r/paintprobe/ fixture samples it from inside the page instead
+ * (THE BLACKOUT MUST BEAT THE BODY'S FIRST CONTENT, below).
  */
 const { execFileSync, spawn } = require('child_process');
 const fs = require('fs');

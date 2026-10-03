@@ -20,6 +20,207 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.53.0
+
+### Added — edit your own comments
+
+Your own comments in a thread now have an **edit** link when the account layer is
+enabled and Reddit identifies you as their author. The link opens Reddit's native
+editor with the existing text, including its formatting. Save there, then choose
+**back to sheddit** to refresh the displayed comment.
+
+The handoff waits for the comment's own menu to hydrate, never uses a nested reply's
+menu, and focuses the editor if Reddit has mounted it but left it hidden. An editor
+that cannot be opened gets an explicit fallback explaining how to use Reddit's
+comment menu. Leaving the handoff cancels pending attempts to open it.
+
+Reddit still owns editing, saving, authentication and error handling. No API requests
+were added, and logged-out reading is unchanged. This remains part of the experimental
+signed-in account layer.
+
+## 0.52.0
+
+### Fixed — loading more, on any listing with ads
+
+0.51.0 fixed the front page by ruling out Reddit's hovercards by name. Where those cards
+actually sit is now measured, on a live /r/programming page, logged out: every post's author
+card is inside its post, where Sheddit already ignored it, and every ad carries its
+advertiser's card — inside the ad, which Reddit does not wrap the way it wraps posts, and
+which Sheddit therefore never counted as a post. The first ad's card was the first thing
+0.50.0 would fetch: run against that page, it fetched `xfinity`'s card instead of the next
+posts. So 0.50.0 was very likely fetching ad cards on every listing with ads in it, not
+only on the signed-in front page. 0.51.0's name rule already caught these cards; an ad now
+counts as a post as well, so nothing inside one is fetched as the next page whatever Reddit
+calls it. The same check on /r/aww found the same shape; the /popular feed also carries a
+hidden privacy-dialog element ahead of its posts, named by nothing, which 0.50.0 fetched
+instead of more posts — 0.51.0's position rule already skips it, and now a test proves that
+rule on its own.
+
+### Fixed — a rule that could have stopped paging for no reason
+
+0.51.0's second rule — the thing that continues a list has to come after the list — measured
+"the list" by every `article` element, not only posts. Anything Reddit appended after the
+continuation inside an `article`, a promoted unit or any other module, would have made
+Sheddit say "no more pages" at once with more to load. It measures against posts now.
+Reddit puts nothing there today, and the live check below now says so if that changes.
+
+### Fixed — the tools that check Sheddit against live Reddit
+
+- `npm run verify:live` found "the pagination partial" by taking the first match of its
+  selector — which on today's markup is the first post's author card. So "the pagination
+  partial is present" could not fail while any post had an author, and its thin-feed test
+  loaded a hovercard and concluded the feed had ended. It now finds the element the way the
+  paginator does, and checks that it follows the last post. The 2026-09-05 reading "one
+  post, and the feed genuinely ends there" is withdrawn as evidence.
+- The diagnostics on the `load more` control could say a target was still there beside
+  "no more pages" — two answers from the reading meant to settle it. They ask the
+  paginator's own rule now.
+- 0.51.0's tests could not tell its two rules apart: removing either one alone left every
+  test passing. Each rule has its own test now, with a mutation row proving it is the one
+  that fails, and so do the two added here.
+
+### Fixed — a bare `loading…` line
+
+On a first load where the page had no feed at Sheddit's first look and posts arrived before
+it started, an unstyled `loading…` paragraph could sit at the bottom of Reddit's own page.
+It is only ever shown now where it is styled — over Sheddit's blackout, or its layout.
+
+### Changed — what Sheddit says about itself, finished
+
+- The options page: the video note still opened by calling video "the one feature that makes
+  a request of its own", and the account note said Sheddit "still makes no request of its
+  own" without saying of what. Both say what is true now.
+- A failed version check is not "retried after an hour", as 0.51.1's notes said: after a
+  failure the limit is an hour instead of twenty, so the next browser start after that asks
+  again. Nothing retries while the browser stays open.
+- `PRIVACY.md` still said "two requests" in one place, and that the update record is written
+  whenever a check is attempted; a pressed check that gets no answer writes nothing.
+  `SECURITY.md` said the failure screen's diagnostics are "never user data" — they include
+  the page's URL and your browser's user agent. They stay on your screen; nothing is sent.
+- The release checklist in `docs/store-listing.md` now says what `./refresh-zip.sh
+  <version>` does — it commits, pushes and publishes the GitHub release without running a
+  test — and gives the order that keeps `main` passing.
+- `npm test` now reads the README's Install-section version, as CONTRIBUTING and the
+  checklist already said it did.
+- Smaller corrections across `ARCHITECTURE.md`, `TESTING.md`, the bug-report template
+  (console lines start `[sheddit]`, not `[shd]`), source comments and the engineering log.
+  Engineering log bug 117.
+
+### Known, not fixed
+
+Unchanged from 0.51.0: `load more` can still stick on your own profile overview, and a post
+on that overview is read and then not shown.
+
+---
+
+## 0.51.2
+
+No behaviour changed. This build republishes 0.51.1 with one fix to the test suite, so the
+download zips, the release and the version an installed copy is offered all move together.
+
+### Fixed — a test that failed without anything being wrong
+
+`rendered count matches the slice plus whatever has loaded` in `test/extension.js` failed one
+run in several, and every time under CPU load. The fixture counts a comment load when it is
+requested and delivers the batch 50ms later; the test read the thread with no wait while a
+load was already in flight, so it saw a load counted against comments that had not arrived.
+The extension had done nothing wrong. The fixture now also counts delivered batches, and the
+test compares only a reading in which every requested batch has landed and been drawn. With
+the delay widened to 1.5s the old test fails every time and the new one passes. Engineering
+log bug 116.
+
+### Known, not fixed
+
+Unchanged from 0.51.0: `load more` can still stick on your own profile overview, and a post
+on that overview is read and then not shown.
+
+---
+
+## 0.51.1
+
+No behaviour changed. This build corrects what Sheddit says about itself, on its own pages
+and in this repository.
+
+### Fixed — the options page and the header said less than was true
+
+- The note under *Play video on the comments page* said video "is the one feature that
+  makes a request of its own" and that nothing else makes a request of any kind — a few
+  lines below the switch for the version check, which also makes one. It names both now.
+  (Its second sentence did; the first still called video "the one feature" until 0.52.0.)
+- The account note had lost the sentence before "When you are, the vote arrows register…",
+  so it never said *when you are what*. It reads "When you are logged in" now.
+- The header's **auto: on** tooltip promised "no more than once every twenty hours". That
+  is the limit after an answer; after a check that fails the limit is an hour
+  (`RETRY_INTERVAL_MS`), so a browser that was offline at startup asks again at the next
+  start an hour or more later, not twenty hours later. Nothing retries while the browser
+  stays open — the check runs only at startup and on install or update. The tooltip says
+  both limits now.
+
+### Changed — the privacy policy, to match the code
+
+`PRIVACY.md` said two things leave the browser in one place and three requests in another.
+It says three (one place still said "two requests" until 0.52.0), adds the one-hour floor
+after a failure, and discloses that the `<html>` element carries `data-shd-*` state while a
+page loads and more posts arrive, not only the scroll marker. Its history entry for the `old.reddit.com` redirect was dated 0.38.0; it shipped in
+0.33.0. The age-gate click has happened since 0.3.0, not 0.30.0 as four places said.
+
+### Changed — the documentation, read against the code
+
+A full pass over every document and source comment, about 150 corrections. The ones worth
+knowing: `ARCHITECTURE.md` described the reply protocol as it was before 0.49.0 (an emptied
+box counted as success) and the page change as it was before 0.47.0; `TESTING.md` carried
+suite counts from several releases ago and told you to use `verify:live -- --headed` for a
+signed-in check, which always runs logged out (`--headed --login`); the issue chooser linked
+a Discussions page that does not exist. The download zips are rebuilt because the options
+page and the stylesheets' comments changed.
+
+### Known, not fixed
+
+Unchanged from 0.51.0: `load more` can still stick on your own profile overview, and a post
+on that overview is read and then not shown.
+
+---
+
+## 0.51.0
+
+### Fixed — the front page stopped loading more posts
+
+Reddit ships a listing a few posts at a time and hands the page a hidden element to fetch the
+next batch. Because Sheddit hides Reddit's own layout, Reddit never triggers that element
+itself, so Sheddit triggers it — that is how infinite scroll works here at all.
+
+Reddit now uses the same kind of hidden element for the little community cards that appear
+when you hover a subreddit name. Sheddit picked one of those instead of the one that fetches
+posts, and kept picking it: fetching a hovercard, finding no new posts, trying again, until
+the control gave up and said there was nothing left. Measured on a live front page: stuck at
+27 posts, and 52 the moment the right element was triggered.
+
+Sheddit now rules the hovercards out by name, and separately applies a rule that does not
+depend on knowing their name: the thing that continues a list has to come *after* the list.
+Both are there because Reddit renames things, and when neither matches, the control honestly
+says there are no more pages rather than fetching something that will never produce a post.
+(This entry first said either one alone would have fixed today's page. The name would have;
+whether position alone would have depends on where the hovercard sat, which the report did
+not record — the tests modelled it after the last post, where position accepts it. See
+0.52.0 for where these partials actually were.)
+
+### Unchanged
+
+Everything else in the same round passed: signed-in identity and the account menu, theme
+switching, front page, subreddits, comments pages and profiles, comment collapse, the reply
+box opening and cancelling, narrow-window layout, browser back and forward, and handing
+search back to Reddit. No page errors.
+
+### Known, not fixed
+
+**`load more` can still stick on your own profile overview.** The front-page case above is
+fixed and explains most of what was reported, but the symptom recorded twice before was a
+control stuck reading "loading more…", and fetching a hovercard does not produce that — it
+produces a finished fetch that found nothing. So a second cause is likely and is still open.
+Also still open: a post on your own profile overview is read and then not shown.
+
+---
+
 ## 0.50.0
 
 A signed-in round against today's Reddit. Reading and voting passed end to end; everything
@@ -383,7 +584,7 @@ is under the length ceiling rather than over it. The author's regions are skippe
 the sentence is tested, erring in the direction this project had already chosen twice: a
 tombstone over live content is the worse of the two errors.
 
-### Fixed — four things about leaving a page, and arriving at the next one
+### Fixed — three things about leaving a page, and arriving at the next one
 
 - **Navigating away from an empty listing painted "there doesn't seem to be anything here"
   over the incoming page** — and threw away the deadline that route had just armed, so a
@@ -393,10 +594,6 @@ tombstone over live content is the worse of the two errors.
 - **A failure left the reveal latch set**, so the next navigation skipped the blackout —
   native Reddit fully visible for the whole incoming load — and mounted the loading line
   with neither gate class set, which no stylesheet has a rule for.
-- **The teardown's own scroll counted as the reader.** Removing `#shd-root` collapses the
-  document, the browser clamps scrollY, and that scroll event lands after `reset()` cleared
-  the flag — so every navigation from a scrolled page began "already interacted", losing
-  the unprompted-fill bound and the held `load more` label.
 - **A load in flight wrote its verdict into the route that replaced it**, crediting a page
   that loaded nothing and clearing `busy` for a load the new page never made.
 
@@ -544,7 +741,7 @@ Those links stay where they are now; the hop applies to the pages Sheddit actual
 ### Documented — Sheddit answers Reddit's 18+ prompt for you
 
 On a subreddit marked adult, Reddit covers the page with a dialog asking whether you are
-over 18, and Sheddit has clicked its affirmative button since 0.30.0. That is deliberate:
+over 18, and Sheddit has clicked its affirmative button since 0.3.0. That is deliberate:
 a dialog that is merely hidden leaves Reddit's scroll lock in place and the session
 treated as unattested, so the page underneath half-works.
 
@@ -765,7 +962,7 @@ the rule that chose between candidates could not see it.
 
 Reddit offers a post's picture twice. `i.redd.it` serves the file as uploaded;
 `preview.redd.it` serves generated variants of it, each stating its width in a `srcset`
-descriptor. Since 0.17.0 the resolver has taken the widest stated width, which is the right
+descriptor. Since 0.19.0 the resolver has taken the widest stated width, which is the right
 answer among resizes and the wrong one here — the original states no width at all, because
 there is nothing for Reddit to state a width against, so it scored zero and every variant
 outbid it. A post with a 4000px original and a 640px preview rendered the preview.
@@ -955,7 +1152,7 @@ Reddit's composer to mount, puts your text into Reddit's editor (a textarea in m
 mode; a rich-text field otherwise, fed through the browser's own editing command so the
 editor sees a real input), and clicks Reddit's submit. Then it **measures** the outcome —
 the new comment arriving under its parent — rather than assuming the click worked, which is
-the lesson of the *N more replies* control (log bug 90). Reddit's own code owns the auth,
+the lesson of the *N more replies* control (log bug 70). Reddit's own code owns the auth,
 the request and the error handling; the pipeline renders the comment Reddit inserts, nested
 where Reddit put it. Every step that can miss has the same floor: the box **stays, with
 your draft**, the status line names the step that failed, and Reddit's own composer is
@@ -2036,7 +2233,7 @@ and it is the half the fix rests on, so 9(c) stays open and live testing's P3 st
 
 ### Changed — a video post's title is its comments page; the mp4 is its own link
 
-The design half of the same day's reports, and an project decision rather than a fix: with
+The design half of the same day's reports, and a project decision rather than a fix: with
 Reddit migrating video to CMAF/HLS, a title that resolves to a packaged mp4 is a title
 that intermittently lands the reader on Chrome's `source fetch error`. So the title now
 points at the post's own comments page — which is where the `v.redd.it` bounce was going
