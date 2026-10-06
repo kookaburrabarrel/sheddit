@@ -68,10 +68,12 @@ SHD.account = (() => {
              editor reconciles its DOM against its own model a microtask or a frame after
              the write, and text that does not outlive that was never accepted (landed()).
      arriveWaitMs: how long to wait for the posted comment to appear before calling the
-             submit lost and revealing the native composer. */
+             submit lost and revealing the native composer.
+     editRefreshMs: how long after the reader leaves an edit handoff to keep copying the
+             comment's body into our row, for a save that lands after they pressed back. */
   const timings = { syncMs: 1500, settleMs: 400, composeWaitMs: 4000, pollMs: 100, arriveWaitMs: 8000,
                     drawerWaitMs: 4000, logoutWaitMs: 6000, hydrateWaitMs: 3000,
-                    reconcileMs: 120 };
+                    reconcileMs: 120, editRefreshMs: 15000 };
 
   const active = () => SHD.session.active();
 
@@ -363,10 +365,12 @@ SHD.account = (() => {
    * Reply — drive Reddit's composer
    * ------------------------------------------------------------------ */
 
-  function waitFor(cond, ms) {
+  /** Poll `cond` until it answers, `ms` runs out, or `alive` (optional) says to give up. */
+  function waitFor(cond, ms, alive) {
     const deadline = Date.now() + ms;
     return new Promise((resolve) => {
       const tick = () => {
+        if (alive && !alive()) return resolve(null);
         let v = null;
         try { v = cond(); } catch { v = null; }
         if (v) return resolve(v);
@@ -928,90 +932,149 @@ SHD.account = (() => {
     return !!name && name.toLowerCase() === m.author.toLowerCase();
   }
 
+  /** The native comment behind a rendered row, found again if Reddit has replaced it. */
+  function nativeComment(m) {
+    if (m.source?.isConnected) return m.source;
+    return [...document.querySelectorAll(C.COMMENT)]
+      .find(el => el.getAttribute(C.COMMENT_ATTR.id) === m.id) || null;
+  }
+
   function editLink(m, thing) {
     if (!ownsComment(m)) return null;
-    let busy = false;
+    /* The handoff this link opened (dom.passthrough's exit bar), not a busy flag. A flag
+       stayed set until the pending waits timed out, so for 3-4 s after the reader pressed
+       back their next click on edit did nothing at all. The bar is gone the moment they
+       leave, and the attempt it belonged to stops at its next poll (editComment). */
+    let open = null;
     const link = h('a.edit', { href: '#', text: 'edit' });
     return h('li', { onclick: async (e) => {
       e.preventDefault();
-      if (busy) return;
+      if (open?.isConnected) return;
       if (!ownsComment(m)) {
         link.textContent = 'editing unavailable: not signed in as this author';
         return;
       }
-      busy = true;
+      link.textContent = 'edit';
+      const source = nativeComment(m);
+      open = SHD.dom.passthrough(source);
+      if (!open) {
+        // Nothing was handed off, so there is no exit bar to say it in: the link is all
+        // the reader can see.
+        link.textContent = 'comment not found; reload to edit';
+        return;
+      }
+      m.source = source;
+      const bar = open;
       try {
-        await editComment(m, thing);
+        await editComment(m, thing, bar);
       } catch (error) {
         console.warn('[sheddit] could not open Reddit\'s comment editor', error);
-        link.textContent = 'could not open editor; try again';
-        SHD.dom.passthroughNote('Could not open the editor. Use Reddit\'s comment menu to edit.');
-      } finally {
-        busy = false;
+        if (bar.isConnected) {
+          SHD.dom.passthroughNote('Could not open the editor. Use Reddit\'s comment menu to edit.');
+        }
       }
     } }, link);
   }
 
-  async function editComment(m, thing) {
+  /**
+   * Open Reddit's own editor on the reader's comment, inside the handoff `bar` belongs to.
+   *
+   * Every wait stops when that handoff closes. Not when the comment's path loses its
+   * passthrough classes: a later handoff to a reply nested under this comment puts them
+   * straight back, and an attempt the reader had already left then woke up and opened this
+   * comment's editor beside the reply's.
+   */
+  async function editComment(m, thing, bar) {
     const source = m.source;
-    if (!SHD.dom.passthrough(source)) throw new Error('Comment is no longer on the page');
     source.scrollIntoView?.({ block: 'center' });
     SHD.dom.passthroughNote('Opening Reddit\'s editor for your comment...');
+    refreshOnReturn(m, thing, bar);
 
-    // The body in our layout is a clone. Re-read it when the reader returns from editing.
-    const returning = new MutationObserver(() => {
-      if (source.isConnected && source.classList.contains('shd-passthrough')) return;
-      returning.disconnect();
-      const current = [...document.querySelectorAll(C.COMMENT)]
-        .find(el => el.getAttribute(C.COMMENT_ATTR.id) === m.id);
-      const body = current && SHD.model.comment(current)?.bodyNode;
-      const shown = thing.querySelector(':scope > .entry > .usertext > .usertext-body');
-      if (thing.isConnected && body && shown) {
-        shown.replaceChildren(SHD.dom.adoptBody(body));
-        m.source = current;
-        m.bodyNode = body;
-      }
-    });
-    returning.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-
-    const stillHere = () => source.isConnected && source.classList.contains('shd-passthrough');
+    const stillHere = () => bar.isConnected && source.isConnected;
     const owned = (selector) => [...source.querySelectorAll(selector)]
-      .find(el => ownerComment(el) === source);
-    const editor = () => owned(C.NATIVE.commentEditHost);
+      .filter(el => ownerComment(el) === source);
     const findMenuButton = () => {
-      const menu = owned(C.NATIVE.commentOverflow);
+      const menu = owned(C.NATIVE.commentOverflow)[0];
       return menu && SHD.dom.deepQuery(menu, C.NATIVE.commentActions);
+    };
+    /* The editor's text field, from whichever of this comment's edit hosts has one showing.
+       Every host is asked, not the first: one Reddit left behind after a cancel or a save
+       has no usable field, and taking it for THE editor skipped the menu and failed every
+       later attempt on this comment until a reload. */
+    const field = () => {
+      const hosts = owned(C.NATIVE.commentEditHost);
+      for (const host of hosts) {
+        const input = shown(SHD.dom.deepQuery(host, C.COMPOSER.editor));
+        if (input) return input;
+      }
+      // Like the reply composer, an edit host can mount with its ready slot still closed.
+      for (const host of hosts) if (shown(host)) host.focus?.();
+      return null;
     };
     const fallback = () => SHD.dom.passthroughNote(
       'Could not open the editor automatically. Use this comment\'s menu > Edit comment.');
 
-    if (!editor()) {
-      const toggle = await waitFor(findMenuButton, timings.hydrateWaitMs);
+    // An editor already open here needs no menu. Asked twice: the second look sees what the
+    // first one's focus() opened.
+    if (!field() && !field()) {
+      const toggle = await waitFor(findMenuButton, timings.hydrateWaitMs, stillHere);
       if (!stillHere()) return;
       if (!toggle) { fallback(); return; }
       if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
       const edit = await waitFor(() => {
-        const menu = owned(C.NATIVE.commentOverflow);
+        const menu = owned(C.NATIVE.commentOverflow)[0];
         const item = menu && SHD.dom.deepQuery(menu, C.NATIVE.commentEdit);
         return item && C.NATIVE.commentEditText.test(item.textContent.trim()) ? item : null;
-      }, timings.composeWaitMs);
+      }, timings.composeWaitMs, stillHere);
       if (!stillHere()) return;
       if (!edit) { fallback(); return; }
       edit.click();
     }
-    const field = await waitFor(() => {
-      if (!stillHere()) return null;
-      const host = editor();
-      if (!host) return null;
-      const input = shown(SHD.dom.deepQuery(host, C.COMPOSER.editor));
-      if (input) return input;
-      // Like the reply composer, an edit host can mount with its ready slot still closed.
-      host.focus?.();
-      return null;
-    }, timings.composeWaitMs);
+    const input = await waitFor(field, timings.composeWaitMs, stillHere);
     if (!stillHere()) return;
-    if (!field) { fallback(); return; }
+    if (!input) { fallback(); return; }
     SHD.dom.passthroughNote('Edit and save in Reddit\'s editor, then choose \u2190 back to sheddit.');
+  }
+
+  /**
+   * Our row shows a CLONE of the comment's body, so an edit made in Reddit's editor does
+   * not appear in it until it is copied again. Copy when the reader leaves the handoff —
+   * and keep copying for editRefreshMs after: Save re-renders the body when Reddit's
+   * request returns, which on a slow connection is after the reader has pressed back, and
+   * a single copy at that moment kept the old text until a reload.
+   */
+  function refreshOnReturn(m, thing, bar) {
+    const opts = { childList: true, subtree: true, characterData: true };
+    let copied = null;
+    let watched = null;
+    let stop = 0;
+    const watch = new MutationObserver(() => copy());
+    const end = () => { watch.disconnect(); clearTimeout(stop); };
+    const copy = () => {
+      if (!thing.isConnected) return end();
+      const current = nativeComment(m);
+      const body = current && SHD.model.comment(current)?.bodyNode;
+      const rendered = thing.querySelector(':scope > .entry > .usertext > .usertext-body');
+      if (!body || !rendered) return;
+      if (current !== watched) {
+        // Reddit may replace the whole comment on save; its parent sees that happen.
+        watched = current;
+        watch.observe(current, opts);
+        if (current.parentNode) watch.observe(current.parentNode, { childList: true });
+      }
+      if (body.innerHTML === copied) return;
+      copied = body.innerHTML;
+      rendered.replaceChildren(SHD.dom.adoptBody(body));
+      m.source = current;
+      m.bodyNode = body;
+    };
+    const left = new MutationObserver(() => {
+      if (bar.isConnected) return;
+      left.disconnect();
+      copy();
+      stop = setTimeout(end, timings.editRefreshMs);
+    });
+    left.observe(bar.parentNode, { childList: true });
   }
 
   /** The top-level comment box on a comments page — old reddit had one above the list. */
@@ -1087,7 +1150,7 @@ SHD.account = (() => {
    * except the last item.
    */
   function fillMenu(menu, status) {
-    const name = SHD.session.username();
+    const name = SHD.session.username({ fresh: true });
     const kids = [];
     if (name) {
       kids.push(menuLink(`/user/${name}/`, 'my profile'));

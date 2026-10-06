@@ -2164,6 +2164,43 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      version that CONTRIBUTING said it guarded.
 
 
+118. **Editing your own comment (0.53.0) kept going after the reader left, and could not see
+     a late save.** An adversarial review of 0.53.0, every finding reproduced against the
+     built bundle before it was fixed, and each fix pinned by a test that fails without it.
+
+     THE HANDOFF WAS IDENTIFIED BY A CLASS ANYONE COULD SET. The pending attempt asked "does
+     the comment still carry `shd-passthrough`?", and a later handoff to the reader's own
+     reply nested under it puts that class straight back on every ancestor. The attempt they
+     had pressed back on then woke, opened the outer comment's menu and a second editor, and
+     overwrote the exit bar's note. `dom.passthrough()` returns its exit bar now, which is
+     removed when the reader leaves and when another handoff replaces this one, so
+     `bar.isConnected` is the only question asked. Every wait polls it, so leaving ends the
+     attempt within one poll — which also retired the `busy` flag that swallowed the next
+     click on edit for the whole 3-4 s wait.
+
+     ONE COPY AT THE MOMENT OF LEAVING. The row shows a clone of the body; it was refreshed
+     once when the handoff closed. Reddit re-renders on the save's response, which on a slow
+     connection is after the reader pressed back, and the row then kept the old text until
+     a reload — while the CHANGELOG told them returning refreshes it. The native comment is
+     watched for `editRefreshMs` after they leave now.
+
+     A LEFTOVER EDITOR WAS TAKEN FOR THE EDITOR. Any `comment-composer-host[edit-mode]`
+     under the comment skipped the menu; one left behind with no usable field (after a
+     cancel or a save) failed every later attempt on that comment until a reload. Only a
+     host with a visible field counts now; otherwise the menu is opened.
+
+     THE NAME WAS SEARCHED FOR ONCE PER COMMENT. `editLink` asks who the reader is for every
+     rendered comment, and `session.ident()` never cached a nameless reading, so a signed-in
+     page whose name could not be read re-ran the header search per comment — a 624-comment
+     thread rendered seven times slower. A miss is held for `NEGATIVE_TTL_MS`, like
+     `loggedIn()`'s; the account menu, built on a click, asks `{ fresh: true }`.
+
+     Smaller: a failure label that replaced `edit` for good, and an exit-bar note in the
+     `catch` that could never appear (the only error left no bar); the options page,
+     ARCHITECTURE, CONTRIBUTING and PRIVACY still describing the layer as vote, reply, post;
+     and the five edit selectors had no `verify:live` row — they do now (EDITING YOUR OWN
+     COMMENT), hard when signed in.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*
@@ -2208,6 +2245,27 @@ If a stepped edge is reported again, suspect the **right** edge, not the left: b
 above squeezed rows beside the sidebar by 18px, which is exactly the kind of ragged wrap
 that reads as stepping. That is fixed and asserted ("every row shares one width").
 
+
+### The pagination-repair merge kept nothing of its branch
+
+`a6f773d` ("Merge pagination repair into main lineage") merged `39e1618` ("Fix live feed
+pagination target", branched from 0.50.0) into the 0.53.0 line, and its tree is identical
+to `061fd43` — 0.53.0 exactly. None of `39e1618` survived: not its `:last-child`
+`C.FEED_PARTIAL`, not the removal of the descendant fallback, not its Devvit-modal fixture
+or regression test. That is the right outcome, recorded so nobody restores it: 0.52.0
+(bug 117) had already settled the same failure differently — the trailing partial by
+position, with ads and posts as items — and on `39e1618`'s own layout (a Devvit modal
+partial directly ahead of `/feed/next`) the merged code drives `/feed/next` on 3 loads of 3.
+`39e1618`'s test would FAIL if brought back, because it asserts that the bare
+`C.FEED_PARTIAL` selects the continuation; under 0.52.0 that selector is a candidate list
+and `paginator.partial()` is what picks.
+
+The history has one trap, left in place rather than rewritten: `39e1618` is the merge's
+FIRST parent. So `git log --first-parent main` runs `a6f773d -> 39e1618 -> 0.50.0` and
+hides 0.51.0-0.53.0, and the obvious way to back out "the pagination repair",
+`git revert -m 1 a6f773d`, would revert all of 0.51.0-0.53.0 instead (60 files), while
+`-m 2` reverts nothing. There is nothing to revert; if that ever seems necessary, read this
+first.
 
 ---
 

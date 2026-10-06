@@ -1220,6 +1220,68 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   console.log(`  \x1b[2mbuttons reachable through the first comment (${replyShape.buttons.length}):\x1b[0m`);
   for (const b of replyShape.buttons) console.log(`  \x1b[2m  [${b.where}] <button ${b.attrs}> "${b.label}"\x1b[0m`);
 
+  /* The edit flow's five contracts (0.53.0), measured signed in on one day and never
+     re-read until now: a rename of Reddit's "Open user actions" label or of the edit icon
+     sent every edit to the fallback note while this run stayed green. The menu is OPENED
+     (it posts nothing) only on a comment the signed-in reader wrote; Edit is never pressed.
+     The rows are hard only where they can be answered: signed in for the menu, and with a
+     comment of the reader's own on this thread for the edit item. */
+  const editShape = await page.evaluate(async (C, editText) => {
+    const deepQuery = (root, sel) => {
+      if (!root || typeof root.querySelector !== 'function') return null;
+      const d = root.querySelector(sel); if (d) return d;
+      if (root.shadowRoot) { const o = deepQuery(root.shadowRoot, sel); if (o) return o; }
+      for (const el of root.querySelectorAll('*')) {
+        if (el.shadowRoot) { const hit = deepQuery(el.shadowRoot, sel); if (hit) return hit; }
+      }
+      return null;
+    };
+    const owner = (n) => { for (; n;) { const k = n.closest?.(C.COMMENT); if (k) return k; const r = n.getRootNode?.(); n = r?.host || null; } return null; };
+    const has = (list) => list.split(',').map(x => x.trim()).filter(Boolean)
+      .some(x => { try { return !!document.querySelector(x); } catch { return false; } });
+    const loggedIn = has(C.SESSION.loggedIn) && !has(C.SESSION.loggedOut);
+    const me = (document.querySelector(C.SESSION.usernameAttr)?.getAttribute('username') || '').trim();
+    const menuOf = (c) => [...c.querySelectorAll(C.NATIVE.commentOverflow)].find(m => owner(m) === c) || null;
+    const first = document.querySelector(C.COMMENT);
+    const firstMenu = first && menuOf(first);
+    const out = { loggedIn, me: me || null, hasComment: !!first, overflow: !!firstMenu,
+                  actions: !!(firstMenu && deepQuery(firstMenu, C.NATIVE.commentActions)),
+                  own: false, editItem: null, editHosts: document.querySelectorAll(C.NATIVE.commentEditHost).length };
+    const mine = me && [...document.querySelectorAll(C.COMMENT)]
+      .find(c => (c.getAttribute(C.COMMENT_ATTR.author) || '').toLowerCase() === me.toLowerCase());
+    if (!mine) return out;
+    out.own = true;
+    mine.scrollIntoView({ block: 'center' });
+    const menu = menuOf(mine);
+    const toggle = menu && deepQuery(menu, C.NATIVE.commentActions);
+    if (!toggle) return out;
+    toggle.click();
+    const re = new RegExp(editText.source, editText.flags);
+    for (let i = 0; i < 30 && !out.editItem; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      const item = deepQuery(menu, C.NATIVE.commentEdit);
+      if (item) out.editItem = { text: (item.textContent || '').trim().slice(0, 40), matches: re.test((item.textContent || '').trim()) };
+    }
+    if (toggle.getAttribute('aria-expanded') === 'true') toggle.click();   // close it again
+    return out;
+  }, C, { source: C.NATIVE.commentEditText.source, flags: C.NATIVE.commentEditText.flags });
+  console.log('\n  \x1b[1mEDITING YOUR OWN COMMENT (menu opened, Edit never pressed)\x1b[0m');
+  console.log(`  \x1b[2msigned in: ${editShape.loggedIn}${editShape.me ? ` as ${editShape.me}` : ''}; ` +
+              `first comment: menu ${editShape.overflow ? 'FOUND' : 'NOT FOUND'} (C.NATIVE.commentOverflow), ` +
+              `actions button ${editShape.actions ? 'FOUND' : 'NOT FOUND'} (C.NATIVE.commentActions); ` +
+              `${editShape.editHosts} open edit host(s) (C.NATIVE.commentEditHost)\x1b[0m`);
+  if (editShape.loggedIn && editShape.hasComment) {
+    check('signed in, a comment carries its own menu and "Open user actions" (C.NATIVE.commentOverflow/commentActions)',
+      editShape.overflow && editShape.actions);
+  }
+  if (editShape.own) {
+    check('the reader\'s own comment menu offers Edit comment (C.NATIVE.commentEdit + commentEditText)',
+      !!editShape.editItem && editShape.editItem.matches, JSON.stringify(editShape.editItem));
+  } else {
+    console.log('  \x1b[2mno comment by the signed-in reader on this thread: the edit item is unverified this run ' +
+                '(it is checked only on a thread the reader has commented on)\x1b[0m');
+  }
+
   /* Not a pass/fail — a measurement the codebase is waiting on. See C.COMMENT_SCORE_HIDDEN:
      the attribute name is a candidate, and this line is the evidence that confirms or
      retires it. A young thread (inside the subreddit's hide-scores window) with many

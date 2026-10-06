@@ -468,6 +468,8 @@ SHD.C = {
        attribute clauses stay first for the day Reddit names the control. */
     replyText: /^reply$/i,
     // Measured signed in, 2026-09-25: comment editing lives in the overflow's open root.
+    // verify:live re-reads all five (EDITING YOUR OWN COMMENT): the menu signed in, the
+    // edit item on a thread carrying one of the reader's own comments.
     commentOverflow: 'shreddit-overflow-menu[comment-id]',
     commentActions: 'button[aria-label="Open user actions"]',
     commentEdit: '[role="menuitem"]:has([icon-name="edit"]) [tabindex="0"]',

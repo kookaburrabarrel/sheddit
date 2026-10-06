@@ -2056,7 +2056,20 @@ mutate "log out assumes the click worked instead of checking the session ended" 
 # Reddit's header hydrates late; caching the FIRST answer means a name that arrives a
 # moment later never appears at all.
 mutate "a missing username is cached, so a late name never arrives" run \
-  src/core/session.js '    if (identity && identity.name) return identity;' '    if (identity) return identity;'
+  src/core/session.js '    if (identity && (identity.name || (!fresh && Date.now() - identityAt < NEGATIVE_TTL_MS))) return identity;' '    if (identity) return identity;'
+
+# 0.53.0 asked for the name once per rendered comment and never cached a miss, so a page
+# whose name could not be read re-ran the header search for every comment (seven times
+# slower on a 624-comment thread).
+mutate "a missing username is re-read for every comment" run \
+  src/core/session.js '    if (identity && (identity.name || (!fresh && Date.now() - identityAt < NEGATIVE_TTL_MS))) return identity;' '    if (identity && identity.name) return identity;'
+
+# 0.53.0's edit flow asked whether the comment still carried the passthrough class, which
+# a later handoff to a reply nested under it puts straight back: an attempt the reader
+# had left woke up and opened a second editor.
+mutate "an abandoned edit resumes when a nested handoff reopens its path" run \
+  src/modules/account.js '    const stillHere = () => bar.isConnected && source.isConnected;' \
+  "    const stillHere = () => source.isConnected && source.classList.contains('shd-passthrough');"
 
 # The corner is the answer to "does this thing know I am logged in", and the name is the
 # half that can go missing. Dropping the fallback takes the answer with it.

@@ -223,15 +223,20 @@ SHD.dom = (() => {
    * So we walk the path from the target to the body child, un-clip that body child, and
    * display:none every SIBLING along the way. Only the corridor down to the target
    * survives. #shd-root is hidden for the duration and restored by passthroughClear().
+   *
+   * Returns the exit bar, or null. The bar is this handoff's identity: it is removed when
+   * the reader leaves AND when a later handoff replaces this one, so `bar.isConnected` is
+   * "this handoff is still open". The path classes are not — a later handoff to anything
+   * inside the same element puts them straight back.
    */
   function passthrough(el) {
     passthroughClear();
-    if (!el || !el.isConnected || el === document.body) return false;
+    if (!el || !el.isConnected || el === document.body) return null;
 
     const chain = [];
     for (let n = el; n && n !== document.body; n = n.parentElement) chain.push(n);
     const top = chain[chain.length - 1];
-    if (!top || top.parentElement !== document.body) return false;
+    if (!top || top.parentElement !== document.body) return null;
 
     for (const n of chain) {
       n.classList.add(n === top ? PASS_ROOT : PASS);
@@ -244,10 +249,9 @@ SHD.dom = (() => {
     }
 
     document.documentElement.classList.add('shd-passthrough-active');
-    document.body.appendChild(h('div#' + EXIT_ID, null,
+    return document.body.appendChild(h('div#' + EXIT_ID, null,
       h('a', { href: '#', text: '← back to sheddit',
                onclick: (e) => { e.preventDefault(); passthroughClear(); } })));
-    return true;
   }
 
   /**
