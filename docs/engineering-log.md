@@ -2201,6 +2201,17 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      and the five edit selectors had no `verify:live` row — they do now (EDITING YOUR OWN
      COMMENT), hard when signed in.
 
+119. **verify:live's RegExps arrived in the page as `{}`.** Found writing 118's live rows.
+     `page.evaluate` serialises its arguments like JSON, and a RegExp crosses as an empty
+     object, so the two probes that used one inside the page were not running the contract
+     at all. The removed-post probe — documented as a NEGATIVE control — rebuilt
+     `new RegExp(undefined)`, which matches everything: measured in Chromium, an ordinary
+     title "matched" `C.POST_REMOVED_TEXT`. The reply probe's text fallback called `.test`
+     on `{}` and threw whenever `C.NATIVE.reply` missed, aborting the run. verify:live now
+     builds C through `harness.pageContracts()`, which carries each RegExp as
+     `{ source, flags }`; run.js checks every contract RegExp survives that trip and that
+     live-contracts.js calls no RegExp method on C directly.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

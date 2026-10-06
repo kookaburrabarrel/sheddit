@@ -52,6 +52,13 @@ marked **never worked**, because "fixed" would imply it once did.
 - `npm run verify:live` checks the edit flow's Reddit selectors: the comment menu when
   signed in, and the *Edit comment* item on a thread you have commented on.
 
+### Fixed — for contributors: `verify:live` was not testing two of its text contracts
+
+The live check passed Reddit's text patterns into the browser page, where they arrived
+empty. Its removed-post check therefore matched every post, and its reply-button check
+crashed the run whenever its first selector missed. The patterns now arrive intact, and a
+test keeps it that way.
+
 ## 0.53.0
 
 ### Added — edit your own comments
