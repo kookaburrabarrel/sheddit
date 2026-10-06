@@ -20,6 +20,38 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased
+
+*Not yet numbered: `refresh-zip.sh <version>` gives this section its version when it ships.*
+
+### Fixed — editing your own comments
+
+- **A save that finishes after you press back now shows up.** Returning from Reddit's
+  editor copied your comment once, at the moment you left; on a slow connection Reddit's
+  save lands a moment later, and the comment kept its old text until a reload. Sheddit
+  keeps watching the comment for a few seconds after you return.
+- **Leaving an edit really does cancel it.** If you pressed back before Reddit's menu had
+  loaded and then edited one of your replies under the same comment, the first attempt
+  woke up and opened a second editor beside the reply's. It stays cancelled now.
+- **edit works again straight after you back out.** It ignored clicks for 3–4 seconds
+  after you left a pending attempt.
+- **A leftover editor no longer blocks editing a comment.** If Reddit left an editor
+  behind after a cancel or a save, every later attempt on that comment failed until a
+  reload; Sheddit opens the comment's menu instead.
+- **Failure messages no longer stick to the link.** A failed attempt used to replace the
+  word *edit* for good; the link resets on the next click, and a comment that has gone
+  from the page says so there.
+- **Long threads render quickly again when Sheddit can't read your username.** Checking
+  each comment's author re-searched the page header for your name every time; on a
+  624-comment thread that made rendering about seven times slower.
+
+### Changed
+
+- The options page, ARCHITECTURE, CONTRIBUTING and PRIVACY now list editing your own
+  comments among what the account layer does.
+- `npm run verify:live` checks the edit flow's Reddit selectors: the comment menu when
+  signed in, and the *Edit comment* item on a thread you have commented on.
+
 ## 0.53.0
 
 ### Added — edit your own comments

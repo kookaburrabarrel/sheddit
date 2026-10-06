@@ -6715,19 +6715,37 @@ async function boot(html, url, setup) {
     check('returning refreshes the cloned body and preserves formatting',
       await waitFor(() => row.querySelector('.usertext-body strong')?.textContent === 'comment'));
 
+    /* A SAVE THAT LANDS AFTER THE READER PRESSED BACK. Reddit re-renders the body when its
+       request returns; one copy at the moment of leaving kept the old text until a reload. */
+    model.bodyNode.innerHTML = '<p>Saved <em>late</em></p>';
+    check('a save that lands after returning still reaches the row',
+      await waitFor(() => row.querySelector('.usertext-body em')?.textContent === 'late'));
+
+    /* An editor Reddit left behind with no usable field (after a cancel or a save) is not
+       THE editor. Taking it for one skipped the menu and failed every later attempt on
+       this comment until a reload. */
     const stuck = doc.createElement('comment-composer-host');
     stuck.setAttribute('edit-mode', '');
     stuck.innerHTML = '<textarea hidden></textarea>';
-    source.appendChild(stuck);
+    source.prepend(stuck);
+    const editsBefore = ownState.edits;
     click(window, edit);
-    check('a mounted but unusable editor is reported as a failure',
-      await waitFor(() => /Could not open the editor automatically/.test(
-        doc.querySelector('.shd-passthrough-note')?.textContent || '')));
+    check('a leftover editor with no usable field is bypassed through the menu',
+      await waitFor(() => ownState.edits === editsBefore + 1 &&
+        /Edit and save/.test(doc.querySelector('.shd-passthrough-note')?.textContent || '')),
+      `edits ${ownState.edits - editsBefore}, note: ${doc.querySelector('.shd-passthrough-note')?.textContent}`);
     click(window, doc.querySelector('#shd-passthrough-exit a'));
-    stuck.remove();
+    source.querySelectorAll('comment-composer-host').forEach(el => el.remove());
     await hold(20);
+
+    /* Leaving ends the attempt THEN, not when its waits run out: the busy flag this replaced
+       swallowed the next click on edit for the whole hydrate wait. */
     source.querySelector(':scope > shreddit-overflow-menu').remove();
     click(window, edit);
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    click(window, edit);
+    check('edit opens again straight after leaving a pending attempt',
+      !!doc.getElementById('shd-passthrough-exit') && source.classList.contains('shd-passthrough'));
     check('missing own controls show an actionable fallback, not a false success',
       await waitFor(() => /Could not open the editor automatically/.test(
         doc.querySelector('.shd-passthrough-note')?.textContent || '')));
@@ -6739,6 +6757,41 @@ async function boot(html, url, setup) {
     const cancelled = menuFor(source);
     await hold(400);
     check('leaving during hydration cancels the pending edit', cancelled.opens === 0);
+  }
+  {
+    /* A LATER HANDOFF INSIDE THIS COMMENT IS NOT THIS HANDOFF. The pending attempt used to
+       ask "does the comment still carry the passthrough class?" — and a handoff to the
+       reader's own reply nested under it puts that class straight back, so the attempt
+       they had left woke up and opened a second editor beside the reply's. */
+    const page = commentsPage({ loggedIn: true })
+      .replace('author="user0"', 'author="TeStEr"').replace('author="user1"', 'author="tester"');
+    const { doc, window } = await boot(page, COMMENTS_URL, loggedInSettings());
+    fastAccount(window);
+    const outer = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const inner = doc.querySelector('shreddit-comment[thingid="t1_c1"]');
+    outer.appendChild(inner);
+    const editOf = (id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"] a.edit`);
+    const menuOn = (target) => {
+      const menu = doc.createElement('shreddit-overflow-menu');
+      menu.setAttribute('comment-id', target.getAttribute('thingid'));
+      const shadow = menu.attachShadow({ mode: 'open' });
+      shadow.innerHTML = '<button aria-label="Open user actions" aria-expanded="false"></button>';
+      const state = { opens: 0 };
+      shadow.querySelector('button').onclick = () => { state.opens++; };
+      target.appendChild(menu);
+      return state;
+    };
+    check('setup: both comments are the reader\'s', !!editOf('t1_c0') && !!editOf('t1_c1'));
+    click(window, editOf('t1_c0'));
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+    click(window, editOf('t1_c1'));
+    check('setup: the reply\'s handoff runs through the outer comment',
+      outer.classList.contains('shd-passthrough'));
+    const outerMenu = menuOn(outer);
+    await hold(150);
+    check('an attempt the reader left stays left when a nested handoff reopens its path',
+      outerMenu.opens === 0, `outer menu opened ${outerMenu.opens}x`);
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
   }
 
   console.log('\n\x1b[1mA SAME-PAGE URL REWRITE DOES NOT KILL THE RENDER (bug 95)\x1b[0m');
@@ -6971,6 +7024,28 @@ async function boot(html, url, setup) {
     window.SHD.session.reset();
     check('a dispatcher nested inside a post is not taken for the reader\'s name',
       window.SHD.session.username() === null, String(window.SHD.session.username()));
+  }
+
+  {
+    /* A NAME THE PAGE DOES NOT CARRY IS NOT RE-SEARCHED PER COMMENT. Every rendered comment
+       asks whether the reader wrote it (account.editLink), and with a miss never cached a
+       signed-in page whose name could not be read re-ran the whole header search for each
+       one — a 624-comment thread rendered seven times slower. A click still reads fresh. */
+    const { doc, window } = await boot(listingPage({ loggedIn: true, noUsername: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    window.SHD.session.reset();
+    const sel = window.SHD.C.SESSION.usernameAttr;
+    let reads = 0;
+    const qs = doc.querySelector.bind(doc);
+    doc.querySelector = (s) => { if (s === sel) reads++; return qs(s); };
+    for (let i = 0; i < 50; i++) window.SHD.session.username();
+    check('a missing name is read once for fifty asks in quick succession', reads === 1, `${reads} reads`);
+    const link = doc.createElement('a');
+    link.setAttribute('href', '/user/arrived/');
+    doc.querySelector('reddit-header-large').appendChild(link);
+    check('...but a fresh ask picks up a name that arrived meanwhile',
+      window.SHD.session.username({ fresh: true }) === 'arrived');
+    delete doc.querySelector;
   }
 
   console.log('\n\x1b[1mTHE ACCOUNT CORNER\x1b[0m');

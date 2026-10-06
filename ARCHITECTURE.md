@@ -317,8 +317,8 @@ Sheddit renders old-reddit vote arrows and links, but owns no auth state. Three 
 ### 5.3 The account layer (0.34.0) — the delegation tier, extended to the reply box
 
 `src/core/session.js` and `src/modules/account.js`. For a reader who is *already* logged in
-to Reddit, three things and no more: vote, reply, post. The architectural claim is that none
-of them needs a fourth tier. Everything is still tier 2 (a click forwarded to Reddit's own
+to Reddit, four things and no more: vote, reply, post, and edit their own comments (0.53.0).
+The architectural claim is that none of them needs a fourth tier. Everything is still tier 2 (a click forwarded to Reddit's own
 control) or tier 1 (a real link), and the layer adds nothing to the extension's network
 surface (§5.1).
 

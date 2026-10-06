@@ -153,8 +153,8 @@ revocable, which is what the options page's access warning exists for.
 
 Sheddit is built for **logged-out reading**, and that is still the default every fixture
 boots into. Since 0.34.0 there is also an **account layer** (`src/core/session.js`,
-`src/modules/account.js`) for a reader who is *already* logged in: vote, reply, and the
-sidebar's doors to the composer. Three rules keep the two from bleeding into each other:
+`src/modules/account.js`) for a reader who is *already* logged in: vote, reply, the
+sidebar's doors to the composer, and editing their own comments through Reddit's comment menu. Three rules keep the two from bleeding into each other:
 
 - **One login affordance, and only one** (owner decision, 2026-09-09): the account corner
   says `logged out` and links to Reddit's login page. That is a reversal of the blanket

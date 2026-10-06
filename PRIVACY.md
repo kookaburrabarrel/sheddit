@@ -147,7 +147,9 @@ the extension removes them.
   0.34.0 Sheddit notices a logged-in page (the avatar button in Reddit's own header) and
   makes old reddit's arrows, reply box and submit buttons work for you. It does that by
   clicking the vote button, reply control and submit button Reddit already rendered for
-  the same item, and by typing your reply into Reddit's own editor — Reddit's page code
+  the same item, and by typing your reply into Reddit's own editor. Since 0.53.0 it also
+  opens Reddit's own menu on a comment you wrote and presses its *Edit comment* item;
+  you make and save the edit yourself, in Reddit's editor. Reddit's page code
   then sends the request it would have sent had you used Reddit's button, with the
   session it already holds. Sheddit never sees that session, never reads a cookie, never
   builds a request, and never acts without a click from you. The layer is on by default,
