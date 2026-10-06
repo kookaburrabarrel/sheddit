@@ -1,6 +1,6 @@
 {
-  "version": "0.53.0",
-  "released": "2026-09-25",
+  "version": "0.53.1",
+  "released": "2026-10-06",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.53.0 adds an edit link to your own comments in a thread when the signed-in account layer is enabled. It opens Reddit's native editor with your existing text; save there, then choose back to sheddit to refresh the displayed comment. If the editor cannot open automatically, the handoff explains how to use Reddit's comment menu. Logged-out reading is unchanged."
+  "notes": "0.53.1 fixes editing your own comments: a save that finishes after you choose back to sheddit now shows up, leaving an edit really cancels it, the edit link works again straight away, and a leftover Reddit editor no longer blocks editing a comment. Long threads also render quickly again when Sheddit cannot read your username. Logged-out reading is unchanged."
 }
