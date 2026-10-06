@@ -20,9 +20,7 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
-## Unreleased
-
-*Not yet numbered: `refresh-zip.sh <version>` gives this section its version when it ships.*
+## 0.53.1
 
 ### Fixed — editing your own comments
 
