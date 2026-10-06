@@ -128,6 +128,31 @@ const LAUNCH_ARGS = [
   '--no-proxy-server'
 ];
 
+/**
+ * The contracts as a page can receive them.
+ *
+ * page.evaluate() and waitForFunction() serialise their arguments like JSON, and a RegExp
+ * crosses as `{}` — no `.test`, no `.source`. verify:live passed C straight in, so the
+ * removed-post probe rebuilt `new RegExp(undefined)`, which matches EVERY post (a negative
+ * control that could only report positives), and the reply probe's text fallback threw
+ * "replyText.test is not a function" and took the run down with it whenever the attribute
+ * clause missed. This copy carries each RegExp as a plain `{ source, flags }`: rebuild it
+ * in the page with `new RegExp(x.source, x.flags)`. Calling `.test` on it fails loudly,
+ * which is the point — it can no longer fail as a silent match-all.
+ */
+function pageContracts(value) {
+  if (Object.prototype.toString.call(value) === '[object RegExp]') {
+    return { source: value.source, flags: value.flags };
+  }
+  if (Array.isArray(value)) return value.map(pageContracts);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const k of Object.keys(value)) out[k] = pageContracts(value[k]);
+    return out;
+  }
+  return value;
+}
+
 /** Pass/fail reporter with the same output shape as the other suites. */
 function makeChecker() {
   const state = { passed: 0, failed: 0, failures: [] };
@@ -636,5 +661,5 @@ const PATHS = {
   emptyTop: '/r/empty/top/'     // ...under a sort that carries a time range (bug 94)
 };
 
-module.exports = { resolveChrome, requireChrome, noChromeMessage, makeChecker,
+module.exports = { resolveChrome, requireChrome, noChromeMessage, makeChecker, pageContracts,
                    serveFixtures, PATHS, COMMENT_SLICE, SLOW_STREAM_HOLD_MS, LAUNCH_ARGS };

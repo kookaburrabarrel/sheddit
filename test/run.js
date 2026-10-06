@@ -8331,6 +8331,38 @@ async function boot(html, url, setup) {
   }
 
   {
+    /* VERIFY:LIVE HANDED ITS PAGES REGEXPS THAT ARRIVED AS `{}`. page.evaluate serialises
+       its arguments like JSON, so the removed-post probe rebuilt `new RegExp(undefined)` —
+       a match-all, on the probe documented as a NEGATIVE control — and the reply probe's
+       text fallback threw. Every RegExp now crosses as { source, flags }. */
+    const { pageContracts } = require('./harness.js');
+    // Loaded the way verify:live loads them: in a vm context, so the RegExps are another realm's.
+    const ctx = require('vm').createContext({});
+    require('vm').runInContext(
+      fs.readFileSync(path.join(__dirname, '..', 'src', 'config', 'contracts.js'), 'utf8'), ctx);
+    const C = ctx.SHD.C;
+    const across = JSON.parse(JSON.stringify(pageContracts(C)));
+    const lost = [];
+    const walk = (orig, sent, at) => {
+      for (const k of Object.keys(orig)) {
+        const v = orig[k];
+        if (Object.prototype.toString.call(v) === '[object RegExp]') {
+          const back = sent?.[k] && new RegExp(sent[k].source, sent[k].flags);
+          if (!back || String(back) !== String(v)) lost.push(at + k);
+        } else if (v && typeof v === 'object') walk(v, sent?.[k], at + k + '.');
+      }
+    };
+    walk(C, across, 'C.');
+    check('every contract RegExp survives the trip into a page, rebuilt from { source, flags }',
+      lost.length === 0, lost.join(', '));
+    const live = fs.readFileSync(path.join(__dirname, 'live-contracts.js'), 'utf8');
+    check('verify:live hands its pages the page-safe contracts',
+      /const C = pageContracts\(context\.SHD\.C\);/.test(live));
+    check('...and never calls a RegExp method on one directly',
+      !/\bC\.[\w.]+\.(test|exec)\(/.test(live), (live.match(/\bC\.[\w.]+\.(test|exec)\(/) || [])[0]);
+  }
+
+  {
     /* THE PACKAGER SHIPPED A DOTFILE. `.DS_Store` is created by the Finder inside src/,
        it is gitignored so it exists on one machine and not in the repository, and it
        went into both store zips. It also broke `--check` everywhere else: the checker

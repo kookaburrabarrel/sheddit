@@ -34,7 +34,7 @@
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer');
-const { resolveChrome, noChromeMessage, makeChecker } = require('./harness');
+const { resolveChrome, noChromeMessage, makeChecker, pageContracts } = require('./harness');
 
 const HEADED = process.argv.includes('--headed');
 /* --login: the signed-in run 0.34.0's account layer waits on. Puppeteer opens a FRESH
@@ -76,7 +76,9 @@ const context = vm.createContext({});
 vm.runInContext(
   fs.readFileSync(path.join(__dirname, '..', 'src', 'config', 'contracts.js'), 'utf8'),
   context, { filename: 'contracts.js' });
-const C = context.SHD.C;
+/* Page-safe from the start (harness pageContracts): every evaluate below is handed C, and a
+   RegExp in it would arrive as `{}`. Node-side code here only ever reads `.source`/`.flags`. */
+const C = pageContracts(context.SHD.C);
 
 const { check, report } = makeChecker();
 const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.js'), 'utf8');
@@ -1158,12 +1160,13 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
     let via = reply ? 'C.NATIVE.reply (attribute)' : null;
     if (c && !reply) {
       // The text test account.js falls back to, scoped to buttons this comment owns.
+      const replyText = new RegExp(C.NATIVE.replyText.source, C.NATIVE.replyText.flags);
       // Ownership THROUGH shadow roots: closest() stops at the boundary (account.js has the same helper).
       const owner = (n) => { for (; n;) { const k = n.closest?.(C.COMMENT); if (k) return k; const r = n.getRootNode?.(); n = r?.host || null; } return null; };
       const scan = (root, depth) => {
         if (!root || depth > 8) return null;
         for (const b of root.querySelectorAll('button')) {
-          if (owner(b) === c && C.NATIVE.replyText.test((b.textContent || '').trim())) return b;
+          if (owner(b) === c && replyText.test((b.textContent || '').trim())) return b;
         }
         if (root.shadowRoot) { const h = scan(root.shadowRoot, depth + 1); if (h) return h; }
         for (const el of root.querySelectorAll('*')) {
@@ -1226,7 +1229,7 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
      (it posts nothing) only on a comment the signed-in reader wrote; Edit is never pressed.
      The rows are hard only where they can be answered: signed in for the menu, and with a
      comment of the reader's own on this thread for the edit item. */
-  const editShape = await page.evaluate(async (C, editText) => {
+  const editShape = await page.evaluate(async (C) => {
     const deepQuery = (root, sel) => {
       if (!root || typeof root.querySelector !== 'function') return null;
       const d = root.querySelector(sel); if (d) return d;
@@ -1256,7 +1259,7 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
     const toggle = menu && deepQuery(menu, C.NATIVE.commentActions);
     if (!toggle) return out;
     toggle.click();
-    const re = new RegExp(editText.source, editText.flags);
+    const re = new RegExp(C.NATIVE.commentEditText.source, C.NATIVE.commentEditText.flags);
     for (let i = 0; i < 30 && !out.editItem; i++) {
       await new Promise(r => setTimeout(r, 100));
       const item = deepQuery(menu, C.NATIVE.commentEdit);
@@ -1264,7 +1267,7 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
     }
     if (toggle.getAttribute('aria-expanded') === 'true') toggle.click();   // close it again
     return out;
-  }, C, { source: C.NATIVE.commentEditText.source, flags: C.NATIVE.commentEditText.flags });
+  }, C);
   console.log('\n  \x1b[1mEDITING YOUR OWN COMMENT (menu opened, Edit never pressed)\x1b[0m');
   console.log(`  \x1b[2msigned in: ${editShape.loggedIn}${editShape.me ? ` as ${editShape.me}` : ''}; ` +
               `first comment: menu ${editShape.overflow ? 'FOUND' : 'NOT FOUND'} (C.NATIVE.commentOverflow), ` +
