@@ -1239,6 +1239,50 @@ async function boot(html, url, setup) {
     check('...and one control, still the last thing in the box',
       box().querySelectorAll('.shd-gallery-nav').length === 1 &&
       nav() === box().lastElementChild);
+
+    /* Bug 120: every photo listed more than once. A lazy frame does not stay lazy — Reddit
+       fills its src and srcset in WHERE IT IS, and the frame's best URL moves from the
+       lazy attribute to the largest member of the set. The deck recognised its frames by
+       URL, so each hydrated frame read as a new one and was appended a second time. The
+       late frame above is a NEW element and could never show this. */
+    for (const n of [2, 3]) {
+      const f = [...srcPost.querySelectorAll('img')]
+        .find(i => (i.getAttribute('data-lazy-src') || '').includes(`bubble-${n}-`));
+      f.setAttribute('srcset', `https://preview.redd.it/bubble-${n}-640.jpg 640w, ` +
+        `https://preview.redd.it/bubble-${n}-1920.jpg 1920w`);
+      f.src = `https://preview.redd.it/bubble-${n}-640.jpg`;
+    }
+    const srcs = () => frames().map(i => i.getAttribute('src'));
+    const upgraded = await waitFor(() => srcs().some(u => /bubble-3-1920/.test(u)), { timeout: 3000 });
+    check('a lazy frame hydrating in place is the same frame, not a new one',
+      upgraded && frames().length === 4 && label() === '2 of 4', `${label()}: ${srcs().join(', ')}`);
+    check('...which takes the better copy Reddit has now offered for it',
+      /bubble-2-1920/.test(srcs()[1]) && /bubble-3-1920/.test(srcs()[2]), srcs().join(', '));
+    /* The same photo under a second URL — another size, another query — is one frame. */
+    const copy = doc.createElement('img');
+    copy.src = 'https://preview.redd.it/bubble-3-1920.jpg?width=320&blur=40';
+    srcPost.appendChild(copy);
+    await hold(100);
+    check('...and a second copy of a picture already in the deck adds nothing',
+      frames().length === 4 && label() === '2 of 4', `${label()}: ${srcs().join(', ')}`);
+  }
+
+  {
+    /* Bug 120 again, when the hydration is the FIRST thing the late watcher sees. Above, an
+       earlier mutation let the watcher pair each drawn frame with its native one while
+       their URLs still agreed; here nothing has, so the pairing has to have been made when
+       the frame was drawn, or the hydrated frame (new URL, nothing to match) is appended. */
+    const { doc } = await boot(commentsPage({ galleryPost: true }),
+      'https://www.reddit.com/r/interesting/comments/gallery1/bubble_boy/');
+    const f = [...doc.querySelectorAll('shreddit-post[id="t3_gallery1"] img')]
+      .find(i => (i.getAttribute('data-lazy-src') || '').includes('bubble-2-'));
+    f.setAttribute('srcset', 'https://preview.redd.it/bubble-2-1920.jpg 1920w');
+    f.src = 'https://preview.redd.it/bubble-2-1920.jpg';
+    const deck = () => [...doc.querySelectorAll('#shd-root .shd-selfpost .shd-image-el')]
+      .map(i => i.getAttribute('src'));
+    await waitFor(() => deck().some(u => /bubble-2-1920/.test(u)), { timeout: 3000 });
+    check('a frame hydrating before anything else changed is still the frame it was',
+      deck().length === 3 && /bubble-2-1920/.test(deck()[1]), deck().join(', '));
   }
 
   {

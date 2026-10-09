@@ -453,15 +453,38 @@ SHD.model = (() => {
   }
 
   /**
-   * Every picture a GALLERY post is carrying, one per <img>, each at its own best size.
+   * WHICH PICTURE a URL is, as opposed to which copy of it.
+   *
+   * Reddit serves one upload under many URLs: `i.redd.it/<id>.jpg` is the original and
+   * `preview.redd.it/<id>.jpg?width=640&…` is a resize of it, one per width in a srcset.
+   * Comparing whole URLs therefore calls two sizes of one photo two photos — which is how
+   * a gallery listed every frame more than once (bug 120). The path is the picture; the
+   * host within redd.it and the query are only which copy of it was asked for.
+   */
+  function pictureKey(u) {
+    const s = String(u || '');
+    const host = s.split('/')[2] || '';
+    const path = s.split('/').slice(3).join('/').split(/[?#]/)[0];
+    return `${/(^|\.)redd\.it$/.test(host) ? 'redd.it' : host}/${path}`;
+  }
+
+  /**
+   * Every picture a GALLERY post is carrying, one per <img>, each at its own best size —
+   * WITH the <img> it was read from.
    *
    * imageOf() above answers "the single largest picture in this post", which is right for
    * an image post and wrong for a gallery — there the frames are peers, and reducing them
    * to the biggest one silently drops the rest. Same scoping, same allowlist, same
    * exclusions; the only difference is the unit of ranking (per element, not per post).
+   *
+   * The element travels with the URL because a frame's best URL CHANGES while it is on
+   * screen: a lazy frame is first read from `data-lazy-src` and, once Reddit fills its
+   * srcset in, from the largest member of that — a different URL for the same frame. The
+   * element is what stays the same, so it is what a consumer tracks a frame by (bug 120).
+   * Two elements carrying one picture are one frame: the first one wins.
    */
-  function imagesOf(el) {
-    const out = [];
+  function framesOf(el) {
+    const out = [], seen = new Set();
     for (const img of el.querySelectorAll('img')) {
       if (img.closest(C.POST) !== el) continue;
       if (img.closest(C.THUMB_EXCLUDE)) continue;
@@ -471,10 +494,15 @@ SHD.model = (() => {
         if (!C.THUMB_HOSTS.test(host)) continue;
         if (betterPicture(c, bestW, bestOrig)) { bestW = c.w; bestOrig = c.orig; best = c.url; }
       }
-      if (best && !out.includes(best)) out.push(best);
+      if (!best || seen.has(pictureKey(best))) continue;
+      seen.add(pictureKey(best));
+      out.push({ img, url: best });
     }
     return out;
   }
+
+  /** framesOf without the elements, for the callers that only need the URLs. */
+  const imagesOf = (el) => framesOf(el).map(f => f.url);
 
   /**
    * Does navigating to this URL land the reader in Reddit's /media viewer?
@@ -697,10 +725,10 @@ SHD.model = (() => {
     };
   }
 
-  /* imagesOf is public for the same reason mp4Of is: gallery frames HYDRATE LATE — the
-     carousel's lazy <img>s are srcless at consume time and grow their src afterwards
-     (bug 91) — so the consumer re-reads the source element after render, exactly as the
-     watch link re-resolves the mp4 at click time. */
-  return { post, comment, profileComment, mp4Of, expired, imagesOf,
+  /* imagesOf and framesOf are public for the same reason mp4Of is: gallery frames HYDRATE
+     LATE — the carousel's lazy <img>s are srcless at consume time and grow their src
+     afterwards (bug 91) — so the consumer re-reads the source element after render,
+     exactly as the watch link re-resolves the mp4 at click time. */
+  return { post, comment, profileComment, mp4Of, expired, imagesOf, framesOf, pictureKey,
            rejects, rejectSummary, clearRejects };
 })();

@@ -2211,6 +2211,22 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      builds C through `harness.pageContracts()`, which carries each RegExp as
      `{ source, flags }`; run.js checks every contract RegExp survives that trip and that
      live-contracts.js calls no RegExp method on C directly.
+120. **Slideshows listed every photo more than once.** Bug 91's late-frame watcher knew
+     the frames already in the deck by URL, and a lazy frame's URL does not stay put: it
+     is drawn from `data-lazy-src` at consume, and when Reddit fills its `src`/`srcset` in
+     PLACE, imagesOf() ranks the largest member of the new set instead — the same photo
+     under a different URL, so the watcher appended it as a new frame. Reproduced in
+     jsdom: hydrating frames 2 and 3 of the fixture took "1 of 3" to "1 of 5". Bug 91's
+     test could not see it because its late frame was a brand-new element, never a lazy
+     one filling in. Two fixes. model.framesOf() returns each frame WITH the native <img>
+     it was read from, and the drawn frame remembers that element — tagged when it is
+     drawn, not on the watcher's first pass, because hydration can be the first mutation
+     the watcher ever sees; the watcher finds a frame by its element and gives it the
+     new, better URL instead of appending. And model.pictureKey() makes "same picture"
+     mean the path, not the whole URL, so two sizes or hosts of one upload (`?width=…`,
+     i.redd.it vs preview.redd.it) are one frame. Whether live Reddit also shows frame 1
+     twice was not established — Reddit 403s the test container — and pictureKey is the
+     guess at that half (a second <img> per frame carrying a resize of the same file).
 
 ## The popup policy — supersedes bugs 30, 33 and 38
 

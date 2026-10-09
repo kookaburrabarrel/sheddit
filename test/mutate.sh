@@ -1475,13 +1475,13 @@ mutate "a timestamp that arrives late is lost again" run \
 # A gallery reduced to its single largest frame — the exact reduction imageOf() rightly
 # performs for an image post, wrong here because frames are peers.
 mutate "a gallery collapses to one picture" run \
-  src/modules/comments.js "      : m.type === 'gallery' ? m.images : [];" \
+  src/modules/comments.js "      : m.type === 'gallery' ? galleryFrames(m) : [];" \
                           "      : m.type === 'gallery' && m.images.length ? [m.images[0]] : [];"
 
 # Per-frame ranking: scoring frames into one global winner is the same bug one level down.
 mutate "gallery frames stop being ranked per element" run \
-  src/core/model.js "      if (best && !out.includes(best)) out.push(best);" \
-                    "      if (best && !out.length) out.push(best);"
+  src/core/model.js "      if (!best || seen.has(pictureKey(best))) continue;" \
+                    "      if (!best || out.length) continue;"
 
 # ----------------------------------------------------------- 0.24.0: the Firefox port ---
 # The relay (bug 82). Reddit's router calls the PAGE realm's pushState; a content-script
@@ -2322,6 +2322,25 @@ mutate "a late frame sends the reader back to the first slide" run \
     stepFrame(box, 0);" "    box.appendChild(nav);
     box.dataset.shdFrame = '0';
     stepFrame(box, 0);"
+
+# Bug 120: every photo listed more than once. A lazy frame hydrates IN PLACE and its best
+# URL moves from data-lazy-src to the largest member of its new srcset, so a deck that knew
+# its frames by URL appended each hydrated frame a second time. Four rows, one per link in
+# the chain: the drawn frame must remember its source, the watcher must look it up by that
+# source, a found frame takes the better copy, and two URLs of one picture are one frame.
+mutate "a drawn gallery frame forgets which native frame it came from" run \
+  src/modules/comments.js "    if (from) frameSource.set(f, from);" "    ;"
+
+mutate "a hydrating gallery frame is recognised by its url again" run \
+  src/modules/comments.js "        const frame = deck.find(f => frameSource.get(f) === img) ||" \
+                          "        const frame = deck.find(f => f.getAttribute('src') === url) ||"
+
+mutate "a hydrated gallery frame keeps its stale lazy url" run \
+  src/modules/comments.js "        if (frame.getAttribute('src') !== url) frame.setAttribute('src', url);" "        ;"
+
+mutate "two urls of one picture are two gallery frames" run \
+  src/core/model.js '    return `${/(^|\.)redd\.it$/.test(host) ? '"'"'redd.it'"'"' : host}/${path}`;' \
+                    '    return s;'
 
 # ------------------------------------------- the original beats every resize ---
 # Reported from live use: a post rendered at 640px with a full-size copy in the same
