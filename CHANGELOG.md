@@ -20,6 +20,18 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.53.2
+
+### Fixed — gallery slideshows listed every photo more than once
+
+- **Each photo is one slide again.** Reddit loads a gallery's later photos after the page
+  opens, and when it did, the photo arrived under a bigger URL than the one Sheddit had
+  first read for it. Sheddit recognised the slides it already had by URL, so every photo
+  that loaded late was added to the slideshow a second time and the count ran past the
+  post's real number of photos. Slides are now tracked by the photo they came from: a
+  photo that loads late updates its own slide — to the full-size copy — instead of adding
+  a new one, and two sizes of the same upload count as one photo.
+
 ## 0.53.1
 
 ### Fixed — editing your own comments
