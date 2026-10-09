@@ -1,6 +1,6 @@
 {
-  "version": "0.53.1",
-  "released": "2026-10-06",
+  "version": "0.53.2",
+  "released": "2026-10-09",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.53.1 fixes editing your own comments: a save that finishes after you choose back to sheddit now shows up, leaving an edit really cancels it, the edit link works again straight away, and a leftover Reddit editor no longer blocks editing a comment. Long threads also render quickly again when Sheddit cannot read your username. Logged-out reading is unchanged."
+  "notes": "0.53.2 fixes gallery slideshows listing every photo more than once: a photo Reddit loads after the page opens now stays the same slide, showing its full-size copy, instead of being added again. Logged-out reading is unchanged."
 }
