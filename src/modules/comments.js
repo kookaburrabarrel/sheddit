@@ -329,6 +329,12 @@ SHD.comments = (() => {
   /** Is this post's picture behind the adult opt-in? One question, asked in three places. */
   const adultGate = (m) => !!m.nsfw && !SHD.settings.showNsfwThumbnails;
 
+  /* The native <img> each drawn gallery frame was read from — bug 120. A lazy frame's URL
+     CHANGES when Reddit hydrates it (data-lazy-src, then the largest of a srcset), so a
+     deck that recognised its frames by URL took every hydrated frame for a new one and
+     listed each photo twice. The source element is the identity that survives that. */
+  const frameSource = new WeakMap();
+
   /* Bare <img>, no anchor — deliberately, since 2026-08-24. These used to link "the file
      itself", and measurement showed there is no such destination for a logged-out click:
      i.redd.it AND preview.redd.it both 307 a navigation into Reddit's /media viewer
@@ -341,8 +347,14 @@ SHD.comments = (() => {
      twenty-frame gallery therefore costs one picture rather than twenty until the reader
      asks for the rest. The visible cost is a frame that arrives a moment after it is
      stepped to, which is the same trade the adult blur makes deliberately. */
-  const imageFrames = (urls) => urls.map(u =>
-    h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
+  const imageFrame = (url, from) => {
+    const f = h('img.shd-image-el', { src: url, alt: '', loading: 'lazy' });
+    if (from) frameSource.set(f, from);
+    return f;
+  };
+  /** Frames from model.framesOf ({ url, img }) or bare URLs — an image post has no source. */
+  const imageFrames = (frames) => frames.map(f =>
+    typeof f === 'string' ? imageFrame(f) : imageFrame(f.url, f.img));
 
   /**
    * Move a gallery `delta` frames along and re-label it.
@@ -432,9 +444,10 @@ SHD.comments = (() => {
    * blur is then over a picture the row had anyway: no worse than the row, never worse than
    * revealing it.
    *
-   * @param {() => string[]} resolve  the frames to draw, called AT REVEAL TIME. A gallery's
-   *   carousel hydrates late (bug 91), so asking at the click is what makes a post revealed
-   *   ten seconds in show everything it has rather than what it had at first paint.
+   * @param {() => Array} resolve  the frames to draw — URLs, or model.framesOf entries —
+   *   called AT REVEAL TIME. A gallery's carousel hydrates late (bug 91), so asking at the
+   *   click is what makes a post revealed ten seconds in show everything it has rather
+   *   than what it had at first paint.
    */
   function gateImages(box, m, resolve) {
     box.classList.add('shd-image-gated');
@@ -452,11 +465,11 @@ SHD.comments = (() => {
       text: 'adult content — click to view',
       onclick: () => {
         box.classList.remove('shd-image-gated');
-        const urls = resolve();
+        const frames = resolve();
         /* Nothing left to show — a gallery whose frames went away mid-blur. Leave the page
            as it was rather than an empty box with a control that did nothing (bug 62). */
-        if (!urls.length) return box.remove();
-        box.replaceChildren(...imageFrames(urls));
+        if (!frames.length) return box.remove();
+        box.replaceChildren(...imageFrames(frames));
         syncGallery(box);
       }
     });
@@ -475,19 +488,22 @@ SHD.comments = (() => {
        slideshow rather than a picture. An image post is the single-picture case of the
        same box. Both fall through to null when nothing resolved, so a page whose full-size
        files live elsewhere costs the picture and never the post. */
-    const urls = m.type === 'image' && m.image ? [m.image]
-      : m.type === 'gallery' ? m.images : [];
-    if (!urls.length) return null;
+    const frames = m.type === 'image' && m.image ? [m.image]
+      : m.type === 'gallery' ? galleryFrames(m) : [];
+    if (!frames.length) return null;
     const box = h('div.shd-image');
-    if (adultGate(m)) return gateImages(box, m, () => liveFrames(m, urls));
-    box.append(...imageFrames(urls));
+    if (adultGate(m)) return gateImages(box, m, () => liveFrames(m, frames));
+    box.append(...imageFrames(frames));
     return syncGallery(box);
   }
+
+  /** A gallery's frames with the elements they came from, so the late watcher can track them. */
+  const galleryFrames = (m) => m.source ? SHD.model.framesOf(m.source) : m.images;
 
   /** The frames this post can show right now, preferring a re-read over the consume-time snapshot. */
   function liveFrames(m, fallback) {
     if (m.type !== 'gallery' || !m.source) return fallback;
-    const now = SHD.model.imagesOf(m.source);
+    const now = SHD.model.framesOf(m.source);
     return now.length ? now : fallback;
   }
 
@@ -814,8 +830,8 @@ SHD.comments = (() => {
        the appending below, not the box. */
     const obs = new MutationObserver(() => {
       if (!row.isConnected) { obs.disconnect(); clearTimeout(stop); return; }
-      const urls = SHD.model.imagesOf(m.source);
-      if (!urls.length) return;
+      const found = SHD.model.framesOf(m.source);
+      if (!found.length) return;
       let box = row.querySelector('.shd-image');
       if (!box) {
         box = h('div.shd-image');
@@ -825,14 +841,26 @@ SHD.comments = (() => {
         /* A gallery whose frames all arrived late, on an adult post: the box opens blurred,
            exactly as postImage would have built it had the frames been there at consume
            time. Appending the frames straight in here is the bypass the gate is for. */
-        if (adultGate(m)) { gateImages(box, m, () => SHD.model.imagesOf(m.source)); return; }
+        if (adultGate(m)) { gateImages(box, m, () => SHD.model.framesOf(m.source)); return; }
       }
       /* Still blurred: the reader has not asked, and the reveal re-reads the frames, so
          nothing that hydrates while the blur stands is lost by waiting. */
       if (box.classList.contains('shd-image-gated')) return;
-      const have = new Set([...box.querySelectorAll('img')].map(i => i.getAttribute('src')));
-      for (const u of urls) {
-        if (!have.has(u)) box.appendChild(h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
+      /* A frame already in the deck is found by the element it was read from, then by
+         picture — never by URL alone, because a hydrating frame's URL changes under it
+         (bug 120). Found, it takes the new URL, which is the same photo at its best size
+         now that Reddit has said what that is; only a frame the deck has no trace of is
+         appended. framesOf gives each picture one entry, so a drawn frame showing that
+         picture IS that entry's frame, even if a re-rendered carousel moved it to a new
+         element. */
+      const deck = [...box.querySelectorAll('.shd-image-el')];
+      for (const { img, url } of found) {
+        const key = SHD.model.pictureKey(url);
+        const frame = deck.find(f => frameSource.get(f) === img) ||
+          deck.find(f => SHD.model.pictureKey(f.getAttribute('src')) === key);
+        if (!frame) { box.appendChild(imageFrame(url, img)); continue; }
+        frameSource.set(frame, img);
+        if (frame.getAttribute('src') !== url) frame.setAttribute('src', url);
       }
       /* A late frame is what turns a lone picture into a gallery — see syncGallery. */
       syncGallery(box);
