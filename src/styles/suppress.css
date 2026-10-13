@@ -118,6 +118,10 @@ html.shd-failed body > *:not(#shd-error) {
   visibility: hidden !important;
 }
 
+/* Focus is refused under visibility:hidden. Keep the native box transparent and
+   non-interactive, but let the editor take focus while its draft is replaced. */
+html.shd-active .shd-native-editing { visibility: visible !important; }
+
 /* Escape hatch: an element we deliberately hand back to native Reddit (e.g. reply box).
  *
  * This class goes on the DIRECT CHILD OF <body>, never on the target itself. opacity

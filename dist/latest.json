@@ -1,6 +1,6 @@
 {
-  "version": "0.53.2",
-  "released": "2026-10-09",
+  "version": "0.53.3",
+  "released": "2026-10-13",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.53.2 fixes gallery slideshows listing every photo more than once: a photo Reddit loads after the page opens now stays the same slide, showing its full-size copy, instead of being added again. Logged-out reading is unchanged."
+  "notes": "0.53.3 fixes reply insertion into Reddit's hidden editor and stops changed drafts accumulating older versions. Failed rich-text edits preserve your draft and cannot trigger submission. Signed-in browsing remains experimental; logged-out reading is unchanged."
 }

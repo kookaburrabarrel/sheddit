@@ -858,9 +858,9 @@ SHD.C = {
    * and a full pointerdown/mousedown/pointerup/mouseup/click sequence on the placeholder
    * both produced no editor, no submit button and `execCommand` still false. A content
    * script cannot fake activation and that is the end of it. And `textContent =` never
-   * works against Lexical in either state, so the check on it has to look again after the
-   * editor has had its turn (landed()) — reading it back synchronously returns true for
-   * text that is about to be removed, which was a false positive with a submit behind it.
+   * works against Lexical in either state, so account.js refuses that fallback for the
+   * measured richEditor selector. Browser edits still have to survive reconciliation
+   * (landed()) before submission.
    *
    * What the ceiling actually costs is one extra click: the reader opens Reddit's box
    * themselves, it stays open, and a second save then completes the whole chain. That is
@@ -876,8 +876,11 @@ SHD.C = {
    * Two more things the same session measured about the editor, both handled in
    * account.js: `textContent` of adjacent <p> nodes concatenates with NO separator, so any
    * comparison against a multi-line draft has to drop whitespace on both sides rather than
-   * collapse it; and `focus()` on the editor is a request it may decline, after which
-   * `execCommand` writes into whatever IS focused — which was the reader's own draft box.
+   * collapse it; and `focus()` on the editor is refused while suppression inherits
+   * visibility:hidden. account.js temporarily overrides only the editor's visibility,
+   * retaining native opacity and click suppression, then verifies focus before editing.
+   * Without that check, `execCommand` writes into whatever IS focused — which was the
+   * reader's own draft box.
    * Neither is a selector problem, which is why neither lives here. Each miss has the same fail-safe: the native composer is revealed in place
    * (passthrough), and the reader finishes in Reddit's UI. account.js's `compose()`
    * measures the outcome — a new comment element arriving under the target — rather than
@@ -887,6 +890,7 @@ SHD.C = {
     host: 'comment-composer-host, shreddit-composer, shreddit-async-loader[bundlename*="composer" i], ' +
           'faceplate-form[action*="comment" i]',
     editor: 'textarea, [data-lexical-editor], [contenteditable="true"], [contenteditable=""]',
+    richEditor: '[data-lexical-editor]',
     submit: 'button[type="submit"], [slot="submit-button"], button[slot*="submit" i]',
     /* THE COLLAPSED STATE, measured live 2026-09-17 on a top-level composer:
          comment-composer-host[slot=ready]

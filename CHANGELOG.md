@@ -20,6 +20,21 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.53.3
+
+### Fixed — reply insertion and accumulated drafts
+
+- **Reddit's hidden editor can accept the reply.** Native suppression prevented focus,
+  sending insertion through a DOM-write fallback that Reddit's rich-text editor could
+  ignore. The editor is temporarily focusable while the native page stays transparent
+  and non-interactive, and focus is checked before each editing command.
+- **Changed drafts replace older text instead of appending to it.** Insertion selects
+  the existing native contents first. Verification and handoff require the complete
+  draft to match, rather than accepting it as a substring of accumulated versions.
+- **A failed Lexical edit cannot authorize submission through a direct DOM write.**
+  The original draft stays in Sheddit's form. These fixes do not establish why earlier
+  manual native-button clicks sent no request; signed-in browsing remains experimental.
+
 ## 0.53.2
 
 ### Fixed — gallery slideshows listed every photo more than once

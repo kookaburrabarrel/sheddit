@@ -480,9 +480,8 @@ SHD.account = (() => {
    * Put text into Reddit's editor so that Reddit's editor knows about it. A textarea is a
    * value and an input event. A contenteditable is fed through the browser's own editing
    * command first, because that is what produces the beforeinput/input sequence a
-   * rich-text editor listens for; if the command is unavailable or the text did not land,
-   * the node's text is set directly and an input event dispatched — the honest fallback,
-   * and the one whose result is checked before anything is submitted.
+   * rich-text editor listens for. Direct DOM writes are a fallback only for plain
+   * contenteditables: Lexical's DOM is not its submission model.
    */
   /**
    * DID IT LAND, AND DID IT STAY? The second half is not pedantry.
@@ -508,7 +507,7 @@ SHD.account = (() => {
    * WHITESPACE IS NOT PART OF THE COMPARISON, and the reason is structural, not cosmetic.
    * A rich editor renders a paragraph break as a second <p>, not as a newline character —
    * so an editor holding a two-paragraph draft perfectly has a textContent with no "\n" in
-   * it at all, and a substring test against the raw draft can never match. Measured live:
+   * it at all, and a comparison against the raw draft can never match. Measured live:
    * every multi-line draft was reported as not landing, however well it had landed, which
    * sent the chain into the handoff and wrote the text a SECOND time.
    *
@@ -516,11 +515,11 @@ SHD.account = (() => {
    * two adjacent <p> nodes concatenate in textContent with NO separator between them —
    * `<p>reply.</p><p>Second</p>` reads "reply.Second" — so the draft's space at the
    * paragraph break has no counterpart on the editor's side to normalise to. What is left
-   * once whitespace is gone is the characters the reader typed, in the order they typed
-   * them, which is the only thing "the words are there" ever meant.
+   * once whitespace is gone must equal the draft, not merely contain it: changed retries
+   * previously accumulated older versions and still passed this check.
    */
   const norm = (s) => String(s || '').replace(/\s+/g, '');
-  const holds = (editor, text) => norm(editor.textContent).includes(norm(text));
+  const holds = (editor, text) => norm(editor.textContent) === norm(text);
 
   async function landed(editor, text) {
     if (!holds(editor, text)) return false;
@@ -558,8 +557,14 @@ SHD.account = (() => {
   function openComposer(host) {
     const trigger = shown(SHD.dom.deepQuery(host, C.COMPOSER.trigger));
     if (!trigger) return false;
-    try { trigger.shadowRoot?.querySelector('textarea')?.focus(); } catch { /* best effort */ }
-    try { if (typeof host.focus === 'function') host.focus(); } catch { /* best effort */ }
+    const editing = trigger.classList.contains('shd-native-editing');
+    trigger.classList.add('shd-native-editing');
+    try {
+      try { trigger.shadowRoot?.querySelector('textarea')?.focus(); } catch { /* best effort */ }
+      try { if (typeof host.focus === 'function') host.focus(); } catch { /* best effort */ }
+    } finally {
+      if (!editing) trigger.classList.remove('shd-native-editing');
+    }
     return true;
   }
 
@@ -571,6 +576,9 @@ SHD.account = (() => {
   }
 
   async function insertText(editor, text) {
+    const activeBefore = deepActive();
+    const editing = editor.classList.contains('shd-native-editing');
+    editor.classList.add('shd-native-editing');
     try {
       if (typeof editor.focus === 'function') editor.focus();
       const tag = editor.tagName;
@@ -600,21 +608,35 @@ SHD.account = (() => {
            piece is typed, and between pieces the editor is told a paragraph ended the way
            the keyboard would tell it. */
         try {
+          const root = editor.getRootNode();
+          const selection = typeof root.getSelection === 'function'
+            ? root.getSelection() : document.getSelection();
+          if (!selection) return false;
+          const range = document.createRange();
+          range.selectNodeContents(editor);
+          selection.removeAllRanges();
+          selection.addRange(range);
           done = true;
-          text.split(/\n\s*\n/).forEach((para, i) => {
+          const paragraphs = text.split(/\n\s*\n/);
+          for (const [i, para] of paragraphs.entries()) {
+            if (deepActive() !== editor) { done = false; break; }
             if (i && typeof InputEvent === 'function') {
               editor.dispatchEvent(new InputEvent('beforeinput',
                 { inputType: 'insertParagraph', bubbles: true, cancelable: true }));
             }
-            if (para && document.execCommand('insertText', false, para) !== true) done = false;
-          });
+            if (deepActive() !== editor ||
+                (para && document.execCommand('insertText', false, para) !== true)) {
+              done = false;
+              break;
+            }
+          }
         } catch { done = false; }
       }
-      /* The honest fallback, kept for a PLAIN contenteditable, where setting text is the
-         whole of what an editor is. Against a rich editor it is a no-op that looks like a
-         success for a moment — which is exactly what landed() is now there to catch, and
-         why the fallback no longer needs to know which kind it is talking to. */
+      /* Plain contenteditables accept a value by reference. Lexical must accept the
+         browser edit instead; leaving plausible DOM text behind could conceal failure. */
       if (!done || !holds(editor, text)) {
+        // Lexical's DOM is not its model; a direct write must never authorize a submit.
+        if (editor.matches(C.COMPOSER.richEditor)) return false;
         editor.textContent = text;
         const ev = typeof InputEvent === 'function'
           ? new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text })
@@ -623,6 +645,13 @@ SHD.account = (() => {
       }
       return await landed(editor, text);
     } catch { return false; }
+    finally {
+      const restoreFocus = deepActive() === editor;
+      if (!editing) editor.classList.remove('shd-native-editing');
+      if (restoreFocus && activeBefore && activeBefore !== editor && activeBefore.isConnected) {
+        activeBefore.focus?.();
+      }
+    }
   }
 
   /**
@@ -752,8 +781,9 @@ SHD.account = (() => {
        editor and then misjudged its own work — the multi-line case did exactly that, and
        this call wrote the draft a second time into a box that already held it, run
        together with no break between. Whatever insertText() concluded, the editor's
-       contents are the fact; if the words are in it, the handoff's job is done. */
-    if (holds(editor, text)) return true;
+       contents must match the entire draft and survive reconciliation before the
+       handoff's job is done. A substring could be buried inside accumulated old drafts. */
+    if (await landed(editor, text)) return true;
     return await insertText(editor, text);
   }
 

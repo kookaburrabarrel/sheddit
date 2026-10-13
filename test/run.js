@@ -7549,6 +7549,92 @@ async function boot(html, url, setup) {
 
   console.log('\n\x1b[1mREPLYING ON A LOGGED-IN SESSION — DRIVING REDDIT\'S COMPOSER\x1b[0m');
   {
+    const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const target = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const draft = 'The revised reply.';
+    const native = installNativeAccount(window, doc, target, {
+      reply: true, composer: 'contenteditable', focusable: true, silentSubmit: true,
+      onEditor: (ed) => { ed.textContent = `An older draft. ${draft}`; }
+    });
+    doc.execCommand = (cmd, _ui, value) => {
+      if (cmd !== 'insertText') return false;
+      const selection = doc.getSelection();
+      selection.getRangeAt(0).deleteContents();
+      doc.activeElement.textContent += value;
+      return true;
+    };
+    await window.SHD.account.compose(target, draft, 'comment');
+    check('a rich editor replaces an older draft even when it already contains the new draft',
+      native.received[0] === draft, JSON.stringify(native.received));
+    await window.SHD.account.compose(target, 'A different revision.', 'comment');
+    check('retrying with a changed draft replaces, rather than appends to, the native text',
+      native.received[1] === 'A different revision.', JSON.stringify(native.received));
+    check('temporary editor focusability is removed after insertion',
+      !native.editor.classList.contains('shd-native-editing'));
+    delete doc.execCommand;
+  }
+  {
+    const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const target = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const native = installNativeAccount(window, doc, target, {
+      reply: true, composer: 'contenteditable', focusable: true,
+      onEditor: (ed) => {
+        ed.setAttribute('data-lexical-editor', 'true');
+        ed.textContent = 'The existing native draft.';
+      }
+    });
+    doc.execCommand = () => false;
+    const result = await window.SHD.account.compose(target, 'A new draft.', 'comment');
+    check('a refused Lexical edit is reported without a success-shaped DOM write',
+      result.step === 'insert' && native.clicks.submit === 0 &&
+      native.editor.textContent === 'The existing native draft.', JSON.stringify(result.step));
+    check('temporary editor focusability is removed on failure too',
+      !native.editor.classList.contains('shd-native-editing'));
+    const own = doc.createElement('textarea');
+    own.value = 'The original Sheddit draft.';
+    doc.querySelector('#shd-root').append(own);
+    native.editor.addEventListener('beforeinput', () => own.focus());
+    doc.execCommand = (_cmd, _ui, value) => {
+      if (doc.activeElement === own) own.value += value;
+      else {
+        doc.getSelection().getRangeAt(0).deleteContents();
+        native.editor.textContent += value;
+      }
+      return true;
+    };
+    const interrupted = await window.SHD.account.compose(target, 'First.\n\nSecond.', 'comment');
+    check('a paragraph handler moving focus cannot send the remaining text into Sheddit',
+      interrupted.step === 'insert' && own.value === 'The original Sheddit draft.' &&
+      native.clicks.submit === 0, own.value);
+    delete doc.execCommand;
+  }
+  {
+    const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    let writes = 0;
+    const target = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const draft = 'Carry only this revision.';
+    const native = installNativeAccount(window, doc, target, {
+      reply: true, composer: 'contenteditable',
+      onEditor: (ed) => ed.addEventListener('input', () => {
+        if (++writes === 1) ed.textContent = `An old draft. ${draft}`;
+      })
+    });
+    const row = doc.querySelector('#shd-root .thing[data-fullname="t1_c0"]');
+    click(window, row.querySelector('a.reply'));
+    const form = row.querySelector('.shd-reply-form');
+    form.querySelector('textarea').value = draft;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await waitFor(() => form.dataset.shdCarried, { timeout: 4000 });
+    check('handoff does not accept a draft buried inside accumulated native text',
+      form.dataset.shdCarried === 'yes' && writes === 2 &&
+      native.editor.textContent === draft && native.clicks.submit === 0,
+      `carried=${form.dataset.shdCarried} writes=${writes} text=${native.editor.textContent}`);
+    window.SHD.dom.passthroughClear();
+  }
+  {
     const { doc, window, logs } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
     fastAccount(window);
     const row = (id) => doc.querySelector(`#shd-root .thing[data-fullname="${id}"]`);
@@ -7763,6 +7849,7 @@ async function boot(html, url, setup) {
       doc.execCommand = (cmd, _ui, val) => {
         const a = doc.activeElement;
         if (cmd !== 'insertText' || !a || a.getAttribute('contenteditable') !== 'true') return false;
+        doc.getSelection().getRangeAt(0).deleteContents();
         a.textContent += val;
         return true;
       };

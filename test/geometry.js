@@ -445,6 +445,66 @@ const overlaps = (a, b) =>
   console.log('\n\x1b[1mLAYOUT GEOMETRY — COMMENTS\x1b[0m');
   {
     const { page, pageErrors } = await open(browser, origin, PATHS.comments, '#shd-root .thing.comment');
+    const result = await page.evaluate(async () => {
+      const target = document.querySelector('shreddit-comment');
+      const host = document.createElement('comment-composer-host');
+      const editor = document.createElement('div');
+      editor.contentEditable = 'true';
+      editor.setAttribute('data-lexical-editor', 'true');
+      editor.innerHTML = '<p>An older draft with <a href="https://example.com/">a stale link</a>.</p>';
+      const submit = document.createElement('button');
+      submit.type = 'submit';
+      host.append(editor, submit);
+      target.append(host);
+      const own = document.createElement('textarea');
+      own.value = 'The untouched Sheddit draft.';
+      document.querySelector('#shd-root').append(own);
+      own.focus();
+      editor.focus();
+      const hiddenFocusRefused = document.activeElement !== editor;
+      let model = '';
+      let inputs = 0;
+      const sent = [];
+      editor.addEventListener('input', () => { model = editor.innerText; inputs++; });
+      editor.addEventListener('beforeinput', (e) => {
+        if (e.inputType !== 'insertParagraph') return;
+        e.preventDefault();
+        document.execCommand('insertParagraph');
+      });
+      submit.addEventListener('click', (e) => { e.preventDefault(); sent.push(model); });
+      Object.assign(SHD.account.timings, { pollMs: 10, arriveWaitMs: 30 });
+      await SHD.account.compose(target, 'First paragraph.\n\nSecond paragraph.', 'comment');
+      await SHD.account.compose(target, 'The revised reply.', 'comment');
+      await SHD.account.compose(target, 'The revised reply.', 'comment');
+      const app = target.closest('shreddit-app');
+      return {
+        hiddenFocusRefused, sent, inputs, staleLink: !!editor.querySelector('a'),
+        visibility: getComputedStyle(editor).visibility,
+        opacity: getComputedStyle(app).opacity,
+        pointerEvents: getComputedStyle(app).pointerEvents,
+        focusRestored: document.activeElement === own,
+        ownDraft: own.value,
+        editing: editor.classList.contains('shd-native-editing')
+      };
+    });
+    check('a suppressed native editor really refuses focus before the insertion scope',
+      result.hiddenFocusRefused, JSON.stringify(result));
+    check('native editing replaces stale rich text and preserves both paragraphs in its input model',
+      result.sent[0]?.replace(/\n+/g, '\n') === 'First paragraph.\nSecond paragraph.' &&
+      !result.staleLink && result.inputs > 0, JSON.stringify(result));
+    check('changed and identical retries submit only the current draft, once per attempt',
+      result.sent.length === 3 && result.sent[1] === 'The revised reply.' &&
+      result.sent[2] === 'The revised reply.', JSON.stringify(result));
+    check('temporary focusability never removes native transparency or click suppression',
+      result.opacity === '0' && result.pointerEvents === 'none' &&
+      result.visibility === 'hidden' && !result.editing, JSON.stringify(result));
+    check('native insertion restores focus without changing the Sheddit draft',
+      result.focusRestored && result.ownDraft === 'The untouched Sheddit draft.', JSON.stringify(result));
+    check('no page errors during native composer insertion', pageErrors.length === 0, pageErrors.join(' | '));
+    await page.close();
+  }
+  {
+    const { page, pageErrors } = await open(browser, origin, PATHS.comments, '#shd-root .thing.comment');
     await page.setViewport({ width: 1280, height: 900 });
 
     const indent = await page.evaluate(() => {

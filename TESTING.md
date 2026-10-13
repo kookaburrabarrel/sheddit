@@ -24,6 +24,12 @@ summary over this table when they disagree, and update the table when they do.)
 `npm run test:fast` is 1+2 only (no browser) for a tight edit loop;
 `npm run test:firefox` is the build plus suite 5 alone.
 
+Reply insertion regressions run in `test/run.js` (replacement, changed retries,
+exact handoff text, and refusal of direct Lexical DOM writes) and `test/geometry.js`.
+The Chromium case uses real focus, selection and editing commands under the shipped
+suppression CSS, and checks the input-driven model, paragraphs, stale-link removal,
+draft preservation and cleanup. It does not publish to Reddit.
+
 ---
 
 ## 1. Static CSS lint (no browser, no DOM)
