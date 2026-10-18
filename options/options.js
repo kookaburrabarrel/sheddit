@@ -19,10 +19,14 @@ chrome.storage.sync.get('settings').then(({ settings }) => {
 });
 
 controls.forEach(c => c.addEventListener('change', async () => {
-  const { settings } = await chrome.storage.sync.get('settings');
-  const next = { ...DEFAULTS, ...(settings || {}) };
-  next[c.dataset.k] = read(c);
-  await chrome.storage.sync.set({ settings: next });
+  const status = document.querySelector('#save-status');
+  try {
+    await SHD.preferences.set(c.dataset.k, read(c));
+    status.textContent = '';
+  } catch (error) {
+    console.warn('[sheddit] could not save preference', error);
+    status.textContent = 'Could not save this preference. Please try again.';
+  }
 }));
 
 /* Firefox treats MV3 host permissions as revocable — and as declined, on versions before

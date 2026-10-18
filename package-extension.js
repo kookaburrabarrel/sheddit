@@ -60,7 +60,7 @@ function firefoxManifest(m) {
      the manifest keys above, handled in the same place — this function is the only
      licence the two stores have to differ. */
   if (out.background && out.background.service_worker) {
-    out.background = { scripts: [out.background.service_worker], persistent: false };
+    out.background = { scripts: ['src/core/settings.js', out.background.service_worker], persistent: false };
   }
   out.browser_specific_settings = {
     gecko: {

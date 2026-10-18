@@ -1,6 +1,6 @@
 {
-  "version": "0.53.3",
-  "released": "2026-10-13",
+  "version": "0.53.6",
+  "released": "2026-10-18",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.53.3 fixes reply insertion into Reddit's hidden editor and stops changed drafts accumulating older versions. Failed rich-text edits preserve your draft and cannot trigger submission. Signed-in browsing remains experimental; logged-out reading is unchanged."
+  "notes": "0.53.6 fixes comments disappearing after returning from Reddit's native editor. The displayed copy no longer inherits the editor's temporary hidden state; the native editor and deliberately hidden descendants remain untouched. Includes the reply, draft, navigation and settings safety fixes from 0.53.5. Signed-in controls remain experimental: reply submission and edit opening can require the native fallback."
 }

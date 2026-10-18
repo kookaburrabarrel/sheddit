@@ -19,13 +19,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.53.3](https://img.shields.io/badge/version-0.53.3-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.53.6](https://img.shields.io/badge/version-0.53.6-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.53.3 is out — everyone is welcome to try it
+### Beta 0.53.6 is out — everyone is welcome to try it
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
@@ -70,6 +70,12 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 > Your own comments have an **edit** link that opens Reddit's native editor.
 > Save there, then choose **back to sheddit** to return to the updated comment.
 >
+> **Known live limitations in 0.53.6:** automatic reply submission can fail even after
+> Reddit's composer is open. The native fallback can carry your draft, but check the
+> thread for an existing reply before pressing Reddit's own **Comment** button.
+> Automatic edit opening can also miss a freshly loaded menu; use that comment's
+> native menu > **Edit comment** when the handoff instructs you to.
+>
 > **It is off with one checkbox** on the options page, and turning it off changes nothing
 > else. Logged out, none of it runs at all.
 
@@ -78,6 +84,23 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
+
+**0.53.6 — returning from the native editor**
+- **Fixed:** your displayed comment no longer disappears when you open Reddit's editor
+  and return to Sheddit. Only the displayed copy is unhidden; native editor state and
+  deliberately hidden descendants are preserved.
+
+**0.53.5 — reply safety, drafts and navigation**
+- **Fixed:** cancelling a pending reply prevents submission. Once Reddit's submit has
+  fired, cancel is disabled until the result is known; ambiguous arrivals keep the draft.
+- **Fixed:** preference changes preserve unsent drafts, concurrent changes no longer
+  overwrite each other, and aborted navigation restores the committed page.
+- **Fixed:** replacement native sources preserve one rendered row, late required
+  attributes can retry, and disabling Old Reddit redirection also disables its loop card.
+
+**0.53.4 — title-prefixed gallery previews, fixed**
+- **Fixed:** a gallery no longer counts Reddit's title-prefixed preview and the original
+  photo as separate slides. A six-photo post stays six slides as its images load.
 
 **0.53.3 — reply insertion and changed drafts, fixed**
 - **Fixed:** Reddit's hidden reply editor can take focus while Sheddit inserts your text.
@@ -371,7 +394,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.53.3**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.53.6**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

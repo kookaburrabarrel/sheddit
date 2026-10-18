@@ -458,13 +458,17 @@ SHD.model = (() => {
    * Reddit serves one upload under many URLs: `i.redd.it/<id>.jpg` is the original and
    * `preview.redd.it/<id>.jpg?width=640&…` is a resize of it, one per width in a srcset.
    * Comparing whole URLs therefore calls two sizes of one photo two photos — which is how
-   * a gallery listed every frame more than once (bug 120). The path is the picture; the
-   * host within redd.it and the query are only which copy of it was asked for.
+   * a gallery listed every frame more than once (bug 120). Preview paths can also carry
+   * a `<title>-v0-` prefix before the upload filename; the lightbox's original does not.
+   * That prefix, the host within redd.it and the query do not identify a different photo.
    */
   function pictureKey(u) {
     const s = String(u || '');
     const host = s.split('/')[2] || '';
-    const path = s.split('/').slice(3).join('/').split(/[?#]/)[0];
+    let path = s.split('/').slice(3).join('/').split(/[?#]/)[0];
+    if (host === 'preview.redd.it') {
+      path = path.replace(/^[^/]+-v0-([a-z0-9]+\.[a-z0-9]+)$/i, '$1');
+    }
     return `${/(^|\.)redd\.it$/.test(host) ? 'redd.it' : host}/${path}`;
   }
 

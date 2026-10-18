@@ -30,6 +30,7 @@ const CSS = ['src/styles/suppress.css', 'src/styles/old-reddit.css', 'src/styles
              'src/styles/redirect.css'];
 const JS = [
   'src/config/contracts.js',
+  'src/core/settings.js',
   // route.js sits at document_start in the manifest, and ahead of BOTH the modules that
   // consult it: gate.js's not-started branch asks classify() whether the URL is one the
   // pipeline will take (on a streamed page that question comes before route.js would

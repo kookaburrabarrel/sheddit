@@ -44,23 +44,26 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
 }
 
 (async () => {
-  const server = await serveFixtures();
+  const server = await serveFixtures({ secure: true });
   // The port must stay in the URL: MAP with an explicit port is refused
   // (ERR_BLOCKED_BY_CLIENT), while MAP to a bare host and an explicit port works.
-  const origin = `http://www.reddit.com:${server.port}`;
+  const origin = `https://www.reddit.com:${server.port}`;
 
   const browser = await puppeteer.launch({
     executablePath: EXE,
+    pipe: true,
+    enableExtensions: true,
     args: [
+      // Reddit is HSTS-preloaded; trust only the ephemeral local fixture's key.
+      `--ignore-certificate-errors-spki-list=${server.spki}`,
       ...LAUNCH_ARGS,
       // old.reddit.com joins www on the same fixture server; the Host header is what
       // tells them apart there, and this is the only way to put a REAL cross-host
       // navigation under test.
-      '--host-resolver-rules=MAP www.reddit.com 127.0.0.1,MAP old.reddit.com 127.0.0.1',
-      `--disable-extensions-except=${ROOT}`,
-      `--load-extension=${ROOT}`
+      '--host-resolver-rules=MAP www.reddit.com 127.0.0.1,MAP old.reddit.com 127.0.0.1'
     ]
   });
+  const extensionId = await browser.installExtension(ROOT);
 
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 900 });
@@ -1593,13 +1596,13 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
       }).observe(document, { childList: true, subtree: true });
     });
 
-    const oldOrigin = `http://old.reddit.com:${server.port}`;
+    const oldOrigin = `https://old.reddit.com:${server.port}`;
     await page.goto(oldOrigin + PATHS.subreddit, { waitUntil: 'domcontentloaded' });
 
     const arrived = await until(page, () => location.hostname === 'www.reddit.com');
     check('a link to old.reddit.com ends up on www.reddit.com', arrived === true, page.url());
     check('...at the page the reader actually asked for, not at a login wall',
-      page.url() === `http://www.reddit.com:${server.port}` + PATHS.subreddit, page.url());
+      page.url() === origin + PATHS.subreddit, page.url());
 
     const rendered = await until(page, () => !!document.querySelector('#shd-root .thing.link'));
     check('...where the extension renders it, which is the whole point', rendered === true);
@@ -1617,7 +1620,7 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     check('...on the login page the 302 actually delivered',
       /\/login\//.test(card.url || '') && /dest=/.test(card.url || ''), String(card.url));
     check('...and offered the same destination as a link, for a timer that never fires',
-      card.href === `http://www.reddit.com:${server.port}` + PATHS.subreddit, card.href);
+      card.href === origin + PATHS.subreddit, card.href);
     check('...announced as a live region', card.role === 'status', String(card.role));
     check('the login wall was never visible behind it',
       card.wallDisplay === 'none', String(card.wallDisplay));
@@ -1654,6 +1657,28 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     other.nativeVisible && !other.active, JSON.stringify(other));
 
   check('no page errors across the whole run', pageErrors.length === 0, pageErrors.join(' | '));
+
+  console.log('\n\x1b[1mPACKED EXTENSION — CONCURRENT PREFERENCES\x1b[0m');
+  {
+    const options = await browser.newPage();
+    await options.goto(`chrome-extension://${extensionId}/options/options.html`);
+    await page.goto(origin + PATHS.listing, { waitUntil: 'domcontentloaded' });
+    await until(page, () => !!document.querySelector('#shd-header .shd-theme-btn'));
+    await Promise.all([
+      options.evaluate(() => document.querySelector('[data-k="inlineVideo"]').click()),
+      page.evaluate(() => document.querySelector('.shd-theme-btn[data-theme="night"]').click())
+    ]);
+    const deadline = Date.now() + 5000;
+    let settings;
+    do {
+      settings = await options.evaluate(async () => (await chrome.storage.sync.get('settings')).settings);
+      if (settings?.inlineVideo === false && settings.theme === 'night') break;
+      await settle(20);
+    } while (Date.now() < deadline);
+    check('options and content-script writes both survive through the real background writer',
+      settings?.inlineVideo === false && settings.theme === 'night', JSON.stringify(settings));
+    await options.close();
+  }
 
   await browser.close();
   await server.close();

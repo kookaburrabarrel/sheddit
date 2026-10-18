@@ -153,6 +153,9 @@ SHD.dom = (() => {
   function adoptBody(node) {
     if (!node) return null;
     const copy = node.cloneNode(true);
+    // Reddit hides the body while editing; only the adopted root must be visible.
+    copy.classList?.remove('hidden');
+    copy.removeAttribute?.('hidden');
     copy.querySelectorAll?.('script, iframe, object, embed').forEach(n => n.remove());
     return inlineGifs(copy);
   }

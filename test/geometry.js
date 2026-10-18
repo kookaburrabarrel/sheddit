@@ -444,9 +444,48 @@ const overlaps = (a, b) =>
    * ================================================================== */
   console.log('\n\x1b[1mLAYOUT GEOMETRY — COMMENTS\x1b[0m');
   {
+    const { page } = await open(browser, origin, PATHS.comments, '#shd-root .thing.comment');
+    const result = await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.textContent = '.hidden { display: none; }';
+      document.head.appendChild(style);
+      const source = document.querySelector('shreddit-comment');
+      const body = SHD.model.comment(source).bodyNode;
+      const rendered = document.querySelector('#shd-root .thing.comment > .entry > .usertext > .usertext-body');
+      const spoiler = document.createElement('span');
+      spoiler.hidden = true;
+      spoiler.textContent = 'A deliberately hidden spoiler.';
+      body.appendChild(spoiler);
+      return ['class', 'attribute'].map(kind => {
+        body.classList.toggle('hidden', kind === 'class');
+        body.hidden = kind === 'attribute';
+        const copy = SHD.dom.adoptBody(body);
+        rendered.replaceChildren(copy);
+        return {
+          kind, visible: copy.getBoundingClientRect().height > 0,
+          nativeClass: body.classList.contains('hidden'), nativeHidden: body.hidden,
+          spoilerHidden: getComputedStyle(copy.querySelector('span[hidden]')).display === 'none'
+        };
+      });
+    });
+    check('a native edit hidden class cannot hide the adopted comment body',
+      result[0].visible, JSON.stringify(result[0]));
+    check('a native edit hidden attribute cannot hide the adopted comment body',
+      result[1].visible, JSON.stringify(result[1]));
+    check('adoption does not unhide Reddit\'s original editing surface',
+      result[0].nativeClass && result[1].nativeHidden);
+    check('adoption does not reveal deliberately hidden descendants',
+      result.every(r => r.spoilerHidden));
+    await page.close();
+  }
+  {
     const { page, pageErrors } = await open(browser, origin, PATHS.comments, '#shd-root .thing.comment');
     const result = await page.evaluate(async () => {
       const target = document.querySelector('shreddit-comment');
+      const app = target.closest('shreddit-app');
+      app.setAttribute('user-logged-in', 'true');
+      document.querySelectorAll(SHD.C.SESSION.loggedOut).forEach(n => n.remove());
+      SHD.session.reset();
       const host = document.createElement('comment-composer-host');
       const editor = document.createElement('div');
       editor.contentEditable = 'true';
@@ -476,7 +515,6 @@ const overlaps = (a, b) =>
       await SHD.account.compose(target, 'First paragraph.\n\nSecond paragraph.', 'comment');
       await SHD.account.compose(target, 'The revised reply.', 'comment');
       await SHD.account.compose(target, 'The revised reply.', 'comment');
-      const app = target.closest('shreddit-app');
       return {
         hiddenFocusRefused, sent, inputs, staleLink: !!editor.querySelector('a'),
         visibility: getComputedStyle(editor).visibility,

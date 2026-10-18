@@ -209,14 +209,14 @@ SHD.route = (() => {
    * `search` rides along for the sort key above, under the same pre-commit rule: the
    * navigate handler passes the DESTINATION's search, never a read of location.
    */
-  function emit(path = location.pathname, search = location.search) {
+  function emit(path = location.pathname, search = location.search, restore = false) {
     const next = classify(path);
     const sort = sortParamOf(search);
-    if (next === current && emit.lastPath === path && emit.lastSort === sort) return;
+    if (!restore && next === current && emit.lastPath === path && emit.lastSort === sort) return;
     current = next;
     emit.lastPath = path;
     emit.lastSort = sort;
-    listeners.forEach(fn => { try { fn(current, path); } catch (e) { SHD.gate.reportError(e); } });
+    listeners.forEach(fn => { try { fn(current, path, restore); } catch (e) { SHD.gate.reportError(e); } });
   }
 
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
@@ -241,7 +241,16 @@ SHD.route = (() => {
     addEventListener(SHD.C.BRIDGE.navigated, () => emit(location.pathname));
     addEventListener('popstate', () => emit(location.pathname));
     if (typeof navigation !== 'undefined' && navigation.addEventListener) {
+      let pending = null;
+      const rollback = (attempt) => queueMicrotask(() => {
+        if (pending !== attempt) return;
+        pending = null;
+        emit(location.pathname, location.search, true);
+      });
       navigation.addEventListener('navigate', (e) => {
+        const attempt = { signal: e.signal };
+        pending = attempt;
+        e.signal?.addEventListener('abort', () => rollback(attempt), { once: true });
         // Deliberately NOT filtered on e.destination.sameDocument. Measured on live
         // Reddit: a sort-tab click reports sameDocument === false and then survives as a
         // same-document navigation anyway, because Reddit's router calls intercept() —
@@ -265,7 +274,13 @@ SHD.route = (() => {
       // Post-commit safety net: redirects, destinations we could not parse, and anything
       // that reached the URL without a navigate event we understood. emit() is idempotent
       // per path, so this is free when the pre-commit emit already did the work.
-      navigation.addEventListener('navigatesuccess', () => emit(location.pathname));
+      navigation.addEventListener('navigateerror', () => {
+        if (pending && (!pending.signal || pending.signal.aborted)) rollback(pending);
+      });
+      navigation.addEventListener('navigatesuccess', () => {
+        pending = null;
+        emit(location.pathname);
+      });
     }
     emit(location.pathname);
   }

@@ -15,6 +15,10 @@
  */
 const fs = require('fs');
 const http = require('http');
+const https = require('https');
+const os = require('os');
+const { execFileSync } = require('child_process');
+const { createHash, X509Certificate } = require('crypto');
 const path = require('path');
 const { listingPage, commentsPage, EMPTY_FEED_PANEL } = require('./fixtures');
 
@@ -186,8 +190,22 @@ function makeChecker() {
  *
  * @returns {Promise<{port:number, close:()=>Promise<void>}>}
  */
-function serveFixtures() {
-  const server = http.createServer((req, res) => {
+function serveFixtures({ secure = false } = {}) {
+  let credentials;
+  if (secure) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sheddit-tls-'));
+    const key = path.join(dir, 'key.pem'), cert = path.join(dir, 'cert.pem');
+    try {
+      execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+        '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=www.reddit.com'],
+      { stdio: 'ignore' });
+      credentials = { key: fs.readFileSync(key), cert: fs.readFileSync(cert) };
+    } finally {
+      for (const file of [key, cert]) if (fs.existsSync(file)) fs.unlinkSync(file);
+      fs.rmdirSync(dir);
+    }
+  }
+  const handler = (req, res) => {
     const pathname = req.url.split('?')[0];
 
     /* old.reddit.com, exactly as it answers today (measured 2026-09-03): every path 302s
@@ -201,7 +219,7 @@ function serveFixtures() {
     const host = String(req.headers.host || '');
     if (host.startsWith('old.reddit.com')) {
       if (!/^\/login\/?$/.test(pathname)) {
-        const dest = encodeURIComponent(`http://${host}${req.url}`);
+        const dest = encodeURIComponent(`${req.socket.encrypted ? 'https' : 'http'}://${host}${req.url}`);
         res.writeHead(302, { Location: `/login/?reason=lor2&dest=${dest}` });
         res.end();
         return;
@@ -622,10 +640,13 @@ function serveFixtures() {
     }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(body);
-  });
+  };
+  const server = secure ? https.createServer(credentials, handler) : http.createServer(handler);
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => resolve({
       port: server.address().port,
+      spki: secure ? createHash('sha256').update(new X509Certificate(credentials.cert)
+        .publicKey.export({ type: 'spki', format: 'der' })).digest('base64') : null,
       close: () => new Promise(r => server.close(r))
     }));
   });

@@ -19,6 +19,7 @@ SHD.comments = (() => {
 
   let root = null;
   const stack = [];        // stack[depth] -> { node, children }
+  const models = new Map();
 
   /** Mounted as a direct child of <body> — see suppress.css. */
   function ensureRoot() {
@@ -33,6 +34,7 @@ SHD.comments = (() => {
   function reset() {
     root = null;
     stack.length = 0;
+    models.clear();
     expanderWatch?.disconnect();
     expanderWatch = null;
     SHD.dom.passthroughClear();   // a route change ends any native handoff in progress
@@ -178,6 +180,7 @@ SHD.comments = (() => {
        subtree it belongs to and the thread guide line runs beside it. */
     const more = moreRepliesControl(m);
     if (more) childListing.appendChild(more);
+    SHD.account.restoreReply(m, thing);
 
     return { node: thing, listing: childListing };
   }
@@ -293,6 +296,15 @@ SHD.comments = (() => {
   function consume(el) {
     const m = SHD.model.comment(el);
     if (!m) return false;
+    const previous = models.get(m.id);
+    const existing = document.querySelector(`#${C.ROOT_ID} ${SHD.dom.rowSel(m.id)}`);
+    if (previous && existing) {
+      if (previous.source === el) return true;
+      Object.assign(previous, m);
+      const body = existing.querySelector(':scope > .entry > .usertext > .usertext-body');
+      if (body && m.bodyNode) body.replaceChildren(SHD.dom.adoptBody(m.bodyNode));
+      return true;
+    }
     // Idempotent; armed from here because the tree provably exists once a comment does.
     watchLateExpanders();
 
@@ -315,6 +327,7 @@ SHD.comments = (() => {
       target = parent ? parent.listing : ensureRoot().querySelector('.nestedlisting');
     }
     if (!target) return false;
+    models.set(m.id, m);
 
     /* Before the branch's own "N more replies" line, if it has one: that control loads
        what comes AFTER these replies, so it has to stay at the bottom of the list. */
@@ -807,6 +820,7 @@ SHD.comments = (() => {
      to give does not hold observers for its lifetime. Same reasoning as listing.js's
      LATE_TIME_MS for the profile timestamp — these are the same late-arrival family. */
   const LATE_HYDRATE_MS = 15000;
+  const galleryWatches = new WeakMap();
 
   /**
    * Append gallery frames that hydrate AFTER the post was consumed — bug 91.
@@ -825,6 +839,8 @@ SHD.comments = (() => {
   function armLateGalleryFrames(row, m) {
     if (m.type !== 'gallery' || !m.source) return;
     if (!SHD.settings.inlineImages) return;
+    const previous = galleryWatches.get(row);
+    if (previous) { previous.obs.disconnect(); clearTimeout(previous.stop); }
     /* An adult gallery is NOT skipped any more (0.30.0): it is blurred like every other one,
        and it can arrive after consume exactly as a clean one can. What the gate costs it is
        the appending below, not the box. */
@@ -872,6 +888,7 @@ SHD.comments = (() => {
       attributeFilter: ['src', 'srcset', C.GALLERY_LAZY_SRC]
     });
     const stop = setTimeout(() => obs.disconnect(), LATE_HYDRATE_MS);
+    galleryWatches.set(row, { obs, stop });
   }
 
   /** The submission itself, rendered above the thread. */
@@ -879,7 +896,12 @@ SHD.comments = (() => {
     const m = SHD.model.post(el);
     if (!m) return false;
     const r = ensureRoot();
-    if (r.querySelector('.shd-selfpost')) return false;
+    if (r.querySelector('.shd-selfpost')) {
+      const previous = SHD.listing.rebind(m);
+      const row = r.querySelector(`.shd-selfpost ${SHD.dom.rowSel(m.id)}`);
+      if (previous && row) armLateGalleryFrames(row, previous);
+      return !!previous;
+    }
     const row = SHD.listing.render(m);
     /* Before the selftext, which is where old reddit's expando sat relative to the body.
 

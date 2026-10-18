@@ -258,9 +258,9 @@ SHD.oldReddit = (() => {
        are not going anywhere. */
     document.documentElement.classList.add(CLASS);
 
-    if (looped(target)) { whenBody(() => mount(target, true)); return; }
-
     if (!await enabled()) { standDown(); return; }
+
+    if (looped(target)) { whenBody(() => mount(target, true)); return; }
 
     recordHop(target);
     whenBody(() => mount(target, false));

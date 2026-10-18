@@ -63,6 +63,11 @@ npm run package:check   # fails if either zip no longer matches the source
 Node 22.22.2+ on the 22 line, 24.15+, or 26+ (jsdom's floor). None of this is needed to
 *run* the extension — `build` only makes the dev harness the tests execute.
 
+The Chrome extension suite also needs `openssl` on `PATH` to generate its one-day local
+HTTPS fixture certificate. Reddit is HSTS-preloaded, so plain HTTP fixtures are upgraded
+before they reach the server. Only that ephemeral certificate's public key is trusted
+by the isolated test browser; temporary key/certificate files are removed immediately.
+
 To run the extension itself: `chrome://extensions` → Developer mode → Load unpacked → this
 folder. **A pushed commit is not a loaded extension** — Chrome keeps running the code it
 read at load time, so hit the ↻ on the extension card before testing anything. The failure

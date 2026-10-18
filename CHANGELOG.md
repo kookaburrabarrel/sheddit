@@ -20,6 +20,72 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.53.6
+
+### Fixed — your comment stays visible after leaving the native editor
+
+- Signed-in live testing found that opening your comment's editor and returning without
+  saving could make its displayed body disappear. Reddit temporarily adds `hidden` to the
+  native body during editing, and Sheddit's refresh copied that state into its own row.
+- Body adoption now removes the `hidden` class and attribute from the cloned root only.
+  Reddit's original body is untouched, and deliberately hidden descendants remain hidden.
+- Regression coverage exercises the edit-return lifecycle and measures actual rendered
+  height under both hiding mechanisms in Chrome. Both cases fail before the fix.
+
+### Known limitations — signed-in controls remain experimental
+
+- Live testing did not establish reliable automatic reply submission, even after opening
+  Reddit's composer. The fallback carried the draft and native submission worked; check
+  the thread before retrying when Sheddit warns that the reply may already have posted.
+- Automatic edit opening can miss a freshly hydrated native menu. The handoff explains
+  how to use the comment's native menu instead. Saving through the native editor and
+  returning to the updated, visible comment was verified.
+
+## 0.53.5
+
+### Fixed — reply safety and draft preservation
+
+- Cancelling a reply, changing routes or rebuilding account controls invalidates pending
+  editor work before native submit. Leaving a native handoff also stops delayed writes.
+- Reply success requires a previously unseen, recent comment by the signed-in author,
+  under the correct direct parent/post, with matching rendered body text. Missing identity
+  or ambiguous rich-text formatting keeps the draft and asks the reader to check Reddit.
+- Cancel is disabled after native submit. Rebuilt forms preserve the draft and warn that
+  it may already have posted, rather than silently inviting a duplicate.
+- Structural preference changes restore top-level and nested drafts in memory; theme,
+  update-check and redirect preferences do not rebuild the page. Explicit cancellation
+  discards the draft. Drafts are not persisted to storage and do not survive a page reload.
+
+### Fixed — source, navigation and preference lifecycle
+
+- Replacing a native post/comment rebinds its existing row instead of duplicating it,
+  preserving the open reply and child thread. Late source hydration can retry rejected
+  required attributes, and replacement sources rearm gallery/profile timestamp observers.
+- Aborted navigation restores the committed path, sort, header and content; stale aborts
+  cannot override a newer pending navigation.
+- Options, header and theme writes are serialized by one background writer, preventing
+  concurrent whole-object storage updates from losing changes. Invalid writes and storage
+  errors are reported explicitly, and a failure does not poison subsequent writes.
+- A disabled Old Reddit redirect takes precedence over its recent-loop record.
+
+### Changed — regression coverage
+
+- Added adversarial regressions and mutation rows for these failures. Chrome's installed
+  extension suite now uses local HTTPS fixtures with an ephemeral pinned certificate,
+  avoiding Reddit's HSTS upgrade, and awaits extension installation before navigation.
+
+## 0.53.4
+
+### Fixed — title-prefixed gallery previews counted twice
+
+- **One photo is one slide, including Reddit's newer preview URLs.** A live six-photo
+  gallery still became twelve slides after 0.53.2: Reddit's preview filename included
+  the post title before the upload ID, while its lightbox original used only the ID.
+  Sheddit now recognizes that prefix on Reddit's preview host, so those copies count
+  as the same photo without merging different uploads or rewriting other image hosts.
+- **Late loading keeps the same deck and position.** Regression coverage includes the
+  live preview/lightbox pairing, lazy images and replacement carousel elements.
+
 ## 0.53.3
 
 ### Fixed — reply insertion and accumulated drafts

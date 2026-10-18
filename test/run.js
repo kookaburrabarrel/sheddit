@@ -1286,6 +1286,63 @@ async function boot(html, url, setup) {
   }
 
   {
+    /* Live r/aww, 2026-10-18: six carousel pages became twelve slides. The preview path
+       carries a title slug; the lightbox's original uses only the same upload ID. */
+    const ids = ['mflbsqtms5wh1', 'kw35t6ums5wh1', 'hgmnqaums5wh1',
+      'pe86e9ums5wh1', '2aetzqtms5wh1', 'y1ysg9ums5wh1'];
+    const preview = (id) => `https://preview.redd.it/my-baby-zozo-and-beenu-v0-${id}.jpg`;
+    const original = (id) => `https://i.redd.it/${id}.jpg`;
+    const { doc, window } = await boot(commentsPage({ galleryPost: true }),
+      'https://www.reddit.com/r/interesting/comments/gallery1/bubble_boy/', win => {
+        noAuto(win);
+        const post = win.document.querySelector('shreddit-post[id="t3_gallery1"]');
+        for (const img of post.querySelectorAll('img')) img.remove();
+        const carousel = win.document.createElement('gallery-carousel');
+        carousel.innerHTML = `<ul>${ids.map((id, n) => `
+          <li slot="page-${n + 1}">
+            <figure>
+              <img ${n < 4 ? `src="${preview(id)}?width=640"
+                srcset="${preview(id)}?width=640 640w, ${preview(id)}?width=1080 1080w"`
+              : `data-lazy-src="${preview(id)}?width=640"`}>
+              <div class="lightboxed-content hidden">
+                <zoomable-img><img src="${original(id)}"></zoomable-img>
+              </div>
+            </figure>
+          </li>`).join('')}</ul>`;
+        post.appendChild(carousel);
+      });
+    const box = () => doc.querySelector('#shd-root .shd-selfpost .shd-image');
+    const frames = () => [...box().querySelectorAll('.shd-image-el')];
+    const label = () => box().querySelector('.shd-gallery-count')?.textContent;
+    const key = window.SHD.model.pictureKey;
+    check('title-prefixed previews and lightbox originals make six slides, not twelve',
+      frames().length === ids.length && label() === '1 of 6', label());
+    check('a title-prefixed Reddit preview identifies the same upload as its original',
+      key(`${preview(ids[0])}?width=1080`) === key(original(ids[0])));
+    check('different upload IDs remain different gallery photos',
+      key(preview(ids[0])) !== key(preview(ids[1])));
+    check('title-prefix normalization is confined to Reddit preview URLs',
+      key(`https://external-preview.redd.it/my-baby-zozo-and-beenu-v0-${ids[0]}.jpg`) !==
+        key(original(ids[0])) &&
+      key(`https://example.com/my-baby-zozo-and-beenu-v0-${ids[0]}.jpg`) !==
+        key(`https://example.com/${ids[0]}.jpg`));
+    box().querySelector('[title="next frame"]').click();
+    check('next advances to the next photo, not another copy of the first',
+      label() === '2 of 6' && key(frames().find(f => !f.hidden)?.src) === key(original(ids[1])),
+      label());
+    const carousel = doc.querySelector('shreddit-post gallery-carousel');
+    carousel.innerHTML = carousel.innerHTML;
+    const lazy = [...carousel.querySelectorAll('img[data-lazy-src]')];
+    for (const [n, img] of lazy.entries()) {
+      img.src = `${preview(ids[n + 4])}?width=1080`;
+      img.setAttribute('srcset', `${preview(ids[n + 4])}?width=1920 1920w`);
+    }
+    const upgraded = await waitFor(() => frames().some(f => /width=1920/.test(f.src)));
+    check('replacement carousel nodes and lazy hydration keep six slides and the reader position',
+      upgraded && frames().length === ids.length && label() === '2 of 6', label());
+  }
+
+  {
     /* THE COUNTERWEIGHT: a lone picture is not a slideshow. Deciding this from the box's
        CONTENTS rather than from the post type is what keeps both halves true — a
        single-frame gallery is a picture, and a picture that grows a second frame becomes a
@@ -5896,6 +5953,16 @@ async function boot(html, url, setup) {
 
     /* ---- the loop guard ---- */
     {
+      const o = bootOld('https://old.reddit.com/r/programming/', {
+        settings: { redirectOldReddit: false },
+        session: { to: 'https://www.reddit.com/r/programming/', at: Date.now() }
+      });
+      await waitFor(() => !o.doc.documentElement.classList.contains('shd-redirecting'));
+      await hold(50);
+      check('the disabled redirect preference wins over a recent loop record',
+        !o.card() && !o.doc.documentElement.classList.contains('shd-redirecting') && o.navs.length === 0);
+    }
+    {
       /* www.reddit.com never sends anyone back here. Another old-reddit redirector
          installed alongside Sheddit does exactly that, and two extensions each doing half
          a round trip is an infinite one — a hang, with no error and nothing on screen to
@@ -6107,6 +6174,7 @@ async function boot(html, url, setup) {
         fetch: opts.fetch || (() => Promise.reject(new Error('no fetch'))),
         chrome: {
           runtime: {
+            onMessage: { addListener() {} },
             onStartup: { addListener: (fn) => registered.push(['onStartup', fn]) },
             onInstalled: { addListener: (fn) => registered.push(['onInstalled', fn]) }
           },
@@ -6121,6 +6189,7 @@ async function boot(html, url, setup) {
       };
       ctx.globalThis = ctx;
       vm.createContext(ctx);
+      vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src/core/settings.js'), 'utf8'), ctx);
       vm.runInContext(BG_SRC, ctx, { filename: 'background.js' });
       ctx.__local = local;
       return ctx;
@@ -6344,6 +6413,7 @@ async function boot(html, url, setup) {
       get: async () => stored,
       set: async (v) => { stored = v; writes.push(v); }
     } } };
+    window.eval(fs.readFileSync(path.join(__dirname, '..', 'src/core/settings.js'), 'utf8'));
     window.eval(optionsJs);
     await waitFor(() => [...doc.querySelectorAll('input[data-k]')].some(b => b.checked));
 
@@ -6624,14 +6694,17 @@ async function boot(html, url, setup) {
              assertion was passing on a different signal entirely — the editor reading
              empty after submit, which is what a FAILED insert reads as too. The suite was
              green on the exact hole a live run then fell through. */
-          thingid: id, postid: 't3_link1',
+          thingid: id, postid: source.getAttribute(isComment ? 'postid' : 'id'),
           author: doc.defaultView.SHD.session.username?.() || 'me', score: '1',
           created: new Date().toISOString(), depth: String(parentDepth + 1),
           'comment-position': '99', permalink: `/r/programming/comments/link1/comment/${id}/`,
           'content-type': 'text'
         };
         for (const [k, v] of Object.entries(attrs)) c.setAttribute(k, v);
-        c.innerHTML = `<div slot="comment"><div class="md"><p>${text}</p></div></div>`;
+        const body = doc.createElement('div');
+        body.setAttribute('slot', 'comment');
+        body.textContent = text;
+        c.appendChild(body);
         (isComment ? source : doc.querySelector('shreddit-comment-tree section')).appendChild(c);
         if (editor.tagName === 'TEXTAREA') editor.value = ''; else editor.textContent = '';
         composer.remove();
@@ -6753,11 +6826,20 @@ async function boot(html, url, setup) {
         /Edit and save/.test(doc.querySelector('.shd-passthrough-note')?.textContent || '') &&
         !source.querySelector('comment-composer-host textarea').hidden));
     const model = window.SHD.model.comment(source);
-    model.bodyNode.innerHTML = '<p>Edited <strong>comment</strong></p>';
+    model.bodyNode.innerHTML = '<p>Edited <strong>comment</strong></p><span hidden>spoiler</span>';
+    model.bodyNode.classList.add('hidden');
+    model.bodyNode.hidden = true;
     source.querySelector('comment-composer-host[edit-mode]').remove();
     click(window, doc.querySelector('#shd-passthrough-exit a'));
     check('returning refreshes the cloned body and preserves formatting',
       await waitFor(() => row.querySelector('.usertext-body strong')?.textContent === 'comment'));
+    const returnedBody = row.querySelector('.usertext-body').firstElementChild;
+    check('returning from a native editor does not hide the rendered comment',
+      !returnedBody.hidden && !returnedBody.classList.contains('hidden'));
+    check('body adoption leaves the native editor visibility state untouched',
+      model.bodyNode.hidden && model.bodyNode.classList.contains('hidden'));
+    check('body adoption preserves deliberately hidden descendants',
+      returnedBody.querySelector('span').hidden);
 
     /* A SAVE THAT LANDS AFTER THE READER PRESSED BACK. Reddit re-renders the body when its
        request returns; one copy at the moment of leaving kept the old text until a reload. */
@@ -8507,6 +8589,342 @@ async function boot(html, url, setup) {
     check('control: everything the browser loads still is',
       isPacked('src/core/gate.js') && isPacked('manifest.json') &&
       isPacked('src/styles/old-reddit.css') && isPacked('options/options.html'));
+  }
+
+  console.log('\n\x1b[1mADVERSARIAL REGRESSIONS — OPERATIONS, DRAFTS AND SOURCE IDENTITY\x1b[0m');
+  const reviewStorage = (initial = {}) => {
+    const listeners = [];
+    let settings = { autoPaginate: false, ...initial };
+    return {
+      setup(win) {
+        win.chrome = { storage: {
+          sync: {
+            get: async () => ({ settings: { ...settings } }),
+            set: async value => {
+              const oldValue = settings;
+              settings = value.settings;
+              listeners.forEach(fn => fn({ settings: { oldValue, newValue: settings } }, 'sync'));
+            }
+          },
+          onChanged: { addListener: fn => listeners.push(fn) }
+        } };
+      }
+    };
+  };
+  const sendForm = (win, form) =>
+    form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+  const reviewRow = (doc, id) => doc.querySelector(`#shd-root [data-fullname="${id}"]`);
+  for (const action of ['cancel', 'reconcile-cancel', 'settings', 'route', 'account-off']) {
+    const storage = reviewStorage();
+    const { window, doc } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, storage.setup);
+    fastAccount(window);
+    const source = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    let form;
+    const native = installNativeAccount(window, doc, source, {
+      reply: true, composer: action === 'reconcile-cancel' ? 'contenteditable' : 'textarea',
+      onEditor: editor => {
+        if (action === 'reconcile-cancel') {
+          editor.addEventListener('input', () => form.querySelector('.shd-reply-cancel').click());
+        }
+      }
+    });
+    window.SHD.account.reply(window.SHD.model.comment(source), reviewRow(doc, 't1_c0'));
+    form = reviewRow(doc, 't1_c0').querySelector('.shd-reply-form');
+    const draft = `Withdrawn reply: ${action}.`;
+    form.querySelector('textarea').value = draft;
+    sendForm(window, form);
+    await waitFor(() => native.clicks.reply === 1);
+    if (action === 'cancel') form.querySelector('.shd-reply-cancel').click();
+    if (action === 'settings') await window.SHD.pipeline.setSetting('compactRows', false);
+    if (action === 'account-off') await window.SHD.pipeline.setSetting('account', false);
+    if (action === 'route') window.history.pushState({}, '', '/r/programming/new/');
+    await hold(180);
+    check(`${action}: an invalidated operation never clicks native submit`, native.clicks.submit === 0);
+    if (['cancel', 'settings', 'route', 'account-off'].includes(action)) {
+      check(`${action}: a late composer is never filled`, !native.editor || !native.editor.value);
+    }
+    if (action === 'settings') {
+      check('a settings rebuild restores the pending draft without resending it',
+        reviewRow(doc, 't1_c0')?.querySelector('textarea')?.value === draft);
+    }
+    if (action === 'account-off') {
+      await window.SHD.pipeline.setSetting('account', true);
+      await waitFor(() => reviewRow(doc, 't1_c0')?.querySelector('textarea'));
+      check('re-enabling the account layer restores the unsent draft',
+        reviewRow(doc, 't1_c0')?.querySelector('textarea')?.value === draft);
+    }
+  }
+  {
+    const storage = reviewStorage();
+    const { window, doc } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, storage.setup);
+    const source = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    window.SHD.account.reply(window.SHD.model.comment(source), reviewRow(doc, 't1_c0'));
+    const form = reviewRow(doc, 't1_c0').querySelector('.shd-reply-form');
+    const draft = 'Unsent words survive preference changes.';
+    form.querySelector('textarea').value = draft;
+    const root = doc.querySelector('#shd-root');
+    await window.SHD.pipeline.setSetting('autoUpdateCheck', false);
+    await window.SHD.pipeline.setSetting('redirectOldReddit', false);
+    check('nonstructural preferences preserve the exact draft form and root',
+      doc.querySelector('#shd-root') === root && form.isConnected &&
+      form.querySelector('textarea').value === draft);
+    await window.SHD.pipeline.setSetting('showThumbnails', false);
+    await waitFor(() => reviewRow(doc, 't1_c0')?.querySelector('textarea'));
+    check('structural preferences restore nested reply drafts',
+      reviewRow(doc, 't1_c0')?.querySelector('textarea')?.value === draft);
+    const top = doc.querySelector('#shd-root .shd-commentbox textarea');
+    top.value = 'A separate top-level draft.';
+    await window.SHD.pipeline.setSetting('compactRows', false);
+    await waitFor(() => doc.querySelector('#shd-root .shd-commentbox textarea') && reviewRow(doc, 't1_c0'));
+    check('top-level and nested drafts are restored independently',
+      doc.querySelector('#shd-root .shd-commentbox textarea')?.value === 'A separate top-level draft.' &&
+      reviewRow(doc, 't1_c0')?.querySelector('textarea')?.value === draft);
+    reviewRow(doc, 't1_c0').querySelector('.shd-reply-cancel').click();
+    await window.SHD.pipeline.setSetting('compactRows', true);
+    await waitFor(() => reviewRow(doc, 't1_c0'));
+    check('an explicitly cancelled draft is not restored by a later rebuild',
+      !reviewRow(doc, 't1_c0').querySelector('.shd-reply-form'));
+  }
+  for (const scenario of ['same-author-other-text', 'unknown-author', 'nested-match',
+    'old-match', 'wrong-post', 'preexisting-id', 'positive-case-insensitive']) {
+    const { window, doc } = await boot(commentsPage({
+      loggedIn: true, noUsername: scenario === 'unknown-author'
+    }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const source = doc.querySelector('shreddit-post');
+    const state = { clicks: { submit: 0 }, received: [] };
+    mountComposer(doc, source, { silentSubmit: true }, state);
+    const form = doc.querySelector('.shd-commentbox .shd-reply-form');
+    const draft = 'The draft whose arrival must be verified.';
+    form.querySelector('textarea').value = draft;
+    sendForm(window, form);
+    await waitFor(() => state.clicks.submit === 1);
+    sendForm(window, form);
+    const arrival = doc.createElement('shreddit-comment');
+    for (const [key, value] of Object.entries({
+      thingid: scenario === 'preexisting-id' ? 't1_c0' : 't1_review_arrival',
+      postid: scenario === 'wrong-post' ? 't3_other' : source.id,
+      author: scenario === 'unknown-author' ? 'someone_else' : 'TeStEr',
+      created: new Date(Date.now() - (scenario === 'old-match' ? 60000 : 0)).toISOString(),
+      depth: scenario === 'nested-match' ? '1' : '0'
+    })) arrival.setAttribute(key, value);
+    const body = doc.createElement('div');
+    body.setAttribute('slot', 'comment');
+    body.textContent = scenario === 'same-author-other-text' ? 'A different comment.' : draft;
+    arrival.appendChild(body);
+    const mount = scenario === 'nested-match'
+      ? doc.querySelector('shreddit-comment')
+      : doc.querySelector('shreddit-comment-tree section');
+    mount.appendChild(arrival);
+    if (scenario === 'positive-case-insensitive') {
+      check('a new matching direct comment by the reader confirms success, ignoring name casing',
+        await waitFor(() => !form.isConnected) && form.dataset.shdState === 'done');
+    } else {
+      await waitFor(() => form.dataset.shdStep);
+      check(`${scenario}: unrelated arrivals do not discard the draft`,
+        form.isConnected && form.dataset.shdStep === 'arrival' &&
+        form.querySelector('textarea').value === draft);
+    }
+    check(`${scenario}: repeated submit events never send a second request`, state.clicks.submit === 1);
+  }
+  {
+    const { window, doc } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const source = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    window.SHD.account.reply(window.SHD.model.comment(source), reviewRow(doc, 't1_c0'));
+    const form = reviewRow(doc, 't1_c0').querySelector('.shd-reply-form');
+    form.querySelector('textarea').value = 'Do not carry this after I return.';
+    sendForm(window, form);
+    await waitFor(() => doc.querySelector('#shd-passthrough-exit a'));
+    doc.querySelector('#shd-passthrough-exit a').click();
+    const native = installNativeAccount(window, doc, source, { reply: true });
+    await hold(150);
+    check('leaving a pending handoff stops delayed native reply clicks and text writes',
+      native.clicks.reply === 0 && !native.editor);
+  }
+  {
+    const storage = reviewStorage();
+    const { window, doc } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, storage.setup);
+    fastAccount(window);
+    const state = { clicks: { submit: 0 }, received: [] };
+    mountComposer(doc, doc.querySelector('shreddit-post'), { silentSubmit: true }, state);
+    const form = doc.querySelector('#shd-root .shd-commentbox .shd-reply-form');
+    form.querySelector('textarea').value = 'This request might already be on its way.';
+    sendForm(window, form);
+    await waitFor(() => state.clicks.submit === 1);
+    check('cancel is disabled once the native request has been sent',
+      form.querySelector('.shd-reply-cancel').disabled);
+    await window.SHD.pipeline.setSetting('compactRows', false);
+    await waitFor(() => {
+      const next = doc.querySelector('#shd-root .shd-commentbox .shd-reply-form');
+      return next && next !== form;
+    });
+    const restored = doc.querySelector('#shd-root .shd-commentbox .shd-reply-form');
+    check('rebuilding after native submit keeps the draft and warns against duplicate posting',
+      restored?.querySelector('textarea').value === 'This request might already be on its way.' &&
+      /may already have posted/.test(restored.textContent) && state.clicks.submit === 1);
+  }
+  {
+    const { doc } = await boot(profilePage({ lateIndex: 1 }),
+      'https://www.reddit.com/user/tester/', noAuto);
+    const source = doc.querySelector('shreddit-profile-comment[comment-id="t1_pc1"]');
+    const row = reviewRow(doc, 't1_pc1');
+    const replacement = source.cloneNode(true);
+    replacement.removeAttribute('data-shd');
+    source.replaceWith(replacement);
+    await waitFor(() => replacement.getAttribute('data-shd') === 'done');
+    replacement.insertAdjacentHTML('afterbegin',
+      '<time datetime="2026-08-12T08:17:36.499000+0000">2 days ago</time>');
+    check('a replacement profile source rearms late timestamp hydration on its preserved row',
+      await waitFor(() => row.querySelector('.tagline time')) && reviewRow(doc, 't1_pc1') === row &&
+      row.querySelectorAll('.tagline time').length === 1);
+  }
+  {
+    const { window, doc } = await boot(listingPage(), 'https://www.reddit.com/r/programming/', noAuto);
+    fastAccount(window);
+    const source = doc.querySelector('shreddit-post');
+    const old = installNativeAccount(window, doc, source);
+    const row = reviewRow(doc, source.id);
+    const replacement = source.cloneNode(true);
+    replacement.removeAttribute('data-shd');
+    const native = installNativeAccount(window, doc, replacement);
+    source.replaceWith(replacement);
+    await waitFor(() => replacement.getAttribute('data-shd') === 'done');
+    check('a fresh source with the same post ID preserves one existing rendered row',
+      reviewRow(doc, source.id) === row &&
+      doc.querySelectorAll(`#shd-root [data-fullname="${source.id}"]`).length === 1);
+    row.querySelector('.arrow.up').click();
+    check('the preserved row delegates to the replacement, not its detached predecessor',
+      native.clicks.up === 1 && old.clicks.up === 0);
+    const late = replacement.cloneNode(true);
+    late.id = 't3_late_required';
+    late.removeAttribute('data-shd');
+    const title = late.getAttribute('post-title');
+    late.removeAttribute('post-title');
+    doc.querySelector('shreddit-feed').appendChild(late);
+    await waitFor(() => late.getAttribute('data-shd') === 'done');
+    late.setAttribute('post-title', title);
+    check('a rejected post is retried when its required attributes hydrate',
+      await waitFor(() => reviewRow(doc, late.id)));
+  }
+  {
+    const depths = [0, 1, 2];
+    const html = commentsPage({ loggedIn: true }).replace(/<section>[\s\S]*?<\/section>/,
+      '<section>' + nestedCommentsHtml(depths) + '</section>');
+    const { window, doc } = await boot(html, COMMENTS_URL, noAuto);
+    const source = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const row = reviewRow(doc, 't1_c0');
+    const child = reviewRow(doc, 't1_c1');
+    window.SHD.account.reply(window.SHD.model.comment(source), row);
+    row.querySelector('textarea').value = 'Keep this open while the source changes.';
+    const replacement = source.cloneNode(true);
+    replacement.removeAttribute('data-shd');
+    replacement.querySelector('[slot="comment"]').textContent = 'Updated native body.';
+    source.replaceWith(replacement);
+    await waitFor(() => replacement.getAttribute('data-shd') === 'done');
+    check('replacement comment sources preserve the row, child thread and draft',
+      reviewRow(doc, 't1_c0') === row && reviewRow(doc, 't1_c1') === child &&
+      row.querySelector('textarea').value === 'Keep this open while the source changes.');
+    check('replacement comment bodies refresh without cloning descendants into their text',
+      row.querySelector(':scope > .entry > .usertext > .usertext-body').textContent === 'Updated native body.');
+  }
+  {
+    const { window, doc } = await boot(listingPage(), 'https://www.reddit.com/r/programming/top/?t=week',
+      w => { noAuto(w); w.navigation = new w.EventTarget(); });
+    const navigate = (path, signal) => {
+      const event = new window.Event('navigate', { cancelable: true });
+      event.destination = { url: 'https://www.reddit.com' + path, sameDocument: true };
+      event.signal = signal;
+      window.navigation.dispatchEvent(event);
+    };
+    const first = new window.AbortController();
+    navigate('/r/aww/', first.signal);
+    first.abort();
+    window.navigation.dispatchEvent(new window.Event('navigateerror'));
+    check('an aborted navigation immediately restores committed path, query and rendered content',
+      await waitFor(() => doc.querySelector('#shd-root .thing')) &&
+      window.SHD.route.path === '/r/programming/top/' && window.SHD.route.timeQuery === 'week' &&
+      !doc.querySelector('#shd-outgoing[inert]') &&
+      doc.querySelector('#shd-header a[href="/r/programming/"]'));
+    const old = new window.AbortController();
+    navigate('/r/old-destination/', old.signal);
+    old.abort();
+    const newer = new window.AbortController();
+    navigate('/r/new-destination/', newer.signal);
+    window.navigation.dispatchEvent(new window.Event('navigateerror'));
+    await Promise.resolve();
+    check('an older abort/error cannot roll back a newer pending navigation',
+      window.SHD.route.path === '/r/new-destination/');
+    newer.abort();
+    check('aborting the latest navigation restores the real route',
+      await waitFor(() => window.SHD.route.path === '/r/programming/top/'));
+  }
+  {
+    const vm = require('vm');
+    const preferences = fs.readFileSync(path.join(__dirname, '..', 'src/core/settings.js'), 'utf8');
+    const background = fs.readFileSync(path.join(__dirname, '..', 'src/core/background.js'), 'utf8');
+    let stored = { settings: { autoPaginate: false, showThumbnails: false } };
+    let handler, failNext = false, messages = 0;
+    const sync = {
+      get: async () => ({ settings: { ...stored.settings } }),
+      set: async value => {
+        if (failNext) { failNext = false; throw new Error('storage unavailable'); }
+        stored = value;
+      }
+    };
+    const bg = vm.createContext({
+      chrome: { runtime: {
+        id: 'sheddit-test', onMessage: { addListener: fn => { handler = fn; } },
+        onStartup: { addListener() {} }, onInstalled: { addListener() {} }
+      }, storage: { sync } }
+    });
+    vm.runInContext(preferences, bg);
+    vm.runInContext(background, bg);
+    const runtime = {
+      id: 'sheddit-test',
+      sendMessage: message => {
+        messages++;
+        return new Promise(resolve => handler(message, { id: 'sheddit-test' }, resolve));
+      }
+    };
+    const { window } = await boot(listingPage(), 'https://www.reddit.com/', w => {
+      w.chrome = { runtime, storage: { sync, onChanged: { addListener() {} } } };
+    });
+    const options = new JSDOM(fs.readFileSync(path.join(__dirname, '..', 'options/options.html'), 'utf8'),
+      { runScripts: 'outside-only', virtualConsole: new VirtualConsole() });
+    options.window.chrome = { runtime, storage: { sync } };
+    options.window.eval(preferences);
+    options.window.eval(fs.readFileSync(path.join(__dirname, '..', 'options/options.js'), 'utf8'));
+    await hold(0);
+    const video = options.window.document.querySelector('[data-k="inlineVideo"]');
+    video.checked = false;
+    video.dispatchEvent(new options.window.Event('change'));
+    await Promise.all([
+      window.SHD.pipeline.setSetting('inlineImages', false), window.SHD.theme.set('night')
+    ]);
+    check('options, header and theme writes from separate contexts are serialized without loss',
+      messages === 3 && stored.settings.inlineVideo === false && stored.settings.inlineImages === false &&
+      stored.settings.theme === 'night' && stored.settings.showThumbnails === false);
+    const contract = vm.createContext({});
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src/config/contracts.js'), 'utf8'), contract);
+    check('the shared settings defaults match every documented extension default',
+      Object.keys(window.SHD.preferences.DEFAULTS).length === Object.keys(contract.SHD.settings).length &&
+      Object.entries(window.SHD.preferences.DEFAULTS).every(([key, value]) => contract.SHD.settings[key] === value) &&
+      window.SHD.preferences.THEMES.join(',') === window.SHD.theme.ids.join(','));
+    check('the background rejects messages from another extension',
+      handler({ type: 'shd:set-setting', key: 'account', value: false }, { id: 'stranger' }, () => {}) === false);
+    const invalid = await runtime.sendMessage({ type: 'shd:set-setting', key: '__proto__', value: false });
+    check('invalid preference messages fail explicitly without altering storage', invalid.ok === false);
+    failNext = true;
+    video.checked = true;
+    video.dispatchEvent(new options.window.Event('change'));
+    const status = options.window.document.querySelector('#save-status');
+    check('storage failures are visible in the options page',
+      await waitFor(() => /Could not save/.test(status.textContent)));
+    video.dispatchEvent(new options.window.Event('change'));
+    check('a failed write does not poison the queue for later attempts',
+      await waitFor(() => stored.settings.inlineVideo === true && !status.textContent));
+    options.window.close();
   }
 
   console.log('\n\x1b[1mTHE ACCOUNT LAYER\'S WIRING\x1b[0m');

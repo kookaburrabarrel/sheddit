@@ -970,9 +970,11 @@ const BRANCH_PAGER_SCRIPT = `
       // comments and stays put, like its in-branch siblings.
       const depth = host ? Number(host.getAttribute('depth')) + 1 : 0;
       const mount = host ? (host.querySelector('.col-span-2.grid') || host) : this.parentElement;
+      this.shdBatches = (this.shdBatches || 0) + 1;
       for (let i = 0; i < 2; i++) {
         const c = document.createElement('shreddit-comment');
-        c.setAttribute('thingid', 't1_' + branch + '_r' + i);
+        c.setAttribute('thingid', 't1_' + branch + '_r' + i +
+          (this.shdBatches > 1 ? '_b' + this.shdBatches : ''));
         c.setAttribute('postid', 't3_link1');
         c.setAttribute('author', 'reply' + i);
         c.setAttribute('score', '3');
