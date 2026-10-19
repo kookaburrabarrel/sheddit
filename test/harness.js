@@ -247,7 +247,7 @@ function serveFixtures({ secure = false } = {}) {
     const wantsNsfwVideo = /\/dead1\//.test(pathname);
     // ...and an ADULT image submission, for the same reason: the blur and its button are a
     // box over a box, which is layout.
-    const wantsNsfwImage = /\/image1nsfw\//.test(pathname);
+    const wantsNsfwImage = /\/r\/nsfwimage\//.test(pathname);
     /* A GALLERY, for the browser suites only: a strip of pictures that scrolls inside its
        own box is a layout question by definition — whether it scrolls THERE or pushes the
        whole document sideways is the entire difference, and jsdom does no layout. */
@@ -277,6 +277,58 @@ function serveFixtures({ secure = false } = {}) {
     // blur gate keys on.
     if (wantsNsfwVideo) body = body.replace('post-type="video"', 'post-type="video" nsfw=""');
     if (wantsNsfwImage) body = body.replace('post-type="image"', 'post-type="image" nsfw=""');
+    if (/^\/r\/threadspa\//.test(pathname)) {
+      body = body.replace('<p>Comment body number 0 at depth 0.</p>',
+        '<p><a href="/r/threadspa/comments/nextthread/next/">next thread</a></p>');
+      body = body.replace('</body>', `<script>
+        window.__threadSpa = { swaps: 0, snapshots: [], mismatches: [] };
+        const template = document.querySelector('main').cloneNode(true);
+        const cache = new Map();
+        const ids = () => [...document.querySelectorAll('#shd-root .thing.link')]
+          .map(row => row.dataset.fullname);
+        new MutationObserver(() => {
+          const expected = location.pathname.match(/\\/comments\\/([^/]+)/)?.[1];
+          const wrong = ids().filter(id => id !== 't3_' + expected);
+          if (wrong.length) window.__threadSpa.mismatches.push({ path: location.pathname, wrong });
+        }).observe(document.body, { childList: true, subtree: true });
+        navigation.addEventListener('navigate', e => {
+          const dest = new URL(e.destination.url);
+          const id = dest.pathname.match(/^\\/r\\/threadspa\\/comments\\/([^/]+)\\//)?.[1];
+          if (!e.canIntercept || dest.origin !== location.origin || !id) return;
+          const current = document.querySelector('main');
+          cache.set(location.pathname, current);
+          e.intercept({ handler: async () => {
+            await new Promise(resolve => setTimeout(resolve, 1800));
+            window.__threadSpa.snapshots.push({
+              path: location.pathname, active: ids(),
+              parked: !!document.querySelector('#shd-outgoing[inert]'),
+              loading: !!document.querySelector('#shd-loading'),
+              error: !!document.querySelector('#shd-error')
+            });
+            await new Promise(resolve => setTimeout(resolve, 800));
+            let incoming = cache.get(dest.pathname);
+            if (!incoming) {
+              incoming = template.cloneNode(true);
+              const post = incoming.querySelector('shreddit-post');
+              post.id = 't3_' + id;
+              post.setAttribute('permalink', dest.pathname);
+              post.setAttribute('post-title', id + ' submission');
+              incoming.querySelector('shreddit-comment-tree').setAttribute('post-id', post.id);
+              incoming.querySelectorAll('shreddit-comment').forEach((comment, i) => {
+                comment.setAttribute('thingid', 't1_' + id + '_c' + i);
+                comment.setAttribute('postid', post.id);
+                comment.setAttribute('permalink', dest.pathname + 'comment/' + id + '_c' + i + '/');
+              });
+              const next = id === 'nextthread' ? 'thirdthread' : 'nextthread';
+              incoming.querySelector('a[href="/r/threadspa/comments/nextthread/next/"]')
+                .setAttribute('href', '/r/threadspa/comments/' + next + '/next/');
+            }
+            current.replaceWith(incoming);
+            window.__threadSpa.swaps++;
+          }});
+        });
+      </script></body>`);
+    }
     /* The vote control a signed-in reader actually misses, delivered the way Reddit
        delivers it. A comment's vote buttons are not in the page's HTML: Reddit mounts the
        <shreddit-comment-action-row> that holds them when the comment comes near a
@@ -660,7 +712,8 @@ const PATHS = {
   imageComments: '/r/aww/comments/image1/a_very_good_dog/',   // an image submission
   galleryComments: '/r/interesting/comments/gallery1/bubble_boy/',  // a multi-frame gallery
   nsfwVideoComments: '/r/funny/comments/dead1/expired/',      // an ADULT video submission
-  nsfwImageComments: '/r/aww/comments/image1nsfw/a_very_good_dog/',  // an ADULT image submission
+  nsfwImageComments: '/r/nsfwimage/comments/image1/a_very_good_dog/',  // an ADULT image submission
+  threadSpa: '/r/threadspa/comments/link1/nasa/',  // native thread swaps slower than the gate tick
   broken: '/r/broken/',         // posts missing a required attribute -> real render failure
   pager: '/r/pager/',           // faceplate-partial with a working loadContent()
   spa: '/r/spa/',               // page-world router intercepts sort navs like live Reddit

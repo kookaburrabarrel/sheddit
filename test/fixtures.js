@@ -1066,6 +1066,8 @@ function commentsPage(opts = {}) {
           '<button>16 more replies</button></faceplate-partial>' + m
         : m);
   }
+  delivered = delivered.replaceAll('t3_link1', post.id)
+    .replaceAll('/comments/link1/', `/comments/${post.id.slice(3)}/`);
   const pagerScript = opts.branchPager ? `<script>${BRANCH_PAGER_SCRIPT}</script>`
     : opts.pager ? `<script>${COMMENT_PAGER_SCRIPT}</script>` : '';
   return `<!DOCTYPE html><html><head><title>thread</title>${REDDIT_PAGE_CSS}</head><body>${pagerScript}
@@ -1073,7 +1075,7 @@ function commentsPage(opts = {}) {
     ${headerHtml(opts)}
     <div><div id="subgrid-container"><div><main id="main-content">
       ${postHtml(shown)}
-      <shreddit-comment-tree post-id="t3_link1" totalcomments="${COMMENT_DEPTHS.length}">
+      <shreddit-comment-tree post-id="${post.id}" totalcomments="${COMMENT_DEPTHS.length}">
         <section>
           ${delivered}${partial}
         </section>

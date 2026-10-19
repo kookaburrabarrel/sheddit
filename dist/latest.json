@@ -1,6 +1,6 @@
 {
-  "version": "0.53.6",
-  "released": "2026-10-18",
+  "version": "0.60.0",
+  "released": "2026-10-19",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.53.6 fixes comments disappearing after returning from Reddit's native editor. The displayed copy no longer inherits the editor's temporary hidden state; the native editor and deliberately hidden descendants remain untouched. Includes the reply, draft, navigation and settings safety fixes from 0.53.5. Signed-in controls remain experimental: reply submission and edit opening can require the native fallback."
+  "notes": "0.60.0 fixes a stale-thread navigation failure: slow Reddit transitions can no longer promote the previous thread into the active page under a new URL. Recovery checks source ownership and rendering checks destination post IDs. Sorts, focused comments and context changes retain distinct content identities; URL rewrites and cached back/forward navigation remain supported. Signed-in controls remain experimental: reply submission and edit opening can require the native fallback."
 }

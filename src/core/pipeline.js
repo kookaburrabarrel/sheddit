@@ -20,9 +20,26 @@ globalThis.SHD = globalThis.SHD || {};
   let observer = null;
   let mode = null;
   let pending = new WeakSet();
+  const sourceRoutes = new WeakMap();
 
   const isDone = (el) => el.getAttribute(C.MARK) === 'done';
-  const markDone = (el) => el.setAttribute(C.MARK, 'done');
+  const markDone = (el) => {
+    sourceRoutes.set(el, R.contentKey);
+    el.setAttribute(C.MARK, 'done');
+  };
+
+  function matchesRoute(el) {
+    if (mode !== R.COMMENTS) return true;
+    const postId = R.postIdOf();
+    const attr = el.matches(C.POST) ? C.POST_ATTR.id : C.COMMENT_ATTR.postId;
+    return !!postId && el.getAttribute(attr) === postId;
+  }
+
+  function waitingForRoute() {
+    const sources = selectorsFor(mode).flatMap(sel => [...document.querySelectorAll(sel)]);
+    return sources.length > 0 && sources.every(el => !matchesRoute(el) ||
+      (isDone(el) && sourceRoutes.has(el) && sourceRoutes.get(el) !== R.contentKey));
+  }
 
   /** Which source elements matter for the current route, honouring feature toggles. */
   function selectorsFor(m) {
@@ -164,7 +181,7 @@ globalThis.SHD = globalThis.SHD || {};
 
     let rendered = 0;
     for (const el of items) {
-      if (isDone(el) || !el.isConnected) continue;
+      if (isDone(el) || !el.isConnected || !matchesRoute(el)) continue;
       try {
         const tag = el.tagName.toLowerCase();
         let ok = false;
@@ -315,7 +332,16 @@ globalThis.SHD = globalThis.SHD || {};
     observer?.disconnect();
     observer = new MutationObserver(records => {
       for (const r of records) {
-        if (r.type === 'attributes') { retry(r.target); continue; }
+        if (r.type === 'attributes') {
+          retry(r.target);
+          if (mode === R.COMMENTS &&
+              [C.POST_ATTR.id, C.COMMENT_ATTR.postId].includes(r.attributeName) &&
+              matchesRoute(r.target)) {
+            revive(r.target);
+            collect(r.target);
+          }
+          continue;
+        }
         for (const n of r.addedNodes) {
           if (n.nodeType === Node.ELEMENT_NODE) collectAdded(n);
         }
@@ -332,17 +358,14 @@ globalThis.SHD = globalThis.SHD || {};
 
   /** Route change: tear down our render, reset module state, sweep again. */
   function onRoute(next, path, restore = false) {
-    /* A COMMENTS -> COMMENTS emit on an unchanged pathname is a SORT SWAP: the emit came
-       from the sort key (route.js bug 87), Reddit moves only `?sort=` and replaces the
-       tree — but it may keep the thread's own post element exactly where it is. A stamp
-       is only ever cleared on re-INSERTION, so an element that never moves keeps it, and
-       its row just went down with the teardown below: the re-sorted page would render
-       comments with no post and no sort strip. Detected here, acted on below. */
-    const sortSwap = mode === R.COMMENTS && next === R.COMMENTS && onRoute.lastPath === path;
+    // A new sort or focused view can replace the tree while keeping the same post.
+    const sameThreadView = mode === R.COMMENTS && next === R.COMMENTS &&
+      R.postIdOf(onRoute.lastPath) === R.postIdOf(path) && onRoute.lastContent !== R.contentKey;
     /* The FIRST emit is the document we were served; every later one runs PRE-COMMIT, over
        the outgoing page. renderEmpty() at the bottom of this function depends on which. */
     const served = onRoute.lastPath === undefined;
     onRoute.lastPath = path;
+    onRoute.lastContent = R.contentKey;
     mode = next;
     // A new page is a fresh attempt: clear the previous one's failure screen and re-arm
     // the deadline. No-ops if the user has released the page to native Reddit.
@@ -399,14 +422,14 @@ globalThis.SHD = globalThis.SHD || {};
     // stamp-free. watchSettings() is different: no navigation is in flight there, so the
     // stamped elements ARE the current page and re-rendering them is the point.
     //
-    // The sort swap (see the top of this function) is the ONE exception, POSTS ONLY: on a
-    // same-thread `?sort=` change the outgoing post IS the incoming post — same element,
-    // same attributes — so re-rendering it pre-commit cannot mix pages, and if Reddit
+    // A same-thread view change is the ONE exception, POSTS ONLY: the outgoing post
+    // IS the incoming post — same element, same attributes — so re-rendering it cannot
+    // mix pages, and if Reddit
     // swaps it anyway the fresh copy arrives with its row already standing and is skipped
     // by revive(). The COMMENTS stay stamped even here: at this pre-commit moment they
     // are the OUTGOING sort's tree, and un-stamping them re-renders the old sort under
     // the new URL — bug 34 by another door. The incoming tree arrives by insertion.
-    if (restore || sortSwap) {
+    if (restore || sameThreadView) {
       document.querySelectorAll(restore ? `[${C.MARK}]` : `${C.POST}[${C.MARK}]`)
         .forEach(p => p.removeAttribute(C.MARK));
     }
@@ -550,19 +573,19 @@ globalThis.SHD = globalThis.SHD || {};
    * processed, 0 rendered, 0 errors, 0 rejected. Reported 2026-09-05 from exactly that
    * card, reproduced in jsdom with one replaceState.
    *
-   * So the gate asks, at its deadline, before accusing anyone: are the stamped sources
-   * STILL CONNECTED? A real navigation has replaced them long before the deadline tick
-   * (measured live: 0 of 4 posts survive a sort change); a URL rewrite leaves every one
-   * of them in the document. Connected-and-stamped-and-unrendered means they ARE the
-   * page, so they are un-stamped, re-collected and flushed synchronously, here, once.
-   * Returns how many were re-adopted.
+   * Connected does not mean current: a slow navigation can leave the outgoing sources
+   * in place past the deadline. Recover only sources consumed for this content identity.
+   * A thread's slug/casing rewrite keeps that identity; another post or sort does not.
    */
   function readopt() {
     if (SHD.gate.stopped || !mode || mode === R.OTHER) return 0;
     let n = 0;
     for (const sel of selectorsFor(mode)) {
       document.querySelectorAll(`${sel}[${C.MARK}]`).forEach(el => {
-        if (el.isConnected) { el.removeAttribute(C.MARK); n++; }
+        if (el.isConnected && matchesRoute(el) && sourceRoutes.get(el) === R.contentKey) {
+          el.removeAttribute(C.MARK);
+          n++;
+        }
       });
     }
     if (!n) return 0;
@@ -581,7 +604,8 @@ globalThis.SHD = globalThis.SHD || {};
      parked on a rAF that may not have fired yet. A deadline must not accuse a queue it
      has not tried to drain, so gate.js calls this first: flush() is idempotent and
      synchronous, and if there is queued work this renders it instead of failing. */
-  SHD.pipeline = { kick() { if (queue.size) flush(); }, readopt, setSetting, renderEmpty };
+  SHD.pipeline = { kick() { if (queue.size) flush(); }, readopt, waitingForRoute,
+                   setSetting, renderEmpty };
 
   (async function boot() {
     await loadSettings();

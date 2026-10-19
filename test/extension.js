@@ -1088,6 +1088,49 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     await pageS.close();
   }
 
+  console.log('\n\x1b[1mPACKED EXTENSION — SLOW THREAD NAVIGATION AND CACHED HISTORY\x1b[0m');
+  {
+    const thread = await browser.newPage();
+    await thread.goto(origin + PATHS.threadSpa, { waitUntil: 'domcontentloaded' });
+    await until(thread, () => !!document.querySelector('#shd-root .thing.link'));
+    const expectedPaths = [
+      '/r/threadspa/comments/nextthread/next/',
+      '/r/threadspa/comments/thirdthread/next/',
+      '/r/threadspa/comments/nextthread/next/'
+    ];
+    for (const pathname of expectedPaths) {
+      await thread.click('#shd-root .thing.comment .usertext-body a');
+      const id = 't3_' + pathname.match(/\/comments\/([^/]+)/)[1];
+      check(`slow click renders only ${id}`, await until(thread, () => {
+        const expected = 't3_' + location.pathname.match(/\/comments\/([^/]+)/)?.[1];
+        const rows = [...document.querySelectorAll('#shd-root .thing.link')];
+        return rows.length === 1 && rows[0].dataset.fullname === expected &&
+          !document.querySelector('#shd-loading');
+      }) && new URL(thread.url()).pathname === pathname);
+    }
+    for (const [direction, expected] of [
+      ['back', 'thirdthread'], ['back', 'nextthread'],
+      ['forward', 'thirdthread'], ['forward', 'nextthread']
+    ]) {
+      if (direction === 'back') await thread.goBack();
+      else await thread.goForward();
+      check(`slow history ${direction} restores ${expected}`, await until(thread, () => {
+        const id = 't3_' + location.pathname.match(/\/comments\/([^/]+)/)?.[1];
+        return document.querySelector('#shd-root .thing.link')?.dataset.fullname === id &&
+          !document.querySelector('#shd-loading');
+      }) && new URL(thread.url()).pathname.includes(`/comments/${expected}/`));
+    }
+    const trace = await thread.evaluate(() => window.__threadSpa);
+    check('every delayed swap was tested after the recovery deadline',
+      trace.swaps === 7 && trace.snapshots.length === 7, JSON.stringify(trace));
+    check('the recovery deadline never activates the outgoing thread or reports a false failure',
+      trace.snapshots.every(s => s.active.length === 0 && s.parked && s.loading && !s.error),
+      JSON.stringify(trace.snapshots));
+    check('no wrong-thread active render occurs anywhere in the navigation sequence',
+      trace.mismatches.length === 0, JSON.stringify(trace.mismatches));
+    await thread.close();
+  }
+
   /* ================================================================== *
    * SELF-DISMISSING OVERLAYS — must not swap the layout at all
    * ================================================================== */

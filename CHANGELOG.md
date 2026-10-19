@@ -20,6 +20,21 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.60.0
+
+### Fixed — a slow navigation cannot turn the previous thread into the new one
+
+- Recovery after a URL rewrite now checks which page consumed each native source.
+  Previously it assumed any source still connected after 1.5 seconds belonged to the
+  destination. A slow Reddit navigation could therefore rebuild the outgoing thread
+  under the new URL and prevent the correct submission from replacing it.
+- Thread rendering checks the destination post ID for both submissions and comments,
+  including late insertions. Outgoing native content stays in a loading transition;
+  an exhausted wait reports the mismatch instead of showing it as the requested thread.
+- Same-post URL rewrites, comment sorting and cached history remain supported.
+  Focused comment links and `context` changes have distinct content identities, so
+  recovery cannot silently replace them with the previous view of the same thread.
+
 ## 0.53.6
 
 ### Fixed — your comment stays visible after leaving the native editor

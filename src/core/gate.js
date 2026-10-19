@@ -370,12 +370,16 @@ SHD.gate = (() => {
         if (renderedCount() > 0) return;    // reveal() ran inside the flush; we are done
       }
       // The other way to reach "processed, none rendered": the rows WERE drawn and a
-      // same-page URL rewrite tore them down, leaving every source stamped and still in
-      // the document (bug 95). By this tick a real navigation would have replaced those
-      // elements; connected ones are the page. Re-adopt them once before accusing.
+      // same-page URL rewrite tore them down (bug 95). The pipeline checks ownership:
+      // connected outgoing sources are not evidence that the incoming page has arrived.
       if (stampedCount() > 0 && renderedCount() === 0) {
         SHD.pipeline?.readopt?.();
         if (renderedCount() > 0) return;    // reveal() ran inside the flush; we are done
+      }
+      if (SHD.pipeline?.waitingForRoute?.()) {
+        document.documentElement.setAttribute('data-shd-waiting', 'route-content');
+        if (waited < MAX_WAIT_MS) return scheduleCheck();
+        return fail('route-content-mismatch', { sources, waited });
       }
       return fail('render-failed', { sources, stamped: stampedCount(),
                                     rejected: SHD.model?.rejectSummary?.() || '' });
@@ -907,6 +911,12 @@ SHD.gate = (() => {
             `posts or comments it could read.`,
       why: 'This is usually a very slow connection or a Reddit outage. It can also happen ' +
            'on an empty or private subreddit, where there is genuinely nothing to show.'
+    }),
+    'route-content-mismatch': (d) => ({
+      what: `Sheddit waited ${Math.round((d.waited || 0) / 1000)} seconds, but Reddit's ` +
+            'connected content still belongs to a different page.',
+      why: 'The previous page was not reused as this one. Reload to retry the navigation, ' +
+           'or use native Reddit below.'
     }),
     'pipeline-stalled': (d) => ({
       what: `Reddit sent ${d.sources} post${d.sources === 1 ? '' : 's'}, but Sheddit's ` +

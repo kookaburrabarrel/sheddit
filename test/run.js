@@ -6920,6 +6920,131 @@ async function boot(html, url, setup) {
     click(window, doc.querySelector('#shd-passthrough-exit a'));
   }
 
+  console.log('\n\x1b[1mSLOW NAVIGATION MUST NOT RE-ADOPT THE PREVIOUS THREAD\x1b[0m');
+  {
+    const { doc, window } = await boot(commentsPage(), COMMENTS_URL, noAuto);
+    const oldPost = doc.querySelector('shreddit-post');
+    const oldTree = doc.querySelector('shreddit-comment-tree');
+    const nextPath = '/r/programming/comments/nextthread/next/';
+    window.history.pushState(null, '', nextPath);
+    check('a different thread cannot recover the outgoing thread through readopt',
+      window.SHD.pipeline.readopt() === 0 && !doc.querySelector('#shd-root .thing'));
+
+    // Reddit can leave the outgoing native DOM connected beyond the 1500ms gate tick.
+    await hold(1800);
+    check('a slow thread stays in a loading transition, not an active copy of the old thread',
+      !doc.querySelector('#shd-root .thing') &&
+      !!doc.querySelector('#shd-outgoing[inert]') && !!doc.querySelector('#shd-loading'));
+    check('waiting for a different native thread is not reported as a render failure',
+      !doc.querySelector('#shd-error'), doc.querySelector('#shd-error')?.textContent);
+
+    const lateOldPost = oldPost.cloneNode(true);
+    const lateOldTree = oldTree.cloneNode(true);
+    oldPost.parentElement.append(lateOldPost, lateOldTree);
+    await hold(80);
+    check('re-inserting an outgoing post and comments cannot make them the active thread',
+      !doc.querySelector('#shd-root .thing'));
+
+    const incoming = new window.DOMParser().parseFromString(
+      commentsPage().replaceAll('link1', 'nextthread').replaceAll('t1_c', 't1_nextc'),
+      'text/html');
+    const incomingPost = incoming.querySelector('shreddit-post');
+    const incomingTree = incoming.querySelector('shreddit-comment-tree');
+    // Keep old native nodes connected while the new tree arrives, comments first.
+    oldPost.parentElement.append(incomingTree);
+    await waitFor(() => doc.querySelector('#shd-root [data-fullname="t1_nextc0"]'));
+    oldPost.parentElement.append(incomingPost);
+    check('the incoming thread wins even while outgoing native content remains connected',
+      await waitFor(() => doc.querySelector('#shd-root [data-fullname="t3_nextthread"]')) &&
+      doc.querySelectorAll('#shd-root .thing.link').length === 1 &&
+      [...doc.querySelectorAll('#shd-root .thing.comment')]
+        .every(row => row.dataset.fullname.startsWith('t1_nextc')));
+    check('successful arrival retires the old picture and loading state',
+      !doc.querySelector('#shd-outgoing') && !doc.querySelector('#shd-loading') &&
+      !doc.querySelector('#shd-error'));
+
+    window.history.pushState(null, '', nextPath + '?sort=new');
+    await waitFor(() => doc.querySelector('#shd-root .shd-selfpost'));
+    window.SHD.pipeline.readopt();
+    await hold(80);
+    check('same-thread recovery cannot re-adopt the outgoing comment sort',
+      doc.querySelectorAll('#shd-root .thing.comment').length === 0 &&
+      doc.querySelector('#shd-root .thing.link')?.dataset.fullname === 't3_nextthread');
+  }
+
+  {
+    const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/r/programming/', noAuto);
+    window.history.pushState(null, '', '/r/programming/comments/link1/nasa/');
+    await hold(1800);
+    check('a listing-to-thread transition never promotes its first listing post to the submission',
+      !doc.querySelector('#shd-root .thing') && !doc.querySelector('#shd-error') &&
+      !!doc.querySelector('#shd-loading'));
+    const incoming = new window.DOMParser().parseFromString(commentsPage(), 'text/html');
+    doc.querySelector('shreddit-app').append(incoming.querySelector('main'));
+    check('a thread arriving after the listing deadline still renders the clicked post',
+      await waitFor(() => doc.querySelector('#shd-root .shd-selfpost')) &&
+      doc.querySelector('#shd-root .thing.link')?.dataset.fullname === 't3_link1');
+  }
+
+  {
+    const { doc, window } = await boot(commentsPage(), COMMENTS_URL, noAuto);
+    const full = window.SHD.route.contentKey;
+    window.history.pushState(null, '', '/r/programming/comments/link1/comment/c0/?context=3');
+    const focused = window.SHD.route.contentKey;
+    check('focused comment navigation cannot recover the full thread as the same page',
+      focused !== full && window.SHD.pipeline.readopt() === 0 &&
+      !doc.querySelector('#shd-root .thing'));
+    window.history.pushState(null, '', '/r/programming/comments/link1/comment/c0/?context=8');
+    check('a context-only change emits a distinct content identity',
+      window.SHD.route.contentKey !== focused);
+    check('a focused view keeps a reused post without reusing the outgoing comments',
+      await waitFor(() => doc.querySelector('#shd-root .shd-selfpost')) &&
+      doc.querySelectorAll('#shd-root .thing.comment').length === 0);
+    const focusedComment = doc.querySelector('shreddit-comment').cloneNode(true);
+    focusedComment.setAttribute('thingid', 't1_focused');
+    doc.querySelector('shreddit-comment-tree').append(focusedComment);
+    check('the focused comment tree can arrive after its reused submission',
+      await waitFor(() => doc.querySelector('#shd-root [data-fullname="t1_focused"]')) &&
+      doc.querySelectorAll('#shd-root .thing.comment').length === 1);
+  }
+
+  {
+    const { doc, window } = await boot(commentsPage(), COMMENTS_URL, noAuto);
+    window.history.pushState(null, '', '/r/programming/comments/superseded/old/');
+    window.history.pushState(null, '', '/r/programming/comments/currentthread/current/');
+    const incoming = id => new window.DOMParser().parseFromString(
+      commentsPage().replaceAll('link1', id).replaceAll('t1_c', `t1_${id}c`),
+      'text/html').querySelector('main');
+    doc.querySelector('shreddit-app').append(incoming('superseded'));
+    await hold(80);
+    check('a late response to a superseded navigation cannot become the active thread',
+      !doc.querySelector('#shd-root .thing'));
+    doc.querySelector('shreddit-app').append(incoming('currentthread'));
+    check('the latest destination renders after a superseded response',
+      await waitFor(() => doc.querySelector('#shd-root [data-fullname="t3_currentthread"]')) &&
+      doc.querySelectorAll('#shd-root .thing.link').length === 1);
+    const late = doc.querySelector('shreddit-comment[postid="t3_currentthread"]').cloneNode(true);
+    late.setAttribute('thingid', 't1_hydrating_route');
+    late.removeAttribute('postid');
+    doc.querySelector('shreddit-app').append(late);
+    await hold(80);
+    check('comments without hydrated thread ownership are not shown speculatively',
+      !doc.querySelector('#shd-root [data-fullname="t1_hydrating_route"]'));
+    late.setAttribute('postid', 't3_currentthread');
+    check('a comment retries when its thread identity hydrates',
+      await waitFor(() => doc.querySelector('#shd-root [data-fullname="t1_hydrating_route"]')));
+  }
+
+  {
+    const { doc, window } = await boot(commentsPage(), COMMENTS_URL, noAuto);
+    window.history.pushState(null, '', '/r/programming/comments/neverarrived/missing/');
+    check('an exhausted route wait reports the mismatch instead of activating the previous thread',
+      await waitFor(() => doc.documentElement.getAttribute('data-shd-fail') === 'route-content-mismatch',
+        { timeout: 14000 }) &&
+      !doc.querySelector('#shd-root') && !doc.querySelector('#shd-outgoing') &&
+      /different page/.test(doc.querySelector('#shd-error')?.textContent || ''));
+  }
+
   console.log('\n\x1b[1mA SAME-PAGE URL REWRITE DOES NOT KILL THE RENDER (bug 95)\x1b[0m');
   {
     /* Reported 2026-09-05 from a logged-in thread: the failure card with 52 processed, 0

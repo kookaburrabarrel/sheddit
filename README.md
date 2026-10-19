@@ -19,15 +19,16 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.53.6](https://img.shields.io/badge/version-0.53.6-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.60.0](https://img.shields.io/badge/version-0.60.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.53.6 is out — everyone is welcome to try it
+### Beta 0.60.0 — safer thread navigation
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
+Store versions can lag this repository's build.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
 If Sheddit makes Reddit better for you, tell a friend — or post about it on Reddit itself,
 if you still have an account ;)
@@ -70,7 +71,7 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 > Your own comments have an **edit** link that opens Reddit's native editor.
 > Save there, then choose **back to sheddit** to return to the updated comment.
 >
-> **Known live limitations in 0.53.6:** automatic reply submission can fail even after
+> **Known live limitations in 0.60.0:** automatic reply submission can fail even after
 > Reddit's composer is open. The native fallback can carry your draft, but check the
 > thread for an existing reply before pressing Reddit's own **Comment** button.
 > Automatic edit opening can also miss a freshly loaded menu; use that comment's
@@ -84,6 +85,12 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail in the [changelog](CHANGELOG.md). The most recent builds:
+
+**0.60.0 — the previous thread stays in the past**
+- **Fixed:** slow navigation cannot promote the outgoing thread into the active page
+  under a new URL. Recovery checks source ownership, and thread rendering checks post IDs.
+- **Fixed:** sorting, focused comment links and context changes keep their own comment
+  trees, while same-post URL rewrites and cached back/forward navigation still work.
 
 **0.53.6 — returning from the native editor**
 - **Fixed:** your displayed comment no longer disappears when you open Reddit's editor
@@ -394,7 +401,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.53.6**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.60.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite
