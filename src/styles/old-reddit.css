@@ -180,6 +180,33 @@ html.shd-active body {
   cursor: pointer;
 }
 .shd-nsfw-btn:hover { background: var(--shd-hover-bg); }
+
+/* The curated / anon links switch (anon.js). Shaped like the theme buttons — two states of
+   one choice, with the selected one in the header fill. */
+.shd-linksbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+.shd-linksbar .shd-linkslabel { color: var(--shd-meta); }
+.shd-links-btn {
+  font: inherit;
+  line-height: 14px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--shd-radius);
+  background: none;
+  color: var(--shd-accent);
+  cursor: pointer;
+}
+.shd-links-btn:hover { background: var(--shd-hover-bg); }
+.shd-links-btn.selected {
+  background: var(--shd-header-bg);
+  border-color: var(--shd-header-border);
+  color: var(--shd-text);
+  font-weight: bold;
+}
 /* The ink is the PAGE's background, not white. Both fills here are theme-owned, and a
    hardcoded white over them inverts where the palette is dark: measured, white on night's
    --shd-nsfw (#ff6b6b) is 2.78:1 and on carbon's (#ff4500) 3.44:1, under the 4.5 floor and
@@ -1215,6 +1242,28 @@ html.shd-active #shd-loading.shd-loading-over {
 .child {
   margin: 0 0 0 15px;
   border-left: 1px var(--shd-thread-style) var(--shd-thread-line);
+}
+
+/* ---------- anonymous listing (anon.js) ----------
+   Two tables, one visible. [hidden] is restated because .shd-sitetable is styled and a
+   later display rule would otherwise win. The curated sentinel goes with its table; the
+   paginator is paused separately (a hidden node still measures). */
+#shd-root .shd-sitetable[hidden] { display: none !important; }
+#shd-root[data-shd-links="anon"] .shd-sentinel { display: none; }
+.shd-anon-note {
+  margin: 0 0 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--shd-meta);
+  background: var(--shd-header-bg);
+  border: 1px solid var(--shd-header-border);
+  border-radius: var(--shd-radius);
+}
+.shd-anon-more {
+  margin: 14px 0 0 82px;   /* the sentinel's 88px less the table's own 6px padding */
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--shd-meta);
 }
 
 /* ---------- pagination sentinel ---------- */

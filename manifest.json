@@ -84,6 +84,7 @@
         "src/core/session.js",
         "src/modules/account.js",
         "src/modules/listing.js",
+        "src/core/anon.js",
         "src/modules/comments.js",
         "src/modules/chrome.js",
         "src/core/pipeline.js"

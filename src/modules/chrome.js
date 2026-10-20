@@ -37,6 +37,8 @@ SHD.chrome = (() => {
             ? h('li.selected', null, h('a', { href: `/r/${sub}/`, text: `r/${sub}` })) : null,
           user ? h('li.selected', null, h('a', { href: `/user/${user}/`, text: `u/${user}` })) : null
         ]),
+        /* Curated or anonymous links (anon.js). Null off a listing and when logged out. */
+        SHD.anon.control(),
         /* LAST, so it lands at the far right — old reddit's `#header-bottom-right`, where
            an account area has been for a decade. The theme bar carries margin-left:auto,
            so it and everything after it form the right-hand cluster; the corner is the

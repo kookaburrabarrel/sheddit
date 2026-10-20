@@ -266,6 +266,9 @@ globalThis.SHD = globalThis.SHD || {};
       SHD.gate.notEmpty();
       if (SHD.settings.chrome) { SHD.chrome.header(); SHD.chrome.sidebar(); }
       SHD.gate.reveal();
+      // After the reveal: the anonymous view is a second table beside the one just drawn,
+      // and the gate's verdict is about the page Reddit served, not about that one.
+      if (mode === R.LISTING) SHD.anon.sync();
     }
 
     // Our own sentinel drives pagination; Reddit's viewport math can't, because we've
@@ -325,6 +328,8 @@ globalThis.SHD = globalThis.SHD || {};
     SHD.listing.renderEmpty();
     if (SHD.settings.chrome) { SHD.chrome.header(); SHD.chrome.sidebar(); }
     SHD.gate.empty(reason);
+    // A personalised feed being empty says nothing about the anonymous one.
+    if (mode === R.LISTING) SHD.anon.sync();
     return true;
   }
 
@@ -387,6 +392,7 @@ globalThis.SHD = globalThis.SHD || {};
     SHD.paginator.reset();
     SHD.session.reset();
     SHD.account.reset();
+    SHD.anon.reset();
     queue.clear();
     pending = new WeakSet();
 
@@ -527,6 +533,7 @@ globalThis.SHD = globalThis.SHD || {};
     observer = null;
     queue.clear();
     SHD.paginator.reset();
+    SHD.anon.reset();
     SHD.dom.passthroughClear();
   });
 

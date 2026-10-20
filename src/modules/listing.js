@@ -152,6 +152,19 @@ SHD.listing = (() => {
    */
   const midcol = (m) => SHD.account.midcol(m, 'post');
 
+  /* The anonymous view's arrows (anon.js): drawn, never forwarded. Those rows were read
+     out of a cookie-less copy of the page, so the post element behind them is detached and
+     has no native control in it. Forwarding would send account.js looking for one, and
+     for a signed-in reader that ends in a miss report about a button that was never going
+     to exist. The score is the anonymous copy's own. */
+  const inertMidcol = (m) => h('div.midcol.unvoted', {
+    title: 'votes are off in the anonymous view — switch back to curated to vote'
+  }, [
+    h('div.arrow.up', { 'aria-hidden': 'true' }),
+    h('div.score.unvoted', { text: score(m.score) }),
+    h('div.arrow.down', { 'aria-hidden': 'true' })
+  ]);
+
   function thumb(m) {
     if (!SHD.settings.showThumbnails) return null;
     /* Adult content gets old reddit's placeholder tile instead of the picture. This is not
@@ -286,7 +299,7 @@ SHD.listing = (() => {
          copy, with no clipboard permission and no session needed. */
       h('li', null, h('a.share', {
         href: m.permalink, text: 'share',
-        onclick: (e) => { e.preventDefault(); toggleShare(m); }
+        onclick: (e) => { e.preventDefault(); toggleShare(m, own(e)); }
       })),
       /* No save/report. Both need a session, and both shipped as `href: permalink`, so
          they looked like actions and silently navigated to the comments page instead.
@@ -296,12 +309,21 @@ SHD.listing = (() => {
          check (SHD.session.active()), as that section says. */
       h('li', null, h('a.hide', {
         href: '#', text: 'hide',
-        onclick: (e) => { e.preventDefault(); row(m.id)?.classList.add('shd-hidden'); }
+        onclick: (e) => { e.preventDefault(); own(e)?.classList.add('shd-hidden'); }
       }))
     ]);
   }
 
-  const row = (id) => document.querySelector(`#shd-root ${SHD.dom.rowSel(id)}`);
+  /* The CURATED row for a post. The anonymous table (anon.js) can carry a row for the same
+     post, and it is not this module's: rebind() finding it would fold a curated model into
+     an anonymous row and leave the curated list one post short. */
+  const row = (id) => [...document.querySelectorAll(`#shd-root ${SHD.dom.rowSel(id)}`)]
+    .find(n => !n.closest('.shd-anon-table')) || null;
+
+  /* The row a click came from. share and hide act on THAT row, not on the first row in the
+     document with the same id — with two tables on the page that was the curated one,
+     hidden, so the press looked like it did nothing. */
+  const own = (e) => e.currentTarget?.closest?.('.thing') || null;
 
   /**
    * Open (or close) the share box under a row: the post's own URL, in a field, selected.
@@ -317,8 +339,7 @@ SHD.listing = (() => {
    * next keystroke is a copy, and no clipboard write of our own — that would need a
    * gesture we cannot guarantee and would make a silent failure look like a success.
    */
-  function toggleShare(m) {
-    const thing = row(m.id);
+  function toggleShare(m, thing = row(m.id)) {
     const entry = thing?.querySelector(':scope > .entry');
     if (!entry) return;
     const open = entry.querySelector(':scope > .shd-sharebox');
@@ -339,6 +360,15 @@ SHD.listing = (() => {
   function render(m) {
     models.set(m.id, m);
     rank += 1;
+    return build(m, rank);
+  }
+
+  /**
+   * The row itself, with nothing recorded: no model kept, no rank counted. anon.js builds
+   * its rows through this so the curated list's numbering and rebind map stay its own.
+   * `inert` draws the arrows without wiring them (see inertMidcol).
+   */
+  function build(m, n, { inert = false } = {}) {
     /* Old reddit numbers LISTINGS, and only listings. Not profiles, where the counter
        would be wrong anyway because comment rows sit between the posts and the visible
        sequence would skip — and not comments pages, where comments.js calls this same
@@ -355,8 +385,8 @@ SHD.listing = (() => {
       dataset: { fullname: m.id, type: m.type, subreddit: m.subreddit },
       class: (m.isSelf ? 'self' : 'linkpost') + (SHD.settings.compactRows ? ' compact' : '')
     }, [
-      ranked ? h('span.rank', { text: String(rank) }) : null,
-      midcol(m),
+      ranked ? h('span.rank', { text: String(n) }) : null,
+      inert ? inertMidcol(m) : midcol(m),
       thumb(m),
       expandoButton(box),
       h('div.entry', null, [
@@ -520,5 +550,5 @@ SHD.listing = (() => {
     return true;
   }
 
-  return { consume, consumeProfileComment, render, rebind, renderEmpty, reset };
+  return { consume, consumeProfileComment, render, build, rebind, renderEmpty, reset };
 })();

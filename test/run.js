@@ -7217,6 +7217,86 @@ async function boot(html, url, setup) {
     }
   }
 
+  console.log('\n\x1b[1mTHE ANONYMOUS LINKS SWITCH\x1b[0m');
+  {
+    /* anon.js re-fetches the listing without cookies and draws it beside the curated one.
+       The stub answers the page URL with a feed that shares one post with the curated
+       page and adds one of its own, plus a continuation; the continuation answers with a
+       third post and no further page. Every request is recorded with its init. */
+    const anonPost = (id, title) =>
+      `<shreddit-post id="${id}" post-title="${title}" permalink="/r/x/comments/${id.slice(3)}/s/" ` +
+      `post-type="text" domain="self.x" score="5" comment-count="1" author="anon" ` +
+      `subreddit-name="x" subreddit-prefixed-name="r/x" created-timestamp="2026-10-01T00:00:00Z"></shreddit-post>`;
+    const firstPage = `<!DOCTYPE html><html><body><shreddit-app><reddit-header-large>` +
+      `<faceplate-tracker noun="login"><a href="/login/">Log In</a></faceplate-tracker></reddit-header-large>` +
+      `<shreddit-feed>${anonPost(POSTS[0].id, 'shared post')}${anonPost('t3_anononly', 'only anonymous')}` +
+      `<shreddit-ad-post>${anonPost('t3_ad', 'an ad')}</shreddit-ad-post>` +
+      `<faceplate-partial loading="programmatic" src="/svc/shreddit/more-posts/anon?after=2"></faceplate-partial>` +
+      `</shreddit-feed></shreddit-app></body></html>`;
+    const secondPage = `${anonPost('t3_anonpage2', 'second page')}`;
+    const calls = [];
+    const setup = (win) => {
+      noAuto(win);
+      try { win.sessionStorage.clear(); } catch { /* no storage */ }
+      win.fetch = async (url, init) => {
+        calls.push({ url: String(url), init });
+        const body = /more-posts/.test(url) ? secondPage : firstPage;
+        return { ok: true, status: 200, text: async () => body };
+      };
+    };
+    const { doc, window } = await boot(listingPage({ loggedIn: true }), 'https://www.reddit.com/r/programming/', setup);
+    const curated = () => doc.querySelector('#shd-root #siteTable');
+    const anon = () => doc.querySelector('#shd-root #shd-anon-table');
+    const btn = (id) => doc.querySelector(`#shd-header .shd-links-btn[data-links="${id}"]`);
+
+    check('a signed-in listing carries the links switch in the header', !!btn('curated') && !!btn('anon'));
+    check('...starting on curated', btn('curated')?.getAttribute('aria-pressed') === 'true');
+    check('...and nothing is fetched until it is flipped', calls.length === 0, JSON.stringify(calls));
+
+    btn('anon').click();
+    await waitFor(() => anon()?.querySelectorAll('.thing.link').length === 2);
+    const rows = () => [...(anon()?.querySelectorAll('.thing.link') || [])];
+    check('flipping to anon fetches the same listing', calls[0]?.url === 'https://www.reddit.com/r/programming/', calls[0]?.url);
+    check('...without cookies', calls[0]?.init?.credentials === 'omit', JSON.stringify(calls[0]?.init));
+    check('...and without a referrer', calls[0]?.init?.referrerPolicy === 'no-referrer');
+    check('the anonymous rows are drawn, ads left out',
+      rows().map(r => r.dataset.fullname).join() === `${POSTS[0].id},t3_anononly`,
+      rows().map(r => r.dataset.fullname).join());
+    check('...numbered from 1 in their own table',
+      rows().map(r => r.querySelector('.rank')?.textContent).join() === '1,2');
+    check('the curated table is hidden, not removed',
+      curated()?.hidden === true && curated().querySelectorAll('.thing.link').length === POSTS.length);
+    check('the switch shows anon selected', btn('anon')?.getAttribute('aria-pressed') === 'true' &&
+      btn('curated')?.getAttribute('aria-pressed') === 'false');
+    check('the anonymous arrows are inert — no vote handler behind them',
+      rows().every(r => r.querySelector('.midcol .arrow.up')?.getAttribute('role') !== 'button'));
+    check('the curated paginator is paused while anon is up', window.SHD.anon.showing() === true);
+
+    /* A post in both tables: hide on the anonymous copy must hide THAT copy. */
+    const shared = rows()[0];
+    shared.querySelector('a.hide').click();
+    check('hide acts on the row it was pressed on', shared.classList.contains('shd-hidden') &&
+      !curated().querySelector(window.SHD.dom.rowSel(POSTS[0].id)).classList.contains('shd-hidden'));
+
+    anon().querySelector('.shd-anon-more a.shd-loadmore').click();
+    await waitFor(() => rows().length === 3);
+    check('load more fetches the continuation, also without cookies',
+      /more-posts\/anon\?after=2$/.test(calls[1]?.url || '') && calls[1]?.init?.credentials === 'omit',
+      JSON.stringify(calls[1]));
+    check('...and appends its posts', rows()[2]?.dataset.fullname === 't3_anonpage2');
+    check('...then says there are no more pages', /no more pages/.test(anon().querySelector('.shd-anon-more').textContent));
+
+    btn('curated').click();
+    check('flipping back shows curated again', curated().hidden === false && anon().hidden === true);
+    check('...without fetching anything', calls.length === 2, String(calls.length));
+    check('...and the choice is remembered for the tab', window.sessionStorage.getItem('shd-links') === 'curated');
+  }
+  {
+    const { doc } = await boot(listingPage(), 'https://www.reddit.com/r/programming/', noAuto);
+    check('logged out there is no links switch — both answers are the same page',
+      !doc.querySelector('#shd-header .shd-linksbar'));
+  }
+
   console.log('\n\x1b[1mSESSION DETECTION\x1b[0m');
   {
     const { doc, window } = await boot(listingPage({ loggedIn: true }), 'https://www.reddit.com/r/programming/', noAuto);

@@ -563,6 +563,10 @@ SHD.paginator = (() => {
        on both a 2,040-comment thread and the front page: pages 40, label "load more".
        Bug 40's complaint exactly: nothing on screen said anything had stopped. */
     if (pages >= MAX_PAGES) { setStatus(`stopped after ${MAX_PAGES} pages`); return; }
+    /* The anonymous view (anon.js) hides #siteTable and this sentinel with it, and a hidden
+       sentinel measures as an empty rect, which inRange() reads as "in range". Without
+       this the curated chain would load pages into a table nobody can see. */
+    if (SHD.anon?.showing()) return;
     if (!inRange() || busy) return;
     /* The unprompted-fill limits. AFTER the geometry and busy checks, so a page that is
        already tall never spends a slot; BEFORE the timer is armed, so waiting out a

@@ -61,6 +61,8 @@ const JS = [
   'src/core/session.js',
   'src/modules/account.js',
   'src/modules/listing.js',
+  // Builds its rows through listing.js; chrome.js asks it for the header switch.
+  'src/core/anon.js',
   'src/modules/comments.js',
   'src/modules/chrome.js',
   'src/core/pipeline.js'
