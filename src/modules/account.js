@@ -1186,6 +1186,14 @@ SHD.account = (() => {
     return unique.length === 1 ? unique[0] : null;
   }
 
+  function readyLogoutControl() {
+    const ctl = findLogoutControl();
+    if (!ctl?.isConnected || ctl.matches(':disabled, [aria-disabled="true"]')) return null;
+    const host = ctl.closest(C.NATIVE.logoutHost);
+    // Server-rendered markup can precede the custom element that installs the click handler.
+    return host && !host.matches(':defined') ? null : ctl;
+  }
+
   /**
    * End the session by pressing Reddit's own control — the delegation tier, applied to the
    * one action a reader most wants back (reported 2026-09-09).
@@ -1208,6 +1216,7 @@ SHD.account = (() => {
    */
   async function logOut(button, status) {
     const say = (text) => { if (status) status.textContent = text; };
+    if (driving) return false;
     if (button) button.disabled = true;
     say('logging out…');
     /* OUR OWN MENU MUST SURVIVE THIS, and nothing else here can keep it open. The corner
@@ -1227,12 +1236,15 @@ SHD.account = (() => {
     try {
       let ctl = findLogoutControl();
       if (!ctl) {
-        const toggle = document.querySelector(C.USER_DRAWER.toggle);
-        if (toggle) {
+        const target = await waitFor(() =>
+          findLogoutControl() || document.querySelector(C.USER_DRAWER.toggle), timings.drawerWaitMs);
+        ctl = findLogoutControl();
+        const toggle = !ctl && target;
+        if (toggle && toggle.getAttribute('aria-expanded') !== 'true') {
           toggle.click();                       // Reddit opens its own drawer
-          ctl = await waitFor(() => findLogoutControl(), timings.drawerWaitMs);
         }
       }
+      ctl = await waitFor(readyLogoutControl, timings.drawerWaitMs);
       if (!ctl) {
         if (button) button.disabled = false;
         say('could not find Reddit\'s log-out control — its own menu is shown instead');
@@ -1241,12 +1253,11 @@ SHD.account = (() => {
         return false;
       }
       ctl.click();
-      /* Measured, not assumed — the lesson every delegated action here carries. The session
-         is gone when the page stops carrying a logged-in signal; reset() first, or the
-         cached YES from a moment ago answers for it. */
-      const gone = await waitFor(() => { SHD.session.reset(); return !SHD.session.loggedIn(); },
+      /* A header can disappear during hydration without ending the session. Require
+         Reddit's affirmative logged-out UI before reloading, not a gap in logged-in UI. */
+      const gone = await waitFor(() => SHD.session.signals().vetoed.length > 0,
                                  timings.logoutWaitMs);
-      if (gone) { nav.reload(); return true; }
+      if (gone) { SHD.session.reset(); nav.reload(); return true; }
       if (button) button.disabled = false;
       say('Reddit did not end the session — its own menu is shown instead');
       const panel = drawerPanel() || document.querySelector(C.HEADER);
@@ -1255,6 +1266,7 @@ SHD.account = (() => {
     } catch (err) {
       if (button) button.disabled = false;
       say('log out failed');
+      console.warn('[sheddit] log out failed', err);
       return false;
     } finally {
       driving = false;
@@ -1323,6 +1335,7 @@ SHD.account = (() => {
 
     toggle.addEventListener('click', (e) => {
       e.preventDefault();
+      if (driving) return;
       if (openMenu && openMenu.menu === menu) { closeMenu(); return; }
       closeMenu();
       status.textContent = '';

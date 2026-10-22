@@ -158,6 +158,11 @@ SHD.model = (() => {
     } catch { return null; }
   }
 
+  function postBodyOf(el) {
+    return [...el.querySelectorAll(C.POST_BODY)]
+      .find(n => n.closest(C.POST) === el) || null;
+  }
+
   /** @returns {object|null} */
   function post(el) {
     const A = C.POST_ATTR;
@@ -179,8 +184,7 @@ SHD.model = (() => {
     // slotted light DOM. Scoped like the comment body below, defensively: a crosspost could
     // plausibly nest another post's markup, and bug 25 is what an unscoped body lookup
     // costs the day the ordering changes.
-    const bodyNode = [...el.querySelectorAll(C.POST_BODY)]
-      .find(n => n.closest(C.POST) === el) || null;
+    const bodyNode = postBodyOf(el);
 
     const removedNotice = removalOf(el);
 
@@ -439,7 +443,9 @@ SHD.model = (() => {
    * Null is the ordinary answer on a listing row, where the only image IS the thumbnail.
    */
   function imageOf(el) {
-    let best = null, bestW = -1, bestOrig = false;
+    const href = attr(el, C.POST_ATTR.contentHref);
+    // The upload URL is available before Reddit mounts its image/lightbox elements.
+    let best = isOriginal(href) ? href : null, bestW = -1, bestOrig = !!best;
     for (const img of el.querySelectorAll('img')) {
       if (img.closest(C.POST) !== el) continue;
       if (img.closest(C.THUMB_EXCLUDE)) continue;
@@ -701,6 +707,6 @@ SHD.model = (() => {
      carousel's lazy <img>s are srcless at consume time and grow their src afterwards
      (bug 91) — so the consumer re-reads the source element after render, exactly as the
      watch link re-resolves the mp4 at click time. */
-  return { post, comment, profileComment, mp4Of, expired, imagesOf,
+  return { post, postBodyOf, comment, profileComment, mp4Of, expired, imageOf, imagesOf,
            rejects, rejectSummary, clearRejects };
 })();

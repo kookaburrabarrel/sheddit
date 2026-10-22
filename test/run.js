@@ -732,6 +732,47 @@ async function boot(html, url, setup) {
     check('a post with no text gets no selftext box', !linkDoc.querySelector('.shd-selftext'));
   }
 
+  console.log('\n\x1b[1mCOMMENTS PAGE — STREAMED POST TEXT\x1b[0m');
+  for (const shape of ['absent', 'empty', 'wrapped']) {
+    const { doc, window } = await boot(commentsPage({ selfPost: true }),
+      'https://www.reddit.com' + SELF_POST.permalink, win => {
+        const body = win.document.querySelector('shreddit-post [slot="text-body"]');
+        if (shape === 'absent') body.remove();
+        else {
+          body.replaceChildren();
+          if (shape === 'wrapped') {
+            const host = win.document.createElement('shreddit-post-text-body');
+            host.setAttribute('slot', 'text-body');
+            body.replaceWith(host);
+            host.appendChild(body);
+          }
+        }
+      });
+    const source = doc.querySelector('shreddit-post');
+    const row = doc.querySelector('.shd-selfpost .thing');
+    check(`${shape}: submission rendered before its text arrived`, !!row);
+    let body = source.querySelector('div[slot="text-body"]');
+    if (!body) {
+      body = doc.createElement('div');
+      body.setAttribute('slot', 'text-body');
+      source.appendChild(body);
+    }
+    body.innerHTML = `<div class="md">${SELF_POST.selftext}</div>`;
+    check(`${shape}: late OP text appears without reloading`,
+      await waitFor(() => /Tell us below/.test(row.querySelector('.shd-selftext')?.textContent || '')));
+    check(`${shape}: late formatting is preserved`,
+      !!row.querySelector('.shd-selftext pre code') &&
+      !!row.querySelector('.shd-selftext blockquote'));
+    check(`${shape}: the submission row is not replaced`,
+      doc.querySelector('.shd-selfpost .thing') === row);
+    if (shape === 'wrapped') {
+      check('the body model selects plain slotted content, not Reddit\'s custom host',
+        window.SHD.model.post(source).bodyNode === body);
+      check('the cloned OP text does not depend on a Reddit custom element',
+        !row.querySelector('.shd-selftext shreddit-post-text-body'));
+    }
+  }
+
   /* Reported: a deleted thread rendered as an ordinary post — a `[deleted]` author, a body,
      and nothing saying it was gone, while Reddit's own page says so plainly. Removal is not
      an attribute (the one idea's third consequence, after selftext and images), so the
@@ -1095,6 +1136,46 @@ async function boot(html, url, setup) {
   }
 
   console.log('\n\x1b[1mCOMMENTS PAGE — AN IMAGE SUBMISSION\x1b[0m');
+  {
+    const url = 'https://i.redd.it/mmn0s6rzb0xh1.jpeg';
+    const { doc } = await boot(commentsPage({ imagePost: true }),
+      'https://www.reddit.com/r/nycrail/comments/1xcgfwn/photo/', win => {
+        const source = win.document.querySelector('shreddit-post');
+        source.setAttribute('content-href', url);
+        source.querySelectorAll('img').forEach(img => img.remove());
+      });
+    check('an uploaded photo renders before Reddit hydrates its lightbox',
+      doc.querySelector('.shd-selfpost .shd-image img')?.getAttribute('src') === url);
+  }
+  for (const nsfw of [false, true]) {
+    const { doc, window } = await boot(commentsPage({ imagePost: true }),
+      'https://www.reddit.com/r/aww/comments/image1/a_very_good_dog/', win => {
+        const source = win.document.querySelector('shreddit-post');
+        source.removeAttribute('content-href');
+        source.querySelectorAll('img').forEach(img => img.remove());
+        if (nsfw) source.setAttribute('nsfw', '');
+      });
+    check(`late photo (${nsfw ? 'adult' : 'safe'}): no picture before hydration`,
+      !doc.querySelector('.shd-selfpost .shd-image'));
+    const source = doc.querySelector('shreddit-post');
+    const img = doc.createElement('img');
+    source.appendChild(img);
+    img.src = 'https://preview.redd.it/late-photo.jpg';
+    check(`late photo (${nsfw ? 'adult' : 'safe'}): hydration creates the image box`,
+      await waitFor(() => doc.querySelector('.shd-selfpost .shd-image')));
+    if (nsfw) {
+      check('a late adult photo remains gated',
+        !!doc.querySelector('.shd-image-gated .shd-image-reveal') &&
+        !doc.querySelector('.shd-image-el'));
+      doc.querySelector('.shd-image-reveal').click();
+    }
+    check(`late photo (${nsfw ? 'adult' : 'safe'}): the resolved photo is displayed`,
+      doc.querySelector('.shd-image-el')?.getAttribute('src') === img.src);
+    img.src = 'https://i.redd.it/late-photo.jpg';
+    check('a late full-size source replaces, rather than duplicates, the preview',
+      await waitFor(() => doc.querySelector('.shd-image-el')?.getAttribute('src') === img.src) &&
+      doc.querySelectorAll('.shd-image-el').length === 1);
+  }
   {
     const { doc } = await boot(commentsPage({ imagePost: true }),
       'https://www.reddit.com/r/aww/comments/image1/a_very_good_dog/');
@@ -6979,6 +7060,26 @@ async function boot(html, url, setup) {
   function installUserDrawer(window, doc, opts = {}) {
     const state = { opened: 0, logouts: 0, panel: null };
     const toggle = doc.querySelector('#expand-user-drawer-button');
+    const endSession = () => {
+      state.logouts++;
+      if (opts.headerGap) {
+        const panel = state.panel;
+        toggle.remove();
+        panel.remove();
+        setTimeout(() => {
+          doc.querySelector('reddit-header-large').append(toggle, panel);
+        }, 100);
+        return;
+      }
+      if (opts.endsSession === false) return;
+      toggle?.remove();
+      state.panel?.remove();
+      state.panel = null;
+      const login = doc.createElement('a');
+      login.href = '/login/';
+      login.textContent = 'Log In';
+      doc.querySelector('reddit-header-large').appendChild(login);
+    };
     /* `avatarPartial` is the live header's trap: a faceplate-partial whose id contains
        "user-drawer" sitting INSIDE the toggle button, earlier in document order than the
        panel, and therefore what a loose host match returns first. */
@@ -6989,6 +7090,7 @@ async function boot(html, url, setup) {
     }
     const mount = () => {
       if (state.panel) return;
+      if (toggle.getAttribute('aria-expanded') !== 'true') return;
       const panel = doc.createElement('div');
       panel.id = opts.panelId || 'user-drawer-panel';
       if (opts.profileLink) panel.innerHTML = '<a href="/user/latename/">latename</a>';
@@ -7000,29 +7102,18 @@ async function boot(html, url, setup) {
         ctl.innerHTML = '<faceplate-tracker noun="logout"><ul>' +
           '<li id="logout-list-item" role="presentation"><div tabindex="0">Log Out</div></li>' +
           '</ul></faceplate-tracker>';
-        ctl.addEventListener('click', () => {
-          state.logouts++;
-          if (opts.endsSession === false) return;
-          doc.querySelector('#expand-user-drawer-button')?.remove();
-          state.panel?.remove();
-          state.panel = null;
-        });
+        const hydrate = () => window.customElements.define('user-drawer-logout',
+          class extends window.HTMLElement {
+            connectedCallback() { this.addEventListener('click', endSession); }
+          });
+        if (opts.hydrateDelay) setTimeout(hydrate, opts.hydrateDelay);
+        else hydrate();
         panel.appendChild(ctl);
       } else if (opts.logout !== false) {
         const el = doc.createElement(opts.asAnchor ? 'a' : 'button');
         if (opts.asAnchor) el.setAttribute('href', 'https://www.reddit.com/logout');
         el.textContent = opts.label || 'Log Out';
-        el.addEventListener('click', () => {
-          state.logouts++;
-          /* Reddit tears its logged-in header down, so the whole drawer goes with the
-             button. Removing only the button left this panel behind — and its own id
-             matches C.SESSION.loggedIn's third clause, so the modelled session never
-             ended and the reload never came. A fixture that half-logs-out tests nothing. */
-          if (opts.endsSession === false) return;
-          doc.querySelector('#expand-user-drawer-button')?.remove();
-          state.panel?.remove();
-          state.panel = null;
-        });
+        el.addEventListener('click', endSession);
         panel.appendChild(el);
       }
       // A decoy that must never be clicked: it mentions the words and is not the control.
@@ -7035,9 +7126,59 @@ async function boot(html, url, setup) {
       doc.querySelector('reddit-header-large').appendChild(panel);
       state.panel = panel;
     };
-    if (opts.alreadyOpen) mount();
-    else toggle?.addEventListener('click', () => { state.opened++; setTimeout(mount, 20); });
+    if (opts.alreadyOpen) {
+      toggle.setAttribute('aria-expanded', 'true');
+      if (opts.mountDelay) setTimeout(mount, opts.mountDelay);
+      else mount();
+    }
+    toggle?.addEventListener('click', () => {
+      if (toggle.getAttribute('aria-expanded') === 'true') {
+        toggle.setAttribute('aria-expanded', 'false');
+        state.panel?.remove();
+        state.panel = null;
+        return;
+      }
+      toggle.setAttribute('aria-expanded', 'true');
+      state.opened++;
+      setTimeout(mount, opts.mountDelay ?? 20);
+    });
     return state;
+  }
+
+  for (const shape of ['unhydrated-control', 'open-loading-drawer']) {
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    const drawer = installUserDrawer(window, doc, {
+      live: true,
+      ...(shape === 'unhydrated-control'
+        ? { hydrateDelay: 120 } : { alreadyOpen: true, mountDelay: 120 })
+    });
+    Object.assign(window.SHD.account.timings, { pollMs: 10, drawerWaitMs: 500, logoutWaitMs: 300 });
+    let reloaded = 0;
+    window.SHD.account.nav.reload = () => { reloaded++; };
+    click(window, doc.querySelector('.shd-account-toggle'));
+    click(window, doc.querySelector('.shd-account-logout'));
+    check(`${shape}: logout waits for a usable native control`,
+      await waitFor(() => reloaded === 1, { timeout: 1500 }) && drawer.logouts === 1,
+      `logouts=${drawer.logouts}, reloads=${reloaded}`);
+    check(`${shape}: an already-open drawer is never toggled closed`,
+      drawer.opened === (shape === 'open-loading-drawer' ? 0 : 1));
+  }
+  {
+    const { doc, window } = await boot(listingPage({ loggedIn: true }),
+      'https://www.reddit.com/r/programming/', noAuto);
+    installUserDrawer(window, doc, { headerGap: true });
+    Object.assign(window.SHD.account.timings, { pollMs: 10, drawerWaitMs: 300, logoutWaitMs: 300 });
+    let reloaded = 0;
+    window.SHD.account.nav.reload = () => { reloaded++; };
+    click(window, doc.querySelector('.shd-account-toggle'));
+    click(window, doc.querySelector('.shd-account-logout'));
+    await waitFor(() => doc.documentElement.classList.contains('shd-passthrough-active'),
+      { timeout: 1000 });
+    check('a temporarily missing header is not mistaken for a completed logout',
+      reloaded === 0);
+    check('a session that did not end gets the native-menu fallback',
+      doc.documentElement.classList.contains('shd-passthrough-active'));
   }
 
   {

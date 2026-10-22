@@ -19,6 +19,7 @@ SHD.comments = (() => {
 
   let root = null;
   const stack = [];        // stack[depth] -> { node, children }
+  let postBodyWatch = null;
 
   /** Mounted as a direct child of <body> — see suppress.css. */
   function ensureRoot() {
@@ -35,7 +36,43 @@ SHD.comments = (() => {
     stack.length = 0;
     expanderWatch?.disconnect();
     expanderWatch = null;
+    stopPostBodyWatch();
     SHD.dom.passthroughClear();   // a route change ends any native handoff in progress
+  }
+
+  function stopPostBodyWatch() {
+    postBodyWatch?.disconnect();
+    postBodyWatch = null;
+  }
+  SHD.gate.onStop(stopPostBodyWatch);
+
+  function watchPostBody(row, source) {
+    stopPostBodyWatch();
+    let previous = null;
+    const sync = () => {
+      const body = SHD.model.postBodyOf(source);
+      const html = body?.innerHTML ?? null;
+      if (html === previous) return;
+      previous = html;
+      let box = row.querySelector('.shd-selftext');
+      if (!body) { box?.remove(); return; }
+      if (!box) {
+        box = h('div.usertext-body.shd-selftext');
+        const notice = row.querySelector('.shd-removed-notice');
+        if (notice) notice.before(box); else row.querySelector('.entry').appendChild(box);
+      }
+      box.replaceChildren(SHD.dom.adoptBody(body));
+    };
+    sync();
+    // A post can be consumed before its slotted body, or before the body finishes streaming.
+    postBodyWatch = new MutationObserver(() => {
+      if (!row.isConnected || !source.isConnected) { stopPostBodyWatch(); return; }
+      try { sync(); } catch (err) { SHD.gate.reportError(err); }
+    });
+    postBodyWatch.observe(source, {
+      childList: true, characterData: true, subtree: true, attributes: true,
+      attributeFilter: ['slot']
+    });
   }
 
   /**
@@ -486,8 +523,9 @@ SHD.comments = (() => {
 
   /** The frames this post can show right now, preferring a re-read over the consume-time snapshot. */
   function liveFrames(m, fallback) {
-    if (m.type !== 'gallery' || !m.source) return fallback;
-    const now = SHD.model.imagesOf(m.source);
+    if (!m.source) return fallback;
+    const image = m.type === 'image' ? SHD.model.imageOf(m.source) : null;
+    const now = m.type === 'gallery' ? SHD.model.imagesOf(m.source) : image ? [image] : [];
     return now.length ? now : fallback;
   }
 
@@ -806,15 +844,15 @@ SHD.comments = (() => {
    * pictures when they turn up. Gated exactly as postImage is — the NSFW question must
    * have the same answer however late the picture arrives.
    */
-  function armLateGalleryFrames(row, m) {
-    if (m.type !== 'gallery' || !m.source) return;
+  function armLateImages(row, m) {
+    if (!['image', 'gallery'].includes(m.type) || !m.source) return;
     if (!SHD.settings.inlineImages) return;
     /* An adult gallery is NOT skipped any more (0.30.0): it is blurred like every other one,
        and it can arrive after consume exactly as a clean one can. What the gate costs it is
        the appending below, not the box. */
     const obs = new MutationObserver(() => {
       if (!row.isConnected) { obs.disconnect(); clearTimeout(stop); return; }
-      const urls = SHD.model.imagesOf(m.source);
+      const urls = liveFrames(m, []);
       if (!urls.length) return;
       let box = row.querySelector('.shd-image');
       if (!box) {
@@ -825,11 +863,17 @@ SHD.comments = (() => {
         /* A gallery whose frames all arrived late, on an adult post: the box opens blurred,
            exactly as postImage would have built it had the frames been there at consume
            time. Appending the frames straight in here is the bypass the gate is for. */
-        if (adultGate(m)) { gateImages(box, m, () => SHD.model.imagesOf(m.source)); return; }
+        if (adultGate(m)) { gateImages(box, m, () => liveFrames(m, [])); return; }
       }
       /* Still blurred: the reader has not asked, and the reveal re-reads the frames, so
          nothing that hydrates while the blur stands is lost by waiting. */
       if (box.classList.contains('shd-image-gated')) return;
+      if (m.type === 'image') {
+        if (box.querySelector('img')?.getAttribute('src') !== urls[0]) {
+          box.replaceChildren(...imageFrames(urls));
+        }
+        return;
+      }
       const have = new Set([...box.querySelectorAll('img')].map(i => i.getAttribute('src')));
       for (const u of urls) {
         if (!have.has(u)) box.appendChild(h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
@@ -841,7 +885,7 @@ SHD.comments = (() => {
       childList: true, subtree: true, attributes: true,
       /* The lazy attribute joins the watch list because it is now a source of frames: a
          frame whose url lands there late is as real as one whose src does. */
-      attributeFilter: ['src', 'srcset', C.GALLERY_LAZY_SRC]
+      attributeFilter: ['src', 'srcset', C.GALLERY_LAZY_SRC, C.POST_ATTR.contentHref]
     });
     const stop = setTimeout(() => obs.disconnect(), LATE_HYDRATE_MS);
   }
@@ -872,7 +916,7 @@ SHD.comments = (() => {
     try { picture = postImage(m); } catch { picture = null; }
     if (picture) row.querySelector('.entry').appendChild(picture);
     // Guarded like the enhancements it patches: a watcher must never take the row down.
-    try { armLateGalleryFrames(row, m); } catch { /* the frames already rendered stand */ }
+    try { armLateImages(row, m); } catch (err) { SHD.gate.reportError(err); }
     // The post's own text, expanded — old reddit shows the selftext open on the comments
     // page, and this extension shipped without it: the row builder reads attributes, the
     // text is not an attribute (it is slotted light DOM, C.POST_BODY), and no fixture
@@ -880,11 +924,7 @@ SHD.comments = (() => {
     // from real use as "comments fine, post content missing". Cloned, like comment
     // bodies, so links / code / quotes survive without re-parsing markdown; inside the
     // row's .entry, which is where old reddit hangs the expando.
-    if (m.bodyNode) {
-      row.querySelector('.entry').appendChild(
-        h('div.usertext-body.shd-selftext', null,
-          SHD.dom.adoptBody(m.bodyNode)));
-    }
+    watchPostBody(row, el);
     /* A post Reddit has taken down said so nowhere in our layout: reported as a deleted
        thread rendering as an ordinary one, with a `[deleted]` author and a body, and no
        way to tell a dead thread from a live one. Reddit's own sentence is shown, because

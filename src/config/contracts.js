@@ -337,7 +337,7 @@ SHD.C = {
    * treatment: clone the rendered node, never re-parse markdown, and scope the lookup to
    * the post that owns it.
    */
-  POST_BODY: '[slot="text-body"]',
+  POST_BODY: 'div[slot="text-body"]',
 
   /* A post Reddit has taken down, which we rendered as an ordinary one.
    *
@@ -422,6 +422,7 @@ SHD.C = {
        toggle-then-wait already covers; the wait was searching for the wrong thing. */
     logout: 'user-drawer-logout, #logout-list-item, ' +
             'a[href*="/logout" i], button[data-testid*="logout" i], [role="menuitem"][href*="logout" i]',
+    logoutHost: 'user-drawer-logout',
     logoutText: /^log\s*out$/i,
     /* What the text fallback is allowed to consider. `[tabindex]` is there because the live
        control is a focusable <div> — without it the div carrying exactly "Log Out" was

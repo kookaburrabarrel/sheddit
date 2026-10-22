@@ -78,7 +78,8 @@ function crc32(buf) {
 const TEST_PNG = png(1000, 750);
 
 /** Load a fixture over a real URL, run the bundle on it, wait for our layout to exist. */
-async function open(browser, origin, urlPath, waitFor, viewport, { images = false, imageBody = TEST_PNG } = {}) {
+async function open(browser, origin, urlPath, waitFor, viewport,
+  { images = false, imageBody = TEST_PNG, setup } = {}) {
   const page = await browser.newPage();
   // Settable before the bundle runs, because the paginator measures the page against the
   // viewport the moment it attaches — resizing afterwards would be measuring the wrong one.
@@ -98,6 +99,7 @@ async function open(browser, origin, urlPath, waitFor, viewport, { images = fals
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(String(e)));
   await page.goto(origin + urlPath, { waitUntil: 'domcontentloaded' });
+  if (setup) await page.evaluate(setup);
   await page.evaluate(BUNDLE);
   await page.waitForSelector(waitFor, { timeout: 10000 });
   return { page, pageErrors };
@@ -110,6 +112,67 @@ const overlaps = (a, b) =>
   const server = await serveFixtures();
   const origin = `http://127.0.0.1:${server.port}`;
   const browser = await puppeteer.launch({ executablePath: EXE, args: LAUNCH_ARGS });
+
+  console.log('\n\x1b[1mSTREAMED SUBMISSION CONTENT\x1b[0m');
+  {
+    const { page, pageErrors } = await open(browser, origin, PATHS.comments, '.shd-selfpost');
+    await page.evaluate(() => {
+      customElements.define('shreddit-post-text-body', class extends HTMLElement {
+        constructor() {
+          super();
+          this.attachShadow({ mode: 'open' }).innerHTML = '<slot name="text-body"></slot>';
+        }
+      });
+      const host = document.createElement('shreddit-post-text-body');
+      host.setAttribute('slot', 'text-body');
+      document.querySelector('shreddit-post').appendChild(host);
+      host.innerHTML = '<div slot="text-body"><div class="md" property="schema:articleBody">' +
+        '<p>Late OP text with <em>emphasis</em> and a <a href="/r/test/">link</a>.</p></div></div>';
+    });
+    await page.waitForSelector('.shd-selftext p', { visible: true });
+    const body = await page.evaluate(() => {
+      const p = document.querySelector('.shd-selftext p');
+      return {
+        text: p.innerText, visible: p.checkVisibility(), height: p.getBoundingClientRect().height,
+        plain: !document.querySelector('.shd-selftext shreddit-post-text-body'),
+        formatting: !!p.querySelector('em') && !!p.querySelector('a'),
+        source: !!document.querySelector('shreddit-post shreddit-post-text-body .md')
+      };
+    });
+    check('late OP text is actually visible, not just present in textContent',
+      body.visible && body.height > 0 && body.text.includes('Late OP text'));
+    check('wrapped OP text keeps its formatting and native source without cloning the custom host',
+      body.plain && body.formatting && body.source);
+    check('streamed text produces no page errors', pageErrors.length === 0, pageErrors.join('; '));
+    await page.close();
+  }
+  {
+    const { page, pageErrors } = await open(browser, origin, PATHS.imageComments,
+      '.shd-selfpost .shd-image img', null, {
+        images: true,
+        setup: () => {
+          const source = document.querySelector('shreddit-post');
+          source.setAttribute('content-href', 'https://i.redd.it/mmn0s6rzb0xh1.jpeg');
+          source.querySelectorAll('img').forEach(img => img.remove());
+        }
+      });
+    await page.waitForFunction(() => {
+      const img = document.querySelector('.shd-selfpost .shd-image img');
+      return img.complete && img.naturalWidth > 0;
+    });
+    const image = await page.evaluate(() => {
+      const img = document.querySelector('.shd-selfpost .shd-image img');
+      return {
+        src: img.src, visible: img.checkVisibility(), height: img.getBoundingClientRect().height,
+        width: img.naturalWidth
+      };
+    });
+    check('the reported upload renders a decoded visible image without a hydrated native lightbox',
+      image.src === 'https://i.redd.it/mmn0s6rzb0xh1.jpeg' &&
+      image.visible && image.height > 0 && image.width === 1000);
+    check('the photo renders without page errors', pageErrors.length === 0, pageErrors.join('; '));
+    await page.close();
+  }
 
   /* ================================================================== *
    * LISTING
