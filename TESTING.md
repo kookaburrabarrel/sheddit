@@ -66,6 +66,8 @@ output:
 |---|---|
 | Listing page | row count, mount point, ranks, ad exclusion, thumbnail resolution, link targets, score/tagline, pagination sentinel, vote-click safety |
 | Comments page | node count, **DOM nesting matches every `depth` attribute**, top-level counts, body transfer, collapse toggle |
+| Streamed submission content | late or initially empty OP text, Reddit's custom body wrapper, formatting and source preservation, upload URLs before image hydration, late single-image updates and adult gating; geometry also checks visible text and a decoded image |
+| Logout races | delayed custom-element upgrade, an already-open loading drawer, and a transient missing header that must not count as success |
 | Idempotency | re-running the bundle must not duplicate rows or roots |
 | SPA route changes | chrome rebuilt on navigation, no duplicate roots, unhandled routes fully released |
 | Failure screen | explanation shown instead of a silent revert, native Reddit stays hidden, escape hatch works, Sheddit's DOM removed, pipeline stopped, in-flight flush suppressed, native handoff unwound |

@@ -1,6 +1,6 @@
 {
-  "version": "0.60.0",
-  "released": "2026-10-19",
+  "version": "0.61.0",
+  "released": "2026-10-22",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.60.0 fixes a stale-thread navigation failure: slow Reddit transitions can no longer promote the previous thread into the active page under a new URL. Recovery checks source ownership and rendering checks destination post IDs. Sorts, focused comments and context changes retain distinct content identities; URL rewrites and cached back/forward navigation remain supported. Signed-in controls remain experimental: reply submission and edit opening can require the native fallback."
+  "notes": "0.61.0 fixes missing OP text and photos when Reddit hydrates post content after Sheddit renders the submission. Text stays synchronized with its native source, and uploaded photos can render before the lightbox mounts. Logout waits for Reddit's control to hydrate, keeps an already-open loading drawer open, and requires affirmative logged-out UI before reloading. Includes the navigation and gallery fixes from 0.60.0. Signed-in controls remain experimental."
 }

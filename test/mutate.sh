@@ -132,6 +132,44 @@ mutate() { # mutate <name> <suite> <file old new>...
 echo "MUTATION TESTING — each row reintroduces a bug this branch fixed"
 echo
 
+# --- 0.61: streamed submissions and logout readiness ---
+mutate "late OP text is never synchronized" run \
+  src/modules/comments.js "    postBodyWatch.observe(source, {" \
+                          "    postBodyWatch.observe(document.createElement('div'), {"
+
+mutate "OP text clones Reddit's custom host again" run \
+  src/config/contracts.js "  POST_BODY: 'div[slot=\"text-body\"]'," \
+                          "  POST_BODY: '[slot=\"text-body\"]',"
+
+mutate "uploads wait for a native image element again" run \
+  src/core/model.js "let best = isOriginal(href) ? href : null, bestW = -1, bestOrig = !!best;" \
+                    "let best = null, bestW = -1, bestOrig = false;"
+
+mutate "single-image posts lose their late hydration watcher" run \
+  src/modules/comments.js "    if (!['image', 'gallery'].includes(m.type) || !m.source) return;" \
+                          "    if (m.type !== 'gallery' || !m.source) return;"
+
+mutate "replacement posts keep watching the retired OP body" run \
+  src/modules/comments.js "        watchPostBody(row, el);" \
+                          "        stopPostBodyWatch();"
+
+mutate "replacement image sources wait for another mutation" run \
+  src/modules/comments.js "    if (row.isConnected) update();" \
+                          "    ;"
+
+mutate "logout clicks an unupgraded custom element" run \
+  src/modules/account.js "    return host && !host.matches(':defined') ? null : ctl;" \
+                         "    return ctl;"
+
+mutate "logout closes an already-open loading drawer" run \
+  src/modules/account.js "        if (toggle && toggle.getAttribute('aria-expanded') !== 'true') {" \
+                         "        if (toggle) {"
+
+mutate "a temporary missing header is called logout success" run \
+  src/modules/account.js "      const gone = await waitFor(() => SHD.session.signals().vetoed.length > 0," \
+                         "      const gone = await waitFor(() => { SHD.session.reset(); return !SHD.session.loggedIn(); },"
+# --- end 0.61 ---
+
 mutate "sidebar padding+border escape the reserved gutter" geometry \
   src/styles/old-reddit.css '  box-sizing: border-box;          /* keeps the margin box exactly --shd-gutter */
 ' ''
@@ -736,12 +774,11 @@ mutate "zero-stamped failures blame the markup again" run \
 # The post text vanishes from the comments page — the original symptom, "comments fine,
 # post content missing".
 mutate "post selftext body vanishes from the comments page" run \
-  src/modules/comments.js "    if (m.bodyNode) {
-      row.querySelector('.entry').appendChild(
-        h('div.usertext-body.shd-selftext', null,
-          SHD.dom.adoptBody(m.bodyNode)));
-    }
-" ""
+  src/modules/comments.js "
+    watchPostBody(row, el);
+" "
+    ;
+"
 
 # The cascade the report DIAGNOSED (wrongly, but nothing asserted otherwise): the first
 # unconsumable element aborts the flush, so one broken post zeroes out a whole thread.
@@ -1356,7 +1393,7 @@ mutate "late-arriving expanders never get controls and branches dead-end again" 
 # Bug 91 (QA F3): gallery frames hydrate late — srcless at consume — so live galleries
 # rendered one frame while the page carried two, and nothing ever looked again.
 mutate "late-hydrating gallery frames are dropped again" run \
-  src/modules/comments.js "    try { armLateGalleryFrames(row, m); } catch { /* the frames already rendered stand */ }" \
+  src/modules/comments.js "    try { armLateImages(row, m); } catch (err) { SHD.gate.reportError(err); }" \
                           "    ;"
 
 # QA F5: a gallery title's content-href is reddit.com/gallery/<id>, which only lands on
@@ -1415,10 +1452,10 @@ mutate "an image submission loses its picture again" run \
 # Shadowing the helper is what reinstates first-url-wins.
 mutate "the largest rendition stops winning, and the first one does" run \
   src/core/model.js "  function imageOf(el) {
-    let best = null, bestW = -1, bestOrig = false;" \
+    const href = attr(el, C.POST_ATTR.contentHref);" \
                     "  function imageOf(el) {
-    let best = null, bestW = -1, bestOrig = false;
-    const betterPicture = () => bestW < 0;"
+    const betterPicture = () => bestW < 0;
+    const href = attr(el, C.POST_ATTR.contentHref);"
 
 mutate "an image title points at the viewer-bound image URL again" run \
   src/core/model.js "        : (type === 'image' && imageUrl && viewerBound(contentHref)) ? permalink" \
@@ -2049,7 +2086,8 @@ mutate "log out clicks the first candidate instead of refusing an ambiguous draw
 # Every delegated action here MEASURES its outcome. Assuming the click worked reports a
 # logout that did not happen and reloads the page out from under the reader.
 mutate "log out assumes the click worked instead of checking the session ended" run \
-  src/modules/account.js '      if (gone) { nav.reload(); return true; }' '      nav.reload(); return true;'
+  src/modules/account.js '      if (gone) { SHD.session.reset(); nav.reload(); return true; }' \
+                         '      SHD.session.reset(); nav.reload(); return true;'
 
 # Reddit's header hydrates late; caching the FIRST answer means a name that arrives a
 # moment later never appears at all.

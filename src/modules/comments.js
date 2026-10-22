@@ -861,7 +861,7 @@ SHD.comments = (() => {
   const galleryWatches = new WeakMap();
 
   /**
-   * Append gallery frames that hydrate AFTER the post was consumed — bug 91.
+   * Refresh pictures that hydrate AFTER the post was consumed — bug 91.
    *
    * QA round 2026-08-27, F3, two live galleries: the native carousel carried 2 loaded
    * frames, the lazy remainder srcless, and exactly ONE frame was rendered both times.
@@ -882,8 +882,7 @@ SHD.comments = (() => {
     /* An adult gallery is NOT skipped any more (0.30.0): it is blurred like every other one,
        and it can arrive after consume exactly as a clean one can. What the gate costs it is
        the appending below, not the box. */
-    const obs = new MutationObserver(() => {
-      if (!row.isConnected) { obs.disconnect(); clearTimeout(stop); return; }
+    const update = () => {
       const found = liveFrames(m, []);
       if (!found.length) return;
       let box = row.querySelector('.shd-image');
@@ -924,6 +923,10 @@ SHD.comments = (() => {
       }
       /* A late frame is what turns a lone picture into a gallery — see syncGallery. */
       syncGallery(box);
+    };
+    const obs = new MutationObserver(() => {
+      if (!row.isConnected) { obs.disconnect(); clearTimeout(stop); return; }
+      try { update(); } catch (err) { SHD.gate.reportError(err); }
     });
     obs.observe(m.source, {
       childList: true, subtree: true, attributes: true,
@@ -933,6 +936,7 @@ SHD.comments = (() => {
     });
     const stop = setTimeout(() => obs.disconnect(), LATE_HYDRATE_MS);
     galleryWatches.set(row, { obs, stop });
+    if (row.isConnected) update();
   }
 
   /** The submission itself, rendered above the thread. */

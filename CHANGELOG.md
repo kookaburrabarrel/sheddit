@@ -20,6 +20,32 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.61.0
+
+### Fixed — missing OP text and photos
+
+The submission could render before Reddit delivered its slotted text or image elements.
+Sheddit took that first snapshot and never refreshed it for text or single-image posts.
+The OP body now follows late insertions and streamed text changes without replacing the
+submission row. It clones the plain slotted content rather than Reddit's custom body host,
+preserving links, emphasis, code and quotes.
+
+Image posts can use their direct upload URL before the lightbox mounts. Late single-image
+sources also create or update the inline picture, without duplicating it or bypassing the
+adult-content gate. Existing gallery identity and navigation protections are retained.
+
+### Fixed — logout timing races
+
+Logout now waits for Reddit's custom logout element to upgrade before clicking it and
+does not toggle an already-open drawer closed while its contents are loading. Overlapping
+attempts are blocked. A temporarily absent header no longer counts as success: Sheddit
+requires Reddit's affirmative logged-out UI before reloading, otherwise the native-menu
+fallback remains available.
+
+Regression cases cover these races, rich-text preservation, late image hydration and
+real browser visibility. Signed-in support remains experimental; these changes do not
+claim that live logout is reliable on every Reddit variant.
+
 ## 0.60.0
 
 ### Fixed — a slow navigation cannot turn the previous thread into the new one

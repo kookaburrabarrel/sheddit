@@ -1043,6 +1043,10 @@ const overlaps = (a, b) =>
       `still ${Math.round(g.stillW)}px inside a ${Math.round(g.boxW)}px box (${g.clipped}), cap ${cap}px`);
 
     await page.click('.shd-selfpost .shd-image-reveal');
+    await page.waitForFunction(() => {
+      const img = document.querySelector('.shd-selfpost .shd-image-el');
+      return img?.complete && img.naturalWidth > 0;
+    });
     const after = await page.evaluate(() => {
       const el = document.querySelector('.shd-selfpost .shd-image-el');
       return {

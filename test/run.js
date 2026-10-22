@@ -765,9 +765,21 @@ async function boot(html, url, setup) {
       !!row.querySelector('.shd-selftext blockquote'));
     check(`${shape}: the submission row is not replaced`,
       doc.querySelector('.shd-selfpost .thing') === row);
+    body.querySelector('p').firstChild.data = 'The next streamed chunk';
+    check(`${shape}: subsequent text-node changes also reach the displayed OP`,
+      await waitFor(() => row.querySelector('.shd-selftext')?.textContent.includes('The next streamed chunk')));
+    const replacement = source.cloneNode(true);
+    source.replaceWith(replacement);
+    check(`${shape}: a replacement source keeps the existing submission row`,
+      await waitFor(() => replacement.getAttribute('data-shd') === 'done') &&
+      doc.querySelector('.shd-selfpost .thing') === row);
+    body = replacement.querySelector('div[slot="text-body"]');
+    body.querySelector('p').firstChild.data = 'Text from the replacement source';
+    check(`${shape}: the body watcher follows a replacement native post`,
+      await waitFor(() => row.querySelector('.shd-selftext')?.textContent.includes('Text from the replacement source')));
     if (shape === 'wrapped') {
       check('the body model selects plain slotted content, not Reddit\'s custom host',
-        window.SHD.model.post(source).bodyNode === body);
+        window.SHD.model.post(replacement).bodyNode === body);
       check('the cloned OP text does not depend on a Reddit custom element',
         !row.querySelector('.shd-selftext shreddit-post-text-body'));
     }
@@ -1141,6 +1153,8 @@ async function boot(html, url, setup) {
     const { doc } = await boot(commentsPage({ imagePost: true }),
       'https://www.reddit.com/r/nycrail/comments/1xcgfwn/photo/', win => {
         const source = win.document.querySelector('shreddit-post');
+        source.id = 't3_1xcgfwn';
+        source.setAttribute('permalink', '/r/nycrail/comments/1xcgfwn/photo/');
         source.setAttribute('content-href', url);
         source.querySelectorAll('img').forEach(img => img.remove());
       });
@@ -1167,7 +1181,7 @@ async function boot(html, url, setup) {
       check('a late adult photo remains gated',
         !!doc.querySelector('.shd-image-gated .shd-image-reveal') &&
         !doc.querySelector('.shd-image-el'));
-      doc.querySelector('.shd-image-reveal').click();
+      doc.querySelector('.shd-image-reveal')?.click();
     }
     check(`late photo (${nsfw ? 'adult' : 'safe'}): the resolved photo is displayed`,
       doc.querySelector('.shd-image-el')?.getAttribute('src') === img.src);
@@ -1175,6 +1189,12 @@ async function boot(html, url, setup) {
     check('a late full-size source replaces, rather than duplicates, the preview',
       await waitFor(() => doc.querySelector('.shd-image-el')?.getAttribute('src') === img.src) &&
       doc.querySelectorAll('.shd-image-el').length === 1);
+    const replacement = source.cloneNode(true);
+    replacement.querySelector('img').src = 'https://i.redd.it/rebound-photo.jpg';
+    source.replaceWith(replacement);
+    check('a replacement source immediately refreshes the existing single-image box',
+      await waitFor(() => doc.querySelector('.shd-image-el')?.getAttribute('src') ===
+        'https://i.redd.it/rebound-photo.jpg') && doc.querySelectorAll('.shd-image-el').length === 1);
   }
   {
     const { doc } = await boot(commentsPage({ imagePost: true }),
