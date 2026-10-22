@@ -25,7 +25,13 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.61.0 — post content and logout fixes
+### Beta 0.61.0 — major bug-fix release
+
+**Updating is strongly recommended.** Earlier builds could show a thread's title and
+comments while silently leaving out the OP's text or photo. **0.61.0 fixes this missing
+post content and several logout timing bugs**, while retaining the recent navigation
+and gallery fixes. If you install from source or a download zip, update your copy and
+reload the extension.
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
 Store versions can lag this repository's build.
@@ -86,7 +92,11 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 Full detail, and every earlier build, in the [changelog](CHANGELOG.md).
 
-**0.61.0 — post content and logout fixes**
+**0.61.0 — major bug-fix release: missing post content and logout**
+
+This is an important reliability update, not just a cosmetic change: affected threads
+could look loaded while the post itself was missing.
+
 - **Fixed:** OP text and photos arriving after the submission's initial render no longer
   disappear. Text keeps its formatting; uploads can render before Reddit's lightbox mounts.
 - **Fixed:** logout waits for Reddit's control to hydrate, does not close an already-open
