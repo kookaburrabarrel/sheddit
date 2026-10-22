@@ -970,9 +970,11 @@ const BRANCH_PAGER_SCRIPT = `
       // comments and stays put, like its in-branch siblings.
       const depth = host ? Number(host.getAttribute('depth')) + 1 : 0;
       const mount = host ? (host.querySelector('.col-span-2.grid') || host) : this.parentElement;
+      this.shdBatches = (this.shdBatches || 0) + 1;
       for (let i = 0; i < 2; i++) {
         const c = document.createElement('shreddit-comment');
-        c.setAttribute('thingid', 't1_' + branch + '_r' + i);
+        c.setAttribute('thingid', 't1_' + branch + '_r' + i +
+          (this.shdBatches > 1 ? '_b' + this.shdBatches : ''));
         c.setAttribute('postid', 't3_link1');
         c.setAttribute('author', 'reply' + i);
         c.setAttribute('score', '3');
@@ -1064,6 +1066,8 @@ function commentsPage(opts = {}) {
           '<button>16 more replies</button></faceplate-partial>' + m
         : m);
   }
+  delivered = delivered.replaceAll('t3_link1', post.id)
+    .replaceAll('/comments/link1/', `/comments/${post.id.slice(3)}/`);
   const pagerScript = opts.branchPager ? `<script>${BRANCH_PAGER_SCRIPT}</script>`
     : opts.pager ? `<script>${COMMENT_PAGER_SCRIPT}</script>` : '';
   return `<!DOCTYPE html><html><head><title>thread</title>${REDDIT_PAGE_CSS}</head><body>${pagerScript}
@@ -1071,7 +1075,7 @@ function commentsPage(opts = {}) {
     ${headerHtml(opts)}
     <div><div id="subgrid-container"><div><main id="main-content">
       ${postHtml(shown)}
-      <shreddit-comment-tree post-id="t3_link1" totalcomments="${COMMENT_DEPTHS.length}">
+      <shreddit-comment-tree post-id="${post.id}" totalcomments="${COMMENT_DEPTHS.length}">
         <section>
           ${delivered}${partial}
         </section>

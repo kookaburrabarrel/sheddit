@@ -13,6 +13,7 @@ SHD.listing = (() => {
 
   let container = null;
   let rank = 0;
+  const models = new Map();
 
   /**
    * Creates (once) the <div id="siteTable"> that all rows go into.
@@ -30,7 +31,7 @@ SHD.listing = (() => {
     return container;
   }
 
-  function reset() { container = null; rank = 0; }
+  function reset() { container = null; rank = 0; models.clear(); }
 
   /* ------------------------------------------------------------------ *
    * the empty listing
@@ -336,6 +337,7 @@ SHD.listing = (() => {
 
   /** model -> DOM node. Pure; no side effects on the page. */
   function render(m) {
+    models.set(m.id, m);
     rank += 1;
     /* Old reddit numbers LISTINGS, and only listings. Not profiles, where the counter
        would be wrong anyway because comment rows sit between the posts and the visible
@@ -389,8 +391,16 @@ SHD.listing = (() => {
     if (el.closest(C.AD_POST)) return false;         // never render ads
     const m = SHD.model.post(el);
     if (!m) return false;
+    if (rebind(m)) return true;
     place(render(m));
     return true;
+  }
+
+  function rebind(m) {
+    const previous = models.get(m.id);
+    if (!previous || !row(m.id)) return null;
+    Object.assign(previous, m);
+    return previous;
   }
 
   /**
@@ -452,6 +462,7 @@ SHD.listing = (() => {
      Long enough for any real hydration, short enough that a row which genuinely has no
      <time> does not hold an observer for the life of the page. */
   const LATE_TIME_MS = 15000;
+  const timeWatches = new WeakMap();
 
   /**
    * Patch the timestamp in late, when the source hydrates after consume time.
@@ -467,9 +478,10 @@ SHD.listing = (() => {
    * on first success or at LATE_TIME_MS, whichever comes first, so it cannot accumulate.
    */
   function armLateTime(thing, m) {
+    timeWatches.get(thing)?.();
     if (m.created || !m.source) return;
     const tagline = thing.querySelector('.tagline');
-    if (!tagline) return;
+    if (!tagline || tagline.querySelector('time')) return;
     const read = () => {
       const t = [...m.source.querySelectorAll('time[datetime]')]
         .find(n => n.closest(C.PROFILE_COMMENT) === m.source);
@@ -490,17 +502,23 @@ SHD.listing = (() => {
       childList: true, subtree: true, attributes: true, attributeFilter: ['datetime']
     });
     const stop = setTimeout(() => obs.disconnect(), LATE_TIME_MS);
+    timeWatches.set(thing, () => { obs.disconnect(); clearTimeout(stop); });
   }
 
   /** Called by the pipeline for each newly-seen <shreddit-profile-comment>. */
   function consumeProfileComment(el) {
     const m = SHD.model.profileComment(el);
     if (!m) return false;
+    if (rebind(m)) {
+      armLateTime(row(m.id), m);
+      return true;
+    }
+    models.set(m.id, m);
     const thing = renderProfileComment(m);
     place(thing);
     armLateTime(thing, m);
     return true;
   }
 
-  return { consume, consumeProfileComment, render, renderEmpty, reset };
+  return { consume, consumeProfileComment, render, rebind, renderEmpty, reset };
 })();

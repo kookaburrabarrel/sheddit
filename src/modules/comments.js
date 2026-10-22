@@ -20,6 +20,7 @@ SHD.comments = (() => {
   let root = null;
   const stack = [];        // stack[depth] -> { node, children }
   let postBodyWatch = null;
+  const models = new Map();
 
   /** Mounted as a direct child of <body> — see suppress.css. */
   function ensureRoot() {
@@ -34,6 +35,7 @@ SHD.comments = (() => {
   function reset() {
     root = null;
     stack.length = 0;
+    models.clear();
     expanderWatch?.disconnect();
     expanderWatch = null;
     stopPostBodyWatch();
@@ -215,6 +217,7 @@ SHD.comments = (() => {
        subtree it belongs to and the thread guide line runs beside it. */
     const more = moreRepliesControl(m);
     if (more) childListing.appendChild(more);
+    SHD.account.restoreReply(m, thing);
 
     return { node: thing, listing: childListing };
   }
@@ -330,6 +333,15 @@ SHD.comments = (() => {
   function consume(el) {
     const m = SHD.model.comment(el);
     if (!m) return false;
+    const previous = models.get(m.id);
+    const existing = document.querySelector(`#${C.ROOT_ID} ${SHD.dom.rowSel(m.id)}`);
+    if (previous && existing) {
+      if (previous.source === el) return true;
+      Object.assign(previous, m);
+      const body = existing.querySelector(':scope > .entry > .usertext > .usertext-body');
+      if (body && m.bodyNode) body.replaceChildren(SHD.dom.adoptBody(m.bodyNode));
+      return true;
+    }
     // Idempotent; armed from here because the tree provably exists once a comment does.
     watchLateExpanders();
 
@@ -352,6 +364,7 @@ SHD.comments = (() => {
       target = parent ? parent.listing : ensureRoot().querySelector('.nestedlisting');
     }
     if (!target) return false;
+    models.set(m.id, m);
 
     /* Before the branch's own "N more replies" line, if it has one: that control loads
        what comes AFTER these replies, so it has to stay at the bottom of the list. */
@@ -366,6 +379,12 @@ SHD.comments = (() => {
   /** Is this post's picture behind the adult opt-in? One question, asked in three places. */
   const adultGate = (m) => !!m.nsfw && !SHD.settings.showNsfwThumbnails;
 
+  /* The native <img> each drawn gallery frame was read from — bug 120. A lazy frame's URL
+     CHANGES when Reddit hydrates it (data-lazy-src, then the largest of a srcset), so a
+     deck that recognised its frames by URL took every hydrated frame for a new one and
+     listed each photo twice. The source element is the identity that survives that. */
+  const frameSource = new WeakMap();
+
   /* Bare <img>, no anchor — deliberately, since 2026-08-24. These used to link "the file
      itself", and measurement showed there is no such destination for a logged-out click:
      i.redd.it AND preview.redd.it both 307 a navigation into Reddit's /media viewer
@@ -378,8 +397,14 @@ SHD.comments = (() => {
      twenty-frame gallery therefore costs one picture rather than twenty until the reader
      asks for the rest. The visible cost is a frame that arrives a moment after it is
      stepped to, which is the same trade the adult blur makes deliberately. */
-  const imageFrames = (urls) => urls.map(u =>
-    h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
+  const imageFrame = (url, from) => {
+    const f = h('img.shd-image-el', { src: url, alt: '', loading: 'lazy' });
+    if (from) frameSource.set(f, from);
+    return f;
+  };
+  /** Frames from model.framesOf ({ url, img }) or bare URLs — an image post has no source. */
+  const imageFrames = (frames) => frames.map(f =>
+    typeof f === 'string' ? imageFrame(f) : imageFrame(f.url, f.img));
 
   /**
    * Move a gallery `delta` frames along and re-label it.
@@ -469,9 +494,10 @@ SHD.comments = (() => {
    * blur is then over a picture the row had anyway: no worse than the row, never worse than
    * revealing it.
    *
-   * @param {() => string[]} resolve  the frames to draw, called AT REVEAL TIME. A gallery's
-   *   carousel hydrates late (bug 91), so asking at the click is what makes a post revealed
-   *   ten seconds in show everything it has rather than what it had at first paint.
+   * @param {() => Array} resolve  the frames to draw — URLs, or model.framesOf entries —
+   *   called AT REVEAL TIME. A gallery's carousel hydrates late (bug 91), so asking at the
+   *   click is what makes a post revealed ten seconds in show everything it has rather
+   *   than what it had at first paint.
    */
   function gateImages(box, m, resolve) {
     box.classList.add('shd-image-gated');
@@ -489,11 +515,11 @@ SHD.comments = (() => {
       text: 'adult content — click to view',
       onclick: () => {
         box.classList.remove('shd-image-gated');
-        const urls = resolve();
+        const frames = resolve();
         /* Nothing left to show — a gallery whose frames went away mid-blur. Leave the page
            as it was rather than an empty box with a control that did nothing (bug 62). */
-        if (!urls.length) return box.remove();
-        box.replaceChildren(...imageFrames(urls));
+        if (!frames.length) return box.remove();
+        box.replaceChildren(...imageFrames(frames));
         syncGallery(box);
       }
     });
@@ -512,20 +538,23 @@ SHD.comments = (() => {
        slideshow rather than a picture. An image post is the single-picture case of the
        same box. Both fall through to null when nothing resolved, so a page whose full-size
        files live elsewhere costs the picture and never the post. */
-    const urls = m.type === 'image' && m.image ? [m.image]
-      : m.type === 'gallery' ? m.images : [];
-    if (!urls.length) return null;
+    const frames = m.type === 'image' && m.image ? [m.image]
+      : m.type === 'gallery' ? galleryFrames(m) : [];
+    if (!frames.length) return null;
     const box = h('div.shd-image');
-    if (adultGate(m)) return gateImages(box, m, () => liveFrames(m, urls));
-    box.append(...imageFrames(urls));
+    if (adultGate(m)) return gateImages(box, m, () => liveFrames(m, frames));
+    box.append(...imageFrames(frames));
     return syncGallery(box);
   }
+
+  /** A gallery's frames with the elements they came from, so the late watcher can track them. */
+  const galleryFrames = (m) => m.source ? SHD.model.framesOf(m.source) : m.images;
 
   /** The frames this post can show right now, preferring a re-read over the consume-time snapshot. */
   function liveFrames(m, fallback) {
     if (!m.source) return fallback;
     const image = m.type === 'image' ? SHD.model.imageOf(m.source) : null;
-    const now = m.type === 'gallery' ? SHD.model.imagesOf(m.source) : image ? [image] : [];
+    const now = m.type === 'gallery' ? SHD.model.framesOf(m.source) : image ? [image] : [];
     return now.length ? now : fallback;
   }
 
@@ -829,6 +858,7 @@ SHD.comments = (() => {
      to give does not hold observers for its lifetime. Same reasoning as listing.js's
      LATE_TIME_MS for the profile timestamp — these are the same late-arrival family. */
   const LATE_HYDRATE_MS = 15000;
+  const galleryWatches = new WeakMap();
 
   /**
    * Append gallery frames that hydrate AFTER the post was consumed — bug 91.
@@ -847,13 +877,15 @@ SHD.comments = (() => {
   function armLateImages(row, m) {
     if (!['image', 'gallery'].includes(m.type) || !m.source) return;
     if (!SHD.settings.inlineImages) return;
+    const previous = galleryWatches.get(row);
+    if (previous) { previous.obs.disconnect(); clearTimeout(previous.stop); }
     /* An adult gallery is NOT skipped any more (0.30.0): it is blurred like every other one,
        and it can arrive after consume exactly as a clean one can. What the gate costs it is
        the appending below, not the box. */
     const obs = new MutationObserver(() => {
       if (!row.isConnected) { obs.disconnect(); clearTimeout(stop); return; }
-      const urls = liveFrames(m, []);
-      if (!urls.length) return;
+      const found = liveFrames(m, []);
+      if (!found.length) return;
       let box = row.querySelector('.shd-image');
       if (!box) {
         box = h('div.shd-image');
@@ -869,14 +901,26 @@ SHD.comments = (() => {
          nothing that hydrates while the blur stands is lost by waiting. */
       if (box.classList.contains('shd-image-gated')) return;
       if (m.type === 'image') {
-        if (box.querySelector('img')?.getAttribute('src') !== urls[0]) {
-          box.replaceChildren(...imageFrames(urls));
+        if (box.querySelector('img')?.getAttribute('src') !== found[0]) {
+          box.replaceChildren(...imageFrames(found));
         }
         return;
       }
-      const have = new Set([...box.querySelectorAll('img')].map(i => i.getAttribute('src')));
-      for (const u of urls) {
-        if (!have.has(u)) box.appendChild(h('img.shd-image-el', { src: u, alt: '', loading: 'lazy' }));
+      /* A frame already in the deck is found by the element it was read from, then by
+         picture — never by URL alone, because a hydrating frame's URL changes under it
+         (bug 120). Found, it takes the new URL, which is the same photo at its best size
+         now that Reddit has said what that is; only a frame the deck has no trace of is
+         appended. framesOf gives each picture one entry, so a drawn frame showing that
+         picture IS that entry's frame, even if a re-rendered carousel moved it to a new
+         element. */
+      const deck = [...box.querySelectorAll('.shd-image-el')];
+      for (const { img, url } of found) {
+        const key = SHD.model.pictureKey(url);
+        const frame = deck.find(f => frameSource.get(f) === img) ||
+          deck.find(f => SHD.model.pictureKey(f.getAttribute('src')) === key);
+        if (!frame) { box.appendChild(imageFrame(url, img)); continue; }
+        frameSource.set(frame, img);
+        if (frame.getAttribute('src') !== url) frame.setAttribute('src', url);
       }
       /* A late frame is what turns a lone picture into a gallery — see syncGallery. */
       syncGallery(box);
@@ -888,6 +932,7 @@ SHD.comments = (() => {
       attributeFilter: ['src', 'srcset', C.GALLERY_LAZY_SRC, C.POST_ATTR.contentHref]
     });
     const stop = setTimeout(() => obs.disconnect(), LATE_HYDRATE_MS);
+    galleryWatches.set(row, { obs, stop });
   }
 
   /** The submission itself, rendered above the thread. */
@@ -895,7 +940,15 @@ SHD.comments = (() => {
     const m = SHD.model.post(el);
     if (!m) return false;
     const r = ensureRoot();
-    if (r.querySelector('.shd-selfpost')) return false;
+    if (r.querySelector('.shd-selfpost')) {
+      const previous = SHD.listing.rebind(m);
+      const row = r.querySelector(`.shd-selfpost ${SHD.dom.rowSel(m.id)}`);
+      if (previous && row) {
+        armLateImages(row, previous);
+        watchPostBody(row, el);
+      }
+      return !!previous;
+    }
     const row = SHD.listing.render(m);
     /* Before the selftext, which is where old reddit's expando sat relative to the body.
 

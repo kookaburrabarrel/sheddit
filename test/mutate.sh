@@ -321,9 +321,8 @@ mutate "a shipped setting has no checkbox to set it" run \
   options/options.html '<label><input type="checkbox" data-k="autoPaginate"> Auto-load more on scroll</label>' ''
 
 mutate "a toggle writes only the changed key" run \
-  options/options.js "  next[c.dataset.k] = read(c);
-  await chrome.storage.sync.set({ settings: next });" \
-                     "  await chrome.storage.sync.set({ settings: { [c.dataset.k]: read(c) } });"
+  src/core/settings.js '        settings: { ...DEFAULTS, ...(settings || {}), [key]: value }' \
+                       '        settings: { [key]: value }'
 
 # --- nested comments (the live 2026-08-14 shape) ---
 mutate "comment body lookup is not scoped to its own comment" run \
@@ -529,7 +528,7 @@ mutate "the theme bar cannot wrap onto a second line" css-lint \
 # theme-only change. Without that, changing colour tears #shd-root down and rebuilds it,
 # which on a paginated feed throws away every page the user has loaded.
 mutate "a theme change tears the whole page down again" run \
-  src/core/pipeline.js "        if (changed.length === 1 && changed[0] === 'theme') return;" \
+  src/core/pipeline.js "        if (!structural.length) return;" \
                        '        /* reverted */'
 
 # Both places the theme gets applied, together. Removing either alone is invisible because
@@ -598,8 +597,11 @@ mutate "a flush parked across a visibility flip is never re-booked" run \
 mutate "route.js reads the old URL and latches it (sort desync)" run \
   src/core/route.js "        if (path) emit(path, search);" \
                     "        queueMicrotask(() => emit(location.pathname));" \
-  src/core/route.js "      navigation.addEventListener('navigatesuccess', () => emit(location.pathname));" "" \
-  src/core/route.js "    if (next === current && emit.lastPath === path && emit.lastSort === sort) return;
+  src/core/route.js "      navigation.addEventListener('navigatesuccess', () => {
+        pending = null;
+        emit(location.pathname);
+      });" "" \
+  src/core/route.js "    if (!restore && next === current && emit.lastPath === path && emit.lastSort === sort) return;
     current = next;
     emit.lastPath = path;" "    const changed = next !== current || emit.lastPath !== path;
     current = next;
@@ -744,10 +746,8 @@ mutate "post selftext body vanishes from the comments page" run \
 # The cascade the report DIAGNOSED (wrongly, but nothing asserted otherwise): the first
 # unconsumable element aborts the flush, so one broken post zeroes out a whole thread.
 mutate "one bad element takes the whole flush down" run \
-  src/core/pipeline.js "        markDone(el);                 // stamp regardless: a skipped item must not be retried
-        if (ok) rendered++;" \
-                       "        markDone(el);
-        if (!ok) { queue.clear(); break; }
+  src/core/pipeline.js "        if (ok) rendered++;" \
+                       "        if (!ok) { queue.clear(); break; }
         rendered++;"
 
 # ------------------------------------------------- popups never take the layout ----------
@@ -798,14 +798,13 @@ mutate "the age gate is never answered" run \
 # traversal back into "sources N, stamped N, rendered 0".
 mutate "history traversals dead-end on stale stamps again" run \
   src/core/pipeline.js "  const revive = (el) => {
-    if (isDone(el) && !rowFor(el)) el.removeAttribute(C.MARK);
+    if (isDone(el)) el.removeAttribute(C.MARK);
   };" "  const revive = () => {};"
 
-# The revival's own guard: without the row check, ANY re-inserted stamped element gets
-# re-rendered — a reparented element with a live row renders twice.
-mutate "revival ignores whether the row still exists" run \
-  src/core/pipeline.js "    if (isDone(el) && !rowFor(el)) el.removeAttribute(C.MARK);" \
-                       "    if (isDone(el)) el.removeAttribute(C.MARK);"
+# Reinserted sources must rebind even while their existing rendered row is retained.
+mutate "revival leaves existing rows bound to stale native sources" run \
+  src/core/pipeline.js "    if (isDone(el)) el.removeAttribute(C.MARK);" \
+                       "    if (isDone(el) && !rowFor(el)) el.removeAttribute(C.MARK);"
 
 # Observed live 2026-08-20 on a quarantined sub, logged out: Reddit serves zero posts and
 # renders its own "no posts yet" panel inside shreddit-feed. Counting DESCENDANTS reads that
@@ -1327,11 +1326,11 @@ mutate "the between-pages window goes back to being an unexplained blank" run \
 # the sort key in the emit latch, and the sort-swap unstamp without which the re-sorted
 # thread renders with no post row and no strip (the post element never re-inserts).
 mutate "a query-only sort change is swallowed and the sorts interleave again" run \
-  src/core/route.js "    if (next === current && emit.lastPath === path && emit.lastSort === sort) return;" \
-                    "    if (next === current && emit.lastPath === path) return;"
+  src/core/route.js "    if (!restore && next === current && emit.lastPath === path && emit.lastSort === sort) return;" \
+                    "    if (!restore && next === current && emit.lastPath === path) return;"
 
 mutate "the re-sorted thread loses its post row and sort strip" run \
-  src/core/pipeline.js "    if (sortSwap) {" "    if (false) {"
+  src/core/pipeline.js "    if (restore || sortSwap) {" "    if (restore) {"
 
 # Bug 88: cloned comment bodies bring <shreddit-player gif> across, the clone UPGRADES
 # (custom elements are document-global), and the upgraded player paints the same solid
@@ -1475,13 +1474,13 @@ mutate "a timestamp that arrives late is lost again" run \
 # A gallery reduced to its single largest frame — the exact reduction imageOf() rightly
 # performs for an image post, wrong here because frames are peers.
 mutate "a gallery collapses to one picture" run \
-  src/modules/comments.js "      : m.type === 'gallery' ? m.images : [];" \
+  src/modules/comments.js "      : m.type === 'gallery' ? galleryFrames(m) : [];" \
                           "      : m.type === 'gallery' && m.images.length ? [m.images[0]] : [];"
 
 # Per-frame ranking: scoring frames into one global winner is the same bug one level down.
 mutate "gallery frames stop being ranked per element" run \
-  src/core/model.js "      if (best && !out.includes(best)) out.push(best);" \
-                    "      if (best && !out.length) out.push(best);"
+  src/core/model.js "      if (!best || seen.has(pictureKey(best))) continue;" \
+                    "      if (!best || out.length) continue;"
 
 # ----------------------------------------------------------- 0.24.0: the Firefox port ---
 # The relay (bug 82). Reddit's router calls the PAGE realm's pushState; a content-script
@@ -1566,10 +1565,12 @@ mutate "the hold blanks routes nobody will ever take" extension \
 # delivered at idle it answers undefined, which silently reverts to unblank-and-flash.
 mutate "route.js slips back to document_idle" run \
   manifest.json "        \"src/config/contracts.js\",
+        \"src/core/settings.js\",
         \"src/core/route.js\",
         \"src/config/themes.js\",
         \"src/core/gate.js\"" \
                 "        \"src/config/contracts.js\",
+        \"src/core/settings.js\",
         \"src/config/themes.js\",
         \"src/core/gate.js\""
 
@@ -1623,8 +1624,7 @@ mutate "the toggle stops reflecting the setting" run \
 # in-memory object instead changes only what renders LATER — everything already on screen
 # stays stale, which looks like a toggle that half works.
 mutate "the toggle mutates settings in memory instead of writing them" run \
-  src/core/pipeline.js "      const { settings } = await chrome.storage.sync.get('settings');
-      await chrome.storage.sync.set({" "      SHD.settings[key] = value; if (true) return; await Promise.resolve({"
+  src/core/pipeline.js "      await SHD.preferences.set(key, value);" "      SHD.settings[key] = value;"
 
 # NOT MUTATED, deliberately, and recorded so the gap is a decision rather than an
 # oversight: there is no row for "a settings change keeps your scroll position", because
@@ -1728,7 +1728,8 @@ mutate "the empty-feed shortcut runs on a route change, over the outgoing page" 
 # Both paths share one author filter now (0.49.0), so this row reintroduces the drift on
 # both at once: every comment under the target counts, whoever wrote it.
 mutate "any comment arriving anywhere counts as the reader's comment posting" run \
-  src/modules/account.js "    const mine = (n) => !me || (n.getAttribute(C.COMMENT_ATTR.author) || '') === me;" \
+  src/modules/account.js "    const mine = (n) => !!me &&
+      (n.getAttribute(C.COMMENT_ATTR.author) || '').toLowerCase() === me.toLowerCase();" \
                          "    const mine = () => true;"
 
 # C.USER_DRAWER.host leads with [id*="user-drawer"], which the TOGGLE's own id contains, and
@@ -1985,13 +1986,13 @@ mutate "a missing vote control is reported on a logged-out session too" run \
   src/modules/account.js 'if (missWarned || !active()) return;' 'if (missWarned) return;'
 
 mutate "reply ignores the session and always opens our box" run \
-  src/modules/account.js '  function reply(m, thing) {
-    if (!active()) {' '  function reply(m, thing) {
+  src/modules/account.js '  function reply(m, thing, focus = true) {
+    if (!active()) {' '  function reply(m, thing, focus = true) {
     if (false) {'
 
 mutate "reply ignores the session and always hands off" run \
-  src/modules/account.js '  function reply(m, thing) {
-    if (!active()) {' '  function reply(m, thing) {
+  src/modules/account.js '  function reply(m, thing, focus = true) {
+    if (!active()) {' '  function reply(m, thing, focus = true) {
     if (true) {'
 
 # A comment's subtree holds its descendants' composers (§1.4 for composers): unscoped, a
@@ -2004,18 +2005,15 @@ mutate "the reply text never reaches Reddit's editor" run \
         editor.dispatchEvent' '        editor.dispatchEvent'
 
 mutate "Reddit's submit button is never clicked" run \
-  src/modules/account.js '    const count = commentsUnder(target, kind);
-    submit.click();' '    const count = commentsUnder(target, kind);'
+  src/modules/account.js '    submit.click();' '    ;'
 
 mutate "a failed reply discards the draft" run \
-  src/modules/account.js "      save.disabled = false;
-      form.dataset.shdState = 'failed';" "      save.disabled = false;
-      form.dataset.shdState = 'failed';
-      ta.value = '';"
+  src/modules/account.js "      form.dataset.shdState = 'failed';" \
+                         "      form.dataset.shdState = 'failed'; ta.value = '';"
 
 mutate "a failed reply no longer reveals Reddit's composer" run \
-  src/modules/account.js "    if (!reveal || !SHD.dom.passthrough(reveal)) return false;" \
-                         "    if (!reveal) return false;"
+  src/modules/account.js "    const bar = reveal && SHD.dom.passthrough(reveal);" \
+                         "    const bar = reveal;"
 
 mutate "the top-level comment box is dropped" run \
   src/modules/account.js '  function commentBox(m) {
@@ -2056,7 +2054,20 @@ mutate "log out assumes the click worked instead of checking the session ended" 
 # Reddit's header hydrates late; caching the FIRST answer means a name that arrives a
 # moment later never appears at all.
 mutate "a missing username is cached, so a late name never arrives" run \
-  src/core/session.js '    if (identity && identity.name) return identity;' '    if (identity) return identity;'
+  src/core/session.js '    if (identity && (identity.name || (!fresh && Date.now() - identityAt < NEGATIVE_TTL_MS))) return identity;' '    if (identity) return identity;'
+
+# 0.53.0 asked for the name once per rendered comment and never cached a miss, so a page
+# whose name could not be read re-ran the header search for every comment (seven times
+# slower on a 624-comment thread).
+mutate "a missing username is re-read for every comment" run \
+  src/core/session.js '    if (identity && (identity.name || (!fresh && Date.now() - identityAt < NEGATIVE_TTL_MS))) return identity;' '    if (identity && identity.name) return identity;'
+
+# 0.53.0's edit flow asked whether the comment still carried the passthrough class, which
+# a later handoff to a reply nested under it puts straight back: an attempt the reader
+# had left woke up and opened a second editor.
+mutate "an abandoned edit resumes when a nested handoff reopens its path" run \
+  src/modules/account.js '    const stillHere = () => bar.isConnected && source.isConnected;' \
+  "    const stillHere = () => source.isConnected && source.classList.contains('shd-passthrough');"
 
 # The corner is the answer to "does this thing know I am logged in", and the name is the
 # half that can go missing. Dropping the fallback takes the answer with it.
@@ -2116,15 +2127,15 @@ mutate "account.js is delivered after the modules built from it" run \
 # form behind a hidden #shd-root, under a sentence saying so that the reader could not see.
 # Dropping the carry puts them back in front of an empty box.
 mutate "the handoff reveals Reddit's composer but leaves the draft behind" run \
-  src/modules/account.js '      try { carried = await handoff(m.source, kind, posted ? null : text, r); }' \
+  src/modules/account.js '      try { carried = await handoff(m.source, kind, posted ? null : text, r, live); }' \
                          '      try { await handoff(m.source, kind, posted ? null : text, r); }'
 
 # The reveal is what MAKES the control exist: suppressed, the native tree is a clipped 1x1
 # box, so Reddit never hydrates the action row. Re-running the chain without revealing
 # finds exactly what the first attempt found — nothing.
 mutate "the handoff re-runs the chain without revealing first" run \
-  src/modules/account.js '    if (!reveal || !SHD.dom.passthrough(reveal)) return false;' \
-                         '    if (!reveal) return false;'
+  src/modules/account.js '    const bar = reveal && SHD.dom.passthrough(reveal);' \
+                         '    const bar = reveal;'
 
 # Telling a reader their words are in Reddit's box when they are not is worse than the bug
 # it replaces: they press Reddit's reply on an empty composer and lose the draft for real.
@@ -2253,7 +2264,7 @@ mutate "a finished check removes the toggle that governs the next one" run \
 # Gecko ignores Chrome's service_worker key, so shipping it unchanged means the startup
 # check never runs on Firefox and nothing says why — bug 82's silence, in the packaging.
 mutate "the Firefox build ships Chrome's worker key, which Gecko ignores" run \
-  package-extension.js '    out.background = { scripts: [out.background.service_worker], persistent: false };' \
+  package-extension.js "    out.background = { scripts: ['src/core/settings.js', out.background.service_worker], persistent: false };" \
                        '    out.background = { ...out.background };'
 
 # --------------------------------------------------- a gallery's unshown frames ---
@@ -2309,6 +2320,31 @@ mutate "a late frame sends the reader back to the first slide" run \
     stepFrame(box, 0);" "    box.appendChild(nav);
     box.dataset.shdFrame = '0';
     stepFrame(box, 0);"
+
+# Bug 120: every photo listed more than once. A lazy frame hydrates IN PLACE and its best
+# URL moves from data-lazy-src to the largest member of its new srcset, so a deck that knew
+# its frames by URL appended each hydrated frame a second time. Four rows, one per link in
+# the chain: the drawn frame must remember its source, the watcher must look it up by that
+# source, a found frame takes the better copy, and two URLs of one picture are one frame.
+mutate "a drawn gallery frame forgets which native frame it came from" run \
+  src/modules/comments.js "    if (from) frameSource.set(f, from);" "    ;"
+
+mutate "a hydrating gallery frame is recognised by its url again" run \
+  src/modules/comments.js "        const frame = deck.find(f => frameSource.get(f) === img) ||" \
+                          "        const frame = deck.find(f => f.getAttribute('src') === url) ||"
+
+mutate "a hydrated gallery frame keeps its stale lazy url" run \
+  src/modules/comments.js "        if (frame.getAttribute('src') !== url) frame.setAttribute('src', url);" "        ;"
+
+mutate "two urls of one picture are two gallery frames" run \
+  src/core/model.js '    return `${/(^|\.)redd\.it$/.test(host) ? '"'"'redd.it'"'"' : host}/${path}`;' \
+                    '    return s;'
+
+mutate "title-prefixed previews duplicate their lightbox originals" run \
+  src/core/model.js "    if (host === 'preview.redd.it') {" "    if (false) {"
+
+mutate "title-prefix normalization rewrites unrelated image hosts" run \
+  src/core/model.js "    if (host === 'preview.redd.it') {" "    if (true) {"
 
 # ------------------------------------------- the original beats every resize ---
 # Reported from live use: a post rendered at 640px with a full-size copy in the same
@@ -2445,7 +2481,8 @@ mutate "a comment vote goes back to failing silently" run \
 # their words about a box that was never open.
 mutate "a dormant editor counts as an open composer again" run \
   src/modules/account.js "    const opened = await waitFor(
-      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs);
+      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs, live);
+    if (!live()) return cancelled();
     if (!opened) return { ok: false, step: 'composer', host };" \
                          "    const opened = SHD.dom.deepQuery(host, C.COMPOSER.editor);"
 
@@ -2478,9 +2515,8 @@ mutate "the exit bar's note setter writes nothing" run \
 # submit was pressed on an editor Reddit had no model for, nothing posted, the editor read
 # empty BECAUSE nothing was accepted, and the form closed on it with the draft gone.
 mutate "an emptied editor counts as a posted reply again" run \
-  src/modules/account.js "    const arrived = await waitFor(() => commentsUnder(target, kind) > count, timings.arriveWaitMs);" \
-  "    const arrived = await waitFor(() => commentsUnder(target, kind) > count || !host.isConnected ||
-      (editor.textContent || '').trim() === '', timings.arriveWaitMs);"
+  src/modules/account.js "    const arrived = await waitFor(() => commentsUnder(target, kind).find(n => {" \
+  "    const arrived = await waitFor(() => !(editor.textContent || '').trim() || commentsUnder(target, kind).find(n => {"
 
 # Adjacent <p> nodes concatenate in textContent with NO separator — "reply.Second" — so a
 # comparison that merely collapses whitespace still cannot match a draft with a paragraph
@@ -2537,8 +2573,8 @@ mutate "the name attribute is read from anywhere on the page" run \
 # discriminator; 0.48.0's gate passed on a closed box and the insert went into an editor
 # with no model.
 mutate "a hidden submit counts as an open composer again" run \
-  src/modules/account.js "      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs);" \
-                         "      () => SHD.dom.deepQuery(host, C.COMPOSER.submit), timings.composeWaitMs);"
+  src/modules/account.js "      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs, live);" \
+                         "      () => SHD.dom.deepQuery(host, C.COMPOSER.submit), timings.composeWaitMs, live);"
 
 # Focus on the trigger's inner textarea opens the live box where clicks do not.
 mutate "a collapsed composer is never opened" run \
@@ -2548,13 +2584,8 @@ mutate "a collapsed composer is never opened" run \
 # A newline inside one insertText run is not a paragraph to a rich editor; measured live, a
 # two-paragraph draft posted as one.
 mutate "paragraphs are typed as one run" run \
-  src/modules/account.js "          text.split(/\n\s*\n/).forEach((para, i) => {
-            if (i && typeof InputEvent === 'function') {
-              editor.dispatchEvent(new InputEvent('beforeinput',
-                { inputType: 'insertParagraph', bubbles: true, cancelable: true }));
-            }
-            if (para && document.execCommand('insertText', false, para) !== true) done = false;
-          });" "          if (document.execCommand('insertText', false, text) !== true) done = false;"
+  src/modules/account.js '          const paragraphs = text.split(/\n\s*\n/);' \
+                         '          const paragraphs = [text];'
 
 # The handoff's own "already there" guard has NO row, deliberately: with the comparison
 # above fixed, compose() no longer misjudges a landed insert, so the guard is unreachable
@@ -2724,8 +2755,8 @@ mutate "the suppressed tree eats clicks meant for us" extension \
 # to be scrolled INSIDE it, on the click that needs it, because the reader only ever
 # scrolls our rows.
 mutate "a vote never brings the native row into the box" extension \
-  src/modules/account.js "  function resolveLate(source, find) {
-    nudge(source);" "  function resolveLate(source, find) {"
+  src/modules/account.js "  function resolveLate(source, find, alive) {
+    nudge(source);" "  function resolveLate(source, find, alive) {"
 
 # ...and having given Reddit the chance, the click has to wait for it rather than
 # reporting a miss on the first look.
@@ -2748,8 +2779,77 @@ mutate "the unavailable mark is never taken off" run \
 # `Reply` shares that same action row, so it misses for the same reason and takes the same
 # answer. Without the wait the reader is sent to Reddit's own page — the 0.45.0 report.
 mutate "reply no longer waits for its own action row" run \
-  src/modules/account.js "      const btn = replyControl(target) || await resolveLate(target, () => replyControl(target));" \
+  src/modules/account.js "      const btn = replyControl(target) || await resolveLate(target, () => replyControl(target), live);" \
                          "      const btn = replyControl(target);"
+
+# ------------------------------------------------ adversarial lifecycle regressions ---
+mutate "review: cancelled reply forms remain live" run \
+  src/modules/account.js '    const live = () => !withdrawn && epoch === generation && form.isConnected && active();' \
+                         '    const live = () => true;'
+
+mutate "review: arrival ignores draft content" run \
+  src/modules/account.js '        body && norm(body.textContent) === norm(text);' '        !!body;'
+
+mutate "review: old matching comments confirm a new reply" run \
+  src/modules/account.js '        Date.parse(n.getAttribute(C.COMMENT_ATTR.created)) >= sentAt - 2000 &&' ''
+
+mutate "review: preexisting IDs confirm a new reply" run \
+  src/modules/account.js '      return id && !seen.has(id) &&' '      return id &&'
+
+mutate "review: structural rebuilds forget reply drafts" run \
+  src/modules/account.js '    for (const [form, remember] of forms) if (form.isConnected) remember();' ''
+
+mutate "review: leaving a handoff does not stop pending writes" run \
+  src/modules/account.js '    alive = () => callerAlive() && bar.isConnected;' '    alive = callerAlive;'
+
+mutate "review: replacement posts append duplicate rows" run \
+  src/modules/listing.js '    if (rebind(m)) return true;' ''
+
+mutate "review: replacement rows keep detached source references" run \
+  src/modules/listing.js '    Object.assign(previous, m);' ''
+
+mutate "review: profile replacement loses late timestamp hydration" run \
+  src/modules/listing.js '      armLateTime(row(m.id), m);' ''
+
+mutate "review: rejected sources never retry late attributes" run \
+  src/core/pipeline.js "        if (r.type === 'attributes') { retry(r.target); continue; }" \
+                       "        if (r.type === 'attributes') continue;"
+
+mutate "review: aborted navigation never restores the committed route" run \
+  src/core/route.js '        emit(location.pathname, location.search, true);' ''
+
+mutate "review: a stale abort overrides a newer navigation" run \
+  src/core/route.js '        if (pending !== attempt) return;' ''
+
+mutate "review: settings writes race across contexts" run \
+  src/core/settings.js '    const next = tail.then(run, run);' '    const next = run();'
+
+mutate "review: storage rejection poisons later preference writes" run \
+  src/core/settings.js '    const next = tail.then(run, run);' '    const next = tail.then(run);'
+
+mutate "review: storage failures look like saved preferences" run \
+  src/core/settings.js "      if (!result?.ok) throw new Error(result?.error || 'Could not save Sheddit preference');" ''
+
+mutate "review: a loop record overrides the disabled redirect preference" run \
+  src/core/oldreddit.js '    if (!await enabled()) { standDown(); return; }
+
+    if (looped(target)) { whenBody(() => mount(target, true)); return; }' \
+                      '    if (looped(target)) { whenBody(() => mount(target, true)); return; }
+
+    if (!await enabled()) { standDown(); return; }'
+
+mutate "native editing hides the adopted comment through its root class" geometry \
+  src/core/dom.js "    copy.classList?.remove('hidden');" ""
+
+mutate "native editing hides the adopted comment through its root attribute" geometry \
+  src/core/dom.js "    copy.removeAttribute?.('hidden');" ""
+
+mutate "body adoption reveals deliberately hidden descendants" run \
+  src/core/dom.js "    copy.removeAttribute?.('hidden');" \
+                  "    copy.removeAttribute?.('hidden');
+    copy.querySelectorAll('[hidden], .hidden').forEach(n => {
+      n.removeAttribute('hidden'); n.classList.remove('hidden');
+    });"
 
 # The accounting. DECLARED is read from this file itself rather than maintained by hand —
 # a count that has to be kept in step with the rows is the same trap as the hand-maintained

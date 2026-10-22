@@ -507,6 +507,104 @@ const overlaps = (a, b) =>
    * ================================================================== */
   console.log('\n\x1b[1mLAYOUT GEOMETRY — COMMENTS\x1b[0m');
   {
+    const { page } = await open(browser, origin, PATHS.comments, '#shd-root .thing.comment');
+    const result = await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.textContent = '.hidden { display: none; }';
+      document.head.appendChild(style);
+      const source = document.querySelector('shreddit-comment');
+      const body = SHD.model.comment(source).bodyNode;
+      const rendered = document.querySelector('#shd-root .thing.comment > .entry > .usertext > .usertext-body');
+      const spoiler = document.createElement('span');
+      spoiler.hidden = true;
+      spoiler.textContent = 'A deliberately hidden spoiler.';
+      body.appendChild(spoiler);
+      return ['class', 'attribute'].map(kind => {
+        body.classList.toggle('hidden', kind === 'class');
+        body.hidden = kind === 'attribute';
+        const copy = SHD.dom.adoptBody(body);
+        rendered.replaceChildren(copy);
+        return {
+          kind, visible: copy.getBoundingClientRect().height > 0,
+          nativeClass: body.classList.contains('hidden'), nativeHidden: body.hidden,
+          spoilerHidden: getComputedStyle(copy.querySelector('span[hidden]')).display === 'none'
+        };
+      });
+    });
+    check('a native edit hidden class cannot hide the adopted comment body',
+      result[0].visible, JSON.stringify(result[0]));
+    check('a native edit hidden attribute cannot hide the adopted comment body',
+      result[1].visible, JSON.stringify(result[1]));
+    check('adoption does not unhide Reddit\'s original editing surface',
+      result[0].nativeClass && result[1].nativeHidden);
+    check('adoption does not reveal deliberately hidden descendants',
+      result.every(r => r.spoilerHidden));
+    await page.close();
+  }
+  {
+    const { page, pageErrors } = await open(browser, origin, PATHS.comments, '#shd-root .thing.comment');
+    const result = await page.evaluate(async () => {
+      const target = document.querySelector('shreddit-comment');
+      const app = target.closest('shreddit-app');
+      app.setAttribute('user-logged-in', 'true');
+      document.querySelectorAll(SHD.C.SESSION.loggedOut).forEach(n => n.remove());
+      SHD.session.reset();
+      const host = document.createElement('comment-composer-host');
+      const editor = document.createElement('div');
+      editor.contentEditable = 'true';
+      editor.setAttribute('data-lexical-editor', 'true');
+      editor.innerHTML = '<p>An older draft with <a href="https://example.com/">a stale link</a>.</p>';
+      const submit = document.createElement('button');
+      submit.type = 'submit';
+      host.append(editor, submit);
+      target.append(host);
+      const own = document.createElement('textarea');
+      own.value = 'The untouched Sheddit draft.';
+      document.querySelector('#shd-root').append(own);
+      own.focus();
+      editor.focus();
+      const hiddenFocusRefused = document.activeElement !== editor;
+      let model = '';
+      let inputs = 0;
+      const sent = [];
+      editor.addEventListener('input', () => { model = editor.innerText; inputs++; });
+      editor.addEventListener('beforeinput', (e) => {
+        if (e.inputType !== 'insertParagraph') return;
+        e.preventDefault();
+        document.execCommand('insertParagraph');
+      });
+      submit.addEventListener('click', (e) => { e.preventDefault(); sent.push(model); });
+      Object.assign(SHD.account.timings, { pollMs: 10, arriveWaitMs: 30 });
+      await SHD.account.compose(target, 'First paragraph.\n\nSecond paragraph.', 'comment');
+      await SHD.account.compose(target, 'The revised reply.', 'comment');
+      await SHD.account.compose(target, 'The revised reply.', 'comment');
+      return {
+        hiddenFocusRefused, sent, inputs, staleLink: !!editor.querySelector('a'),
+        visibility: getComputedStyle(editor).visibility,
+        opacity: getComputedStyle(app).opacity,
+        pointerEvents: getComputedStyle(app).pointerEvents,
+        focusRestored: document.activeElement === own,
+        ownDraft: own.value,
+        editing: editor.classList.contains('shd-native-editing')
+      };
+    });
+    check('a suppressed native editor really refuses focus before the insertion scope',
+      result.hiddenFocusRefused, JSON.stringify(result));
+    check('native editing replaces stale rich text and preserves both paragraphs in its input model',
+      result.sent[0]?.replace(/\n+/g, '\n') === 'First paragraph.\nSecond paragraph.' &&
+      !result.staleLink && result.inputs > 0, JSON.stringify(result));
+    check('changed and identical retries submit only the current draft, once per attempt',
+      result.sent.length === 3 && result.sent[1] === 'The revised reply.' &&
+      result.sent[2] === 'The revised reply.', JSON.stringify(result));
+    check('temporary focusability never removes native transparency or click suppression',
+      result.opacity === '0' && result.pointerEvents === 'none' &&
+      result.visibility === 'hidden' && !result.editing, JSON.stringify(result));
+    check('native insertion restores focus without changing the Sheddit draft',
+      result.focusRestored && result.ownDraft === 'The untouched Sheddit draft.', JSON.stringify(result));
+    check('no page errors during native composer insertion', pageErrors.length === 0, pageErrors.join(' | '));
+    await page.close();
+  }
+  {
     const { page, pageErrors } = await open(browser, origin, PATHS.comments, '#shd-root .thing.comment');
     await page.setViewport({ width: 1280, height: 900 });
 

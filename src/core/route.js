@@ -142,6 +142,19 @@ SHD.route = (() => {
     return m ? m[1] : null;
   }
 
+  function postIdOf(path = emitPath()) {
+    const m = path.match(/^\/r\/[^/]+\/comments\/([^/]+)/);
+    return m ? `t3_${m[1].toLowerCase()}` : null;
+  }
+
+  function contentKey() {
+    const path = emitPath();
+    const focus = /^\/r\/[^/]+\/comments\/[^/]+\/[^/]+\/([^/]+)/.exec(path)?.[1] || '';
+    const page = classify(path) === COMMENTS ? `${postIdOf(path)}:${focus.toLowerCase()}`
+      : path.toLowerCase().replace(/\/+$/, '');
+    return `${classify(path)}:${page}?${emit.lastSort || ''}`;
+  }
+
   /* A SORT ONLY COUNTS WHERE REDDIT PUTS ONE, and the anchors are the point. Matching a
      sort name anywhere at the end of the path reads `/r/top/` — a real subreddit, as are
      /r/new, /r/best, /r/rising and /r/controversial — as the SORT `top` on no subreddit,
@@ -176,12 +189,15 @@ SHD.route = (() => {
    * Reddit would swap the feed, and the pipeline would append the new window's posts
    * under the old window's rows — bug 87 again, on the other page type.
    *
-   * ONLY these two take part, deliberately: keying on the whole query string would tear
+   * `context` changes the surrounding replies on a focused comment view and also belongs
+   * to the content identity. Recovering a prior context would show the wrong comment tree.
+   *
+   * ONLY content parameters take part, deliberately: keying on the whole query string would tear
    * the page down — scroll position, loaded pages and all — for any tracking or view
    * parameter Reddit rewrites in place, which it does. Each is harmless on the page type
    * that ignores it: a listing sorts by path segment, and a comments page has no window.
    */
-  const CONTENT_PARAMS = ['sort', 't'];
+  const CONTENT_PARAMS = ['sort', 't', 'context'];
   const sortParamOf = (search) => CONTENT_PARAMS
     .map((k) => {
       const m = new RegExp(`[?&]${k}=([^&#]*)`).exec(search || '');
@@ -209,14 +225,14 @@ SHD.route = (() => {
    * `search` rides along for the sort key above, under the same pre-commit rule: the
    * navigate handler passes the DESTINATION's search, never a read of location.
    */
-  function emit(path = location.pathname, search = location.search) {
+  function emit(path = location.pathname, search = location.search, restore = false) {
     const next = classify(path);
     const sort = sortParamOf(search);
-    if (next === current && emit.lastPath === path && emit.lastSort === sort) return;
+    if (!restore && next === current && emit.lastPath === path && emit.lastSort === sort) return;
     current = next;
     emit.lastPath = path;
     emit.lastSort = sort;
-    listeners.forEach(fn => { try { fn(current, path); } catch (e) { SHD.gate.reportError(e); } });
+    listeners.forEach(fn => { try { fn(current, path, restore); } catch (e) { SHD.gate.reportError(e); } });
   }
 
   function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
@@ -241,7 +257,16 @@ SHD.route = (() => {
     addEventListener(SHD.C.BRIDGE.navigated, () => emit(location.pathname));
     addEventListener('popstate', () => emit(location.pathname));
     if (typeof navigation !== 'undefined' && navigation.addEventListener) {
+      let pending = null;
+      const rollback = (attempt) => queueMicrotask(() => {
+        if (pending !== attempt) return;
+        pending = null;
+        emit(location.pathname, location.search, true);
+      });
       navigation.addEventListener('navigate', (e) => {
+        const attempt = { signal: e.signal };
+        pending = attempt;
+        e.signal?.addEventListener('abort', () => rollback(attempt), { once: true });
         // Deliberately NOT filtered on e.destination.sameDocument. Measured on live
         // Reddit: a sort-tab click reports sameDocument === false and then survives as a
         // same-document navigation anyway, because Reddit's router calls intercept() —
@@ -265,16 +290,23 @@ SHD.route = (() => {
       // Post-commit safety net: redirects, destinations we could not parse, and anything
       // that reached the URL without a navigate event we understood. emit() is idempotent
       // per path, so this is free when the pre-commit emit already did the work.
-      navigation.addEventListener('navigatesuccess', () => emit(location.pathname));
+      navigation.addEventListener('navigateerror', () => {
+        if (pending && (!pending.signal || pending.signal.aborted)) rollback(pending);
+      });
+      navigation.addEventListener('navigatesuccess', () => {
+        pending = null;
+        emit(location.pathname);
+      });
     }
     emit(location.pathname);
   }
 
   return { LISTING, COMMENTS, PROFILE, OTHER, SORTS, PROFILE_TABS, TIMES, TIMED_SORTS,
            RENDER_HOSTS, rendersHost,
-           classify, subredditOf, sortOf, usernameOf, profileTabOf, onChange, start,
+           classify, subredditOf, postIdOf, sortOf, usernameOf, profileTabOf, onChange, start,
            get current() { return current; },
            get path() { return emitPath(); },
+           get contentKey() { return contentKey(); },
            /* The `?sort=` value this module last emitted for — the emitPath() rule
               applied to the query: anything decorating the render (the comments page's
               sort strip) must agree with the navigation that produced it, not with a

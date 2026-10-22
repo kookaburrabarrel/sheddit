@@ -94,11 +94,10 @@ SHD.theme = (() => {
     const t = apply(id);
     if (SHD.settings) SHD.settings.theme = t;
     try {
-      const { settings } = await chrome.storage.sync.get('settings');
-      await chrome.storage.sync.set({
-        settings: { ...(SHD.settings || {}), ...(settings || {}), theme: t }
-      });
-    } catch { /* no chrome.storage (dev harness) — the paint above still stands */ }
+      await SHD.preferences.set('theme', t);
+    } catch (error) {
+      console.warn('[sheddit] could not save theme', error);
+    }
     return t;
   }
 

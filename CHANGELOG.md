@@ -20,6 +20,151 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.60.0
+
+### Fixed — a slow navigation cannot turn the previous thread into the new one
+
+- Recovery after a URL rewrite now checks which page consumed each native source.
+  Previously it assumed any source still connected after 1.5 seconds belonged to the
+  destination. A slow Reddit navigation could therefore rebuild the outgoing thread
+  under the new URL and prevent the correct submission from replacing it.
+- Thread rendering checks the destination post ID for both submissions and comments,
+  including late insertions. Outgoing native content stays in a loading transition;
+  an exhausted wait reports the mismatch instead of showing it as the requested thread.
+- Same-post URL rewrites, comment sorting and cached history remain supported.
+  Focused comment links and `context` changes have distinct content identities, so
+  recovery cannot silently replace them with the previous view of the same thread.
+
+## 0.53.6
+
+### Fixed — your comment stays visible after leaving the native editor
+
+- Signed-in live testing found that opening your comment's editor and returning without
+  saving could make its displayed body disappear. Reddit temporarily adds `hidden` to the
+  native body during editing, and Sheddit's refresh copied that state into its own row.
+- Body adoption now removes the `hidden` class and attribute from the cloned root only.
+  Reddit's original body is untouched, and deliberately hidden descendants remain hidden.
+- Regression coverage exercises the edit-return lifecycle and measures actual rendered
+  height under both hiding mechanisms in Chrome. Both cases fail before the fix.
+
+### Known limitations — signed-in controls remain experimental
+
+- Live testing did not establish reliable automatic reply submission, even after opening
+  Reddit's composer. The fallback carried the draft and native submission worked; check
+  the thread before retrying when Sheddit warns that the reply may already have posted.
+- Automatic edit opening can miss a freshly hydrated native menu. The handoff explains
+  how to use the comment's native menu instead. Saving through the native editor and
+  returning to the updated, visible comment was verified.
+
+## 0.53.5
+
+### Fixed — reply safety and draft preservation
+
+- Cancelling a reply, changing routes or rebuilding account controls invalidates pending
+  editor work before native submit. Leaving a native handoff also stops delayed writes.
+- Reply success requires a previously unseen, recent comment by the signed-in author,
+  under the correct direct parent/post, with matching rendered body text. Missing identity
+  or ambiguous rich-text formatting keeps the draft and asks the reader to check Reddit.
+- Cancel is disabled after native submit. Rebuilt forms preserve the draft and warn that
+  it may already have posted, rather than silently inviting a duplicate.
+- Structural preference changes restore top-level and nested drafts in memory; theme,
+  update-check and redirect preferences do not rebuild the page. Explicit cancellation
+  discards the draft. Drafts are not persisted to storage and do not survive a page reload.
+
+### Fixed — source, navigation and preference lifecycle
+
+- Replacing a native post/comment rebinds its existing row instead of duplicating it,
+  preserving the open reply and child thread. Late source hydration can retry rejected
+  required attributes, and replacement sources rearm gallery/profile timestamp observers.
+- Aborted navigation restores the committed path, sort, header and content; stale aborts
+  cannot override a newer pending navigation.
+- Options, header and theme writes are serialized by one background writer, preventing
+  concurrent whole-object storage updates from losing changes. Invalid writes and storage
+  errors are reported explicitly, and a failure does not poison subsequent writes.
+- A disabled Old Reddit redirect takes precedence over its recent-loop record.
+
+### Changed — regression coverage
+
+- Added adversarial regressions and mutation rows for these failures. Chrome's installed
+  extension suite now uses local HTTPS fixtures with an ephemeral pinned certificate,
+  avoiding Reddit's HSTS upgrade, and awaits extension installation before navigation.
+
+## 0.53.4
+
+### Fixed — title-prefixed gallery previews counted twice
+
+- **One photo is one slide, including Reddit's newer preview URLs.** A live six-photo
+  gallery still became twelve slides after 0.53.2: Reddit's preview filename included
+  the post title before the upload ID, while its lightbox original used only the ID.
+  Sheddit now recognizes that prefix on Reddit's preview host, so those copies count
+  as the same photo without merging different uploads or rewriting other image hosts.
+- **Late loading keeps the same deck and position.** Regression coverage includes the
+  live preview/lightbox pairing, lazy images and replacement carousel elements.
+
+## 0.53.3
+
+### Fixed — reply insertion and accumulated drafts
+
+- **Reddit's hidden editor can accept the reply.** Native suppression prevented focus,
+  sending insertion through a DOM-write fallback that Reddit's rich-text editor could
+  ignore. The editor is temporarily focusable while the native page stays transparent
+  and non-interactive, and focus is checked before each editing command.
+- **Changed drafts replace older text instead of appending to it.** Insertion selects
+  the existing native contents first. Verification and handoff require the complete
+  draft to match, rather than accepting it as a substring of accumulated versions.
+- **A failed Lexical edit cannot authorize submission through a direct DOM write.**
+  The original draft stays in Sheddit's form. These fixes do not establish why earlier
+  manual native-button clicks sent no request; signed-in browsing remains experimental.
+
+## 0.53.2
+
+### Fixed — gallery slideshows listed every photo more than once
+
+- **Each photo is one slide again.** Reddit loads a gallery's later photos after the page
+  opens, and when it did, the photo arrived under a bigger URL than the one Sheddit had
+  first read for it. Sheddit recognised the slides it already had by URL, so every photo
+  that loaded late was added to the slideshow a second time and the count ran past the
+  post's real number of photos. Slides are now tracked by the photo they came from: a
+  photo that loads late updates its own slide — to the full-size copy — instead of adding
+  a new one, and two sizes of the same upload count as one photo.
+
+## 0.53.1
+
+### Fixed — editing your own comments
+
+- **A save that finishes after you press back now shows up.** Returning from Reddit's
+  editor copied your comment once, at the moment you left; on a slow connection Reddit's
+  save lands a moment later, and the comment kept its old text until a reload. Sheddit
+  keeps watching the comment for a few seconds after you return.
+- **Leaving an edit really does cancel it.** If you pressed back before Reddit's menu had
+  loaded and then edited one of your replies under the same comment, the first attempt
+  woke up and opened a second editor beside the reply's. It stays cancelled now.
+- **edit works again straight after you back out.** It ignored clicks for 3–4 seconds
+  after you left a pending attempt.
+- **A leftover editor no longer blocks editing a comment.** If Reddit left an editor
+  behind after a cancel or a save, every later attempt on that comment failed until a
+  reload; Sheddit opens the comment's menu instead.
+- **Failure messages no longer stick to the link.** A failed attempt used to replace the
+  word *edit* for good; the link resets on the next click, and a comment that has gone
+  from the page says so there.
+- **Long threads render quickly again when Sheddit can't read your username.** Checking
+  each comment's author re-searched the page header for your name every time; on a
+  624-comment thread that made rendering about seven times slower.
+
+### Changed
+
+- The options page, ARCHITECTURE, CONTRIBUTING and PRIVACY now list editing your own
+  comments among what the account layer does.
+- `npm run verify:live` checks the edit flow's Reddit selectors: the comment menu when
+  signed in, and the *Edit comment* item on a thread you have commented on.
+
+### Fixed — for contributors: `verify:live` was not testing two of its text contracts
+
+The live check passed Reddit's text patterns into the browser page, where they arrived
+empty. Its removed-post check therefore matched every post, and its reply-button check
+crashed the run whenever its first selector missed. The patterns now arrive intact, and a
+test keeps it that way.
+
 ## 0.53.0
 
 ### Added — edit your own comments

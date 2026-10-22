@@ -15,6 +15,10 @@
  */
 const fs = require('fs');
 const http = require('http');
+const https = require('https');
+const os = require('os');
+const { execFileSync } = require('child_process');
+const { createHash, X509Certificate } = require('crypto');
 const path = require('path');
 const { listingPage, commentsPage, EMPTY_FEED_PANEL } = require('./fixtures');
 
@@ -128,6 +132,31 @@ const LAUNCH_ARGS = [
   '--no-proxy-server'
 ];
 
+/**
+ * The contracts as a page can receive them.
+ *
+ * page.evaluate() and waitForFunction() serialise their arguments like JSON, and a RegExp
+ * crosses as `{}` — no `.test`, no `.source`. verify:live passed C straight in, so the
+ * removed-post probe rebuilt `new RegExp(undefined)`, which matches EVERY post (a negative
+ * control that could only report positives), and the reply probe's text fallback threw
+ * "replyText.test is not a function" and took the run down with it whenever the attribute
+ * clause missed. This copy carries each RegExp as a plain `{ source, flags }`: rebuild it
+ * in the page with `new RegExp(x.source, x.flags)`. Calling `.test` on it fails loudly,
+ * which is the point — it can no longer fail as a silent match-all.
+ */
+function pageContracts(value) {
+  if (Object.prototype.toString.call(value) === '[object RegExp]') {
+    return { source: value.source, flags: value.flags };
+  }
+  if (Array.isArray(value)) return value.map(pageContracts);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const k of Object.keys(value)) out[k] = pageContracts(value[k]);
+    return out;
+  }
+  return value;
+}
+
 /** Pass/fail reporter with the same output shape as the other suites. */
 function makeChecker() {
   const state = { passed: 0, failed: 0, failures: [] };
@@ -161,8 +190,22 @@ function makeChecker() {
  *
  * @returns {Promise<{port:number, close:()=>Promise<void>}>}
  */
-function serveFixtures() {
-  const server = http.createServer((req, res) => {
+function serveFixtures({ secure = false } = {}) {
+  let credentials;
+  if (secure) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sheddit-tls-'));
+    const key = path.join(dir, 'key.pem'), cert = path.join(dir, 'cert.pem');
+    try {
+      execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+        '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=www.reddit.com'],
+      { stdio: 'ignore' });
+      credentials = { key: fs.readFileSync(key), cert: fs.readFileSync(cert) };
+    } finally {
+      for (const file of [key, cert]) if (fs.existsSync(file)) fs.unlinkSync(file);
+      fs.rmdirSync(dir);
+    }
+  }
+  const handler = (req, res) => {
     const pathname = req.url.split('?')[0];
 
     /* old.reddit.com, exactly as it answers today (measured 2026-09-03): every path 302s
@@ -176,7 +219,7 @@ function serveFixtures() {
     const host = String(req.headers.host || '');
     if (host.startsWith('old.reddit.com')) {
       if (!/^\/login\/?$/.test(pathname)) {
-        const dest = encodeURIComponent(`http://${host}${req.url}`);
+        const dest = encodeURIComponent(`${req.socket.encrypted ? 'https' : 'http'}://${host}${req.url}`);
         res.writeHead(302, { Location: `/login/?reason=lor2&dest=${dest}` });
         res.end();
         return;
@@ -204,7 +247,7 @@ function serveFixtures() {
     const wantsNsfwVideo = /\/dead1\//.test(pathname);
     // ...and an ADULT image submission, for the same reason: the blur and its button are a
     // box over a box, which is layout.
-    const wantsNsfwImage = /\/image1nsfw\//.test(pathname);
+    const wantsNsfwImage = /\/r\/nsfwimage\//.test(pathname);
     /* A GALLERY, for the browser suites only: a strip of pictures that scrolls inside its
        own box is a layout question by definition — whether it scrolls THERE or pushes the
        whole document sideways is the entire difference, and jsdom does no layout. */
@@ -234,6 +277,58 @@ function serveFixtures() {
     // blur gate keys on.
     if (wantsNsfwVideo) body = body.replace('post-type="video"', 'post-type="video" nsfw=""');
     if (wantsNsfwImage) body = body.replace('post-type="image"', 'post-type="image" nsfw=""');
+    if (/^\/r\/threadspa\//.test(pathname)) {
+      body = body.replace('<p>Comment body number 0 at depth 0.</p>',
+        '<p><a href="/r/threadspa/comments/nextthread/next/">next thread</a></p>');
+      body = body.replace('</body>', `<script>
+        window.__threadSpa = { swaps: 0, snapshots: [], mismatches: [] };
+        const template = document.querySelector('main').cloneNode(true);
+        const cache = new Map();
+        const ids = () => [...document.querySelectorAll('#shd-root .thing.link')]
+          .map(row => row.dataset.fullname);
+        new MutationObserver(() => {
+          const expected = location.pathname.match(/\\/comments\\/([^/]+)/)?.[1];
+          const wrong = ids().filter(id => id !== 't3_' + expected);
+          if (wrong.length) window.__threadSpa.mismatches.push({ path: location.pathname, wrong });
+        }).observe(document.body, { childList: true, subtree: true });
+        navigation.addEventListener('navigate', e => {
+          const dest = new URL(e.destination.url);
+          const id = dest.pathname.match(/^\\/r\\/threadspa\\/comments\\/([^/]+)\\//)?.[1];
+          if (!e.canIntercept || dest.origin !== location.origin || !id) return;
+          const current = document.querySelector('main');
+          cache.set(location.pathname, current);
+          e.intercept({ handler: async () => {
+            await new Promise(resolve => setTimeout(resolve, 1800));
+            window.__threadSpa.snapshots.push({
+              path: location.pathname, active: ids(),
+              parked: !!document.querySelector('#shd-outgoing[inert]'),
+              loading: !!document.querySelector('#shd-loading'),
+              error: !!document.querySelector('#shd-error')
+            });
+            await new Promise(resolve => setTimeout(resolve, 800));
+            let incoming = cache.get(dest.pathname);
+            if (!incoming) {
+              incoming = template.cloneNode(true);
+              const post = incoming.querySelector('shreddit-post');
+              post.id = 't3_' + id;
+              post.setAttribute('permalink', dest.pathname);
+              post.setAttribute('post-title', id + ' submission');
+              incoming.querySelector('shreddit-comment-tree').setAttribute('post-id', post.id);
+              incoming.querySelectorAll('shreddit-comment').forEach((comment, i) => {
+                comment.setAttribute('thingid', 't1_' + id + '_c' + i);
+                comment.setAttribute('postid', post.id);
+                comment.setAttribute('permalink', dest.pathname + 'comment/' + id + '_c' + i + '/');
+              });
+              const next = id === 'nextthread' ? 'thirdthread' : 'nextthread';
+              incoming.querySelector('a[href="/r/threadspa/comments/nextthread/next/"]')
+                .setAttribute('href', '/r/threadspa/comments/' + next + '/next/');
+            }
+            current.replaceWith(incoming);
+            window.__threadSpa.swaps++;
+          }});
+        });
+      </script></body>`);
+    }
     /* The vote control a signed-in reader actually misses, delivered the way Reddit
        delivers it. A comment's vote buttons are not in the page's HTML: Reddit mounts the
        <shreddit-comment-action-row> that holds them when the comment comes near a
@@ -597,10 +692,13 @@ function serveFixtures() {
     }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(body);
-  });
+  };
+  const server = secure ? https.createServer(credentials, handler) : http.createServer(handler);
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => resolve({
       port: server.address().port,
+      spki: secure ? createHash('sha256').update(new X509Certificate(credentials.cert)
+        .publicKey.export({ type: 'spki', format: 'der' })).digest('base64') : null,
       close: () => new Promise(r => server.close(r))
     }));
   });
@@ -614,7 +712,8 @@ const PATHS = {
   imageComments: '/r/aww/comments/image1/a_very_good_dog/',   // an image submission
   galleryComments: '/r/interesting/comments/gallery1/bubble_boy/',  // a multi-frame gallery
   nsfwVideoComments: '/r/funny/comments/dead1/expired/',      // an ADULT video submission
-  nsfwImageComments: '/r/aww/comments/image1nsfw/a_very_good_dog/',  // an ADULT image submission
+  nsfwImageComments: '/r/nsfwimage/comments/image1/a_very_good_dog/',  // an ADULT image submission
+  threadSpa: '/r/threadspa/comments/link1/nasa/',  // native thread swaps slower than the gate tick
   broken: '/r/broken/',         // posts missing a required attribute -> real render failure
   pager: '/r/pager/',           // faceplate-partial with a working loadContent()
   spa: '/r/spa/',               // page-world router intercepts sort navs like live Reddit
@@ -636,5 +735,5 @@ const PATHS = {
   emptyTop: '/r/empty/top/'     // ...under a sort that carries a time range (bug 94)
 };
 
-module.exports = { resolveChrome, requireChrome, noChromeMessage, makeChecker,
+module.exports = { resolveChrome, requireChrome, noChromeMessage, makeChecker, pageContracts,
                    serveFixtures, PATHS, COMMENT_SLICE, SLOW_STREAM_HOLD_MS, LAUNCH_ARGS };

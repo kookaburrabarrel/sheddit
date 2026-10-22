@@ -19,15 +19,16 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.53.0](https://img.shields.io/badge/version-0.53.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.60.0](https://img.shields.io/badge/version-0.60.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.53.0 is out — everyone is welcome to try it
+### Beta 0.60.0 — safer thread navigation
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
+Store versions can lag this repository's build.
 **Chrome is the better-tested of the two**, so start there if you have the choice.
 If Sheddit makes Reddit better for you, tell a friend — or post about it on Reddit itself,
 if you still have an account ;)
@@ -70,6 +71,12 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 > Your own comments have an **edit** link that opens Reddit's native editor.
 > Save there, then choose **back to sheddit** to return to the updated comment.
 >
+> **Known live limitations in 0.60.0:** automatic reply submission can fail even after
+> Reddit's composer is open. The native fallback can carry your draft, but check the
+> thread for an existing reply before pressing Reddit's own **Comment** button.
+> Automatic edit opening can also miss a freshly loaded menu; use that comment's
+> native menu > **Edit comment** when the handoff instructs you to.
+>
 > **It is off with one checkbox** on the options page, and turning it off changes nothing
 > else. Logged out, none of it runs at all.
 
@@ -77,185 +84,13 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 ## What's new
 
-Full detail in the [changelog](CHANGELOG.md). The most recent builds:
+Full detail, and every earlier build, in the [changelog](CHANGELOG.md).
 
-**0.53.0 — edit your own comments**
-- **Added:** an **edit** link on your own comments in a thread when the signed-in
-  account layer is enabled. It opens Reddit's native editor with your existing text.
-- **Changed:** save in Reddit's editor, then choose **back to sheddit** to refresh the
-  displayed comment. If the editor cannot open automatically, the handoff explains
-  how to reach it through Reddit's comment menu.
-
-**0.52.0 — loading more, on any listing with ads**
-- **Fixed:** the hidden cards Sheddit could fetch instead of more posts turn out to sit
-  inside ads, which it never counted as posts — measured on a live listing, logged out.
-  An ad counts now, so nothing inside one is fetched as the next page.
-- **Fixed:** a rule added in 0.51.0 would have stopped paging outright if Reddit ever put
-  anything after its "load more" element in the feed. It only looks at posts now.
-- **Fixed:** a bare `loading…` line could sit at the bottom of Reddit's own page on a slow
-  first load.
-- **Changed:** the options page, [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md)
-  still said a few things the code does not do; corrected. See the
-  [changelog](CHANGELOG.md).
-
-**0.51.2 — the same build, with a test that no longer cries wolf**
-- **Fixed (tests only):** a check on loading more comments failed now and then on a busy
-  machine. It read the thread before the next batch had arrived; the extension was right
-  every time. Nothing you use changed.
-
-**0.51.1 — what Sheddit says about itself, corrected**
-- **Fixed:** the options page said video was the only thing that makes a request, a few
-  lines below the switch for the version check that also makes one. It names both now.
-- **Fixed:** the header's **auto** switch said "no more than once every twenty hours".
-  After a check that failed, the limit is an hour instead, so the next browser start
-  after that asks again; the tooltip says so, and so does
-  [PRIVACY.md](PRIVACY.md#the-short-version).
-- **Changed:** a full read of the documentation against the code — about 150 statements
-  that had gone stale. No behaviour changed. See the [changelog](CHANGELOG.md).
-
-**0.51.0 — the front page loads more posts again**
-- **Fixed:** infinite scroll on the front page stopped after the first batch. Reddit hands
-  the page a hidden element to fetch the next posts, and Sheddit triggers it because
-  Reddit's own layout is hidden — but Reddit now uses that same kind of element for the
-  community cards that pop up when you hover a subreddit name, and Sheddit was triggering
-  one of those instead. Measured live: stuck at 27 posts, 52 once the right one was
-  triggered. Ruled out two ways now, so renaming one of them does not bring it back.
-- **Known:** `load more` can still stick on your own profile overview — a second cause,
-  still open. See the [changelog](CHANGELOG.md).
-
-**0.50.0 — the signed-in corner, against today's Reddit**
-- **Fixed:** `log out` never found Reddit's control. Reddit's item is a plain focusable box
-  inside a custom element, none of the shapes Sheddit searched for; it is named now.
-- **Fixed:** when log out failed, the fallback showed your avatar on a dark page instead of
-  Reddit's menu — the avatar sits inside the menu button and matched the same search.
-- **Fixed:** your username was never read; the corner said "logged in" everywhere. Reddit
-  stamps the name on the page from the first byte in one place, and Sheddit reads it there
-  — and only there.
-- **Fixed:** the top-level reply box. Reddit's collapsed box now has a hidden post button,
-  which defeated 0.48.0's test for "open"; Sheddit reads visibility instead. And focusing
-  the field inside the box opens it where a click did not, so a reply to a fresh thread
-  goes through from Sheddit's box. Blank lines in a reply now post as paragraphs.
-- **Fixed:** a black band under short pages in the classic theme.
-- **Known:** `load more` on your own profile overview sticks; a post on that overview is
-  not shown. Both need a reading from the page. See the [changelog](CHANGELOG.md).
-
-**0.49.0 — the reply box, corrected**
-- **Fixed:** 0.48.0 said it had removed the way a save could lose your draft. It had
-  removed one and left another: a save could report success, post nothing, and close the
-  form with your text gone. Sheddit had been accepting Reddit's box going empty as proof
-  of a post — which is also what the box looks like when Reddit quietly rejected the text.
-  Only your comment actually appearing counts now; if it hasn't in time, the draft stays.
-- **Fixed:** a reply with a blank line in it was always reported as failing, even when it
-  went in perfectly, and then written into Reddit's box a second time.
-- **Fixed:** Sheddit could type into its own reply box instead of Reddit's, doubling your
-  draft — measured twice. It now only uses the browser's typing command when Reddit's
-  editor verifiably has the cursor.
-- **Why the tests missed it:** the fixture posted its pretend comment under the wrong
-  name, so every reply test had been passing on the same weak signal that failed live.
-- **Known:** finding the Reply button on a comment is unreliable; one of three saves on the
-  same comment could not find it at all. Needs a reading before it gets a fix.
-
-**0.48.0 — the signed-in reply box**
-- **Fixed:** a fault that could have posted an empty comment in your name. Sheddit puts
-  your draft into Reddit's own box and presses Reddit's own button; it checked the text had
-  arrived by reading the box back immediately, before Reddit's editor had accepted or
-  rejected it — so text about to be discarded still read as present, and that reading
-  authorised pressing post. It now waits to see the text stay. Your draft was never at risk.
-- **Fixed:** the wrong step was blamed every time. Reddit ships its comment box collapsed
-  and builds the editor only when you click it; Sheddit could not tell that from an open
-  box, so it reported "could not put the text into Reddit's reply box" about a box that had
-  never opened.
-- **Fixed:** when Sheddit hands you to Reddit's own box it hides its own layout — and the
-  sentence saying where your draft went was written into that layout. It now appears in the
-  bar beside "← back to sheddit" too.
-- **Changed:** it tells you the thing that works. Reddit opens that box only for a real
-  click and an extension's does not count — but yours does, and it stays open: click
-  Reddit's box once, press "← back to sheddit", save again.
-
-**0.47.0 — what a logged-out session on live Reddit found**
-- **Fixed:** clicking an arrow while logged out moved the score and lit the arrow without
-  casting anything, and the wrong number stayed until you reloaded. Sheddit forwards votes
-  to Reddit's own button rather than making requests itself, and treated that button's
-  presence as proof you were signed in — Reddit shows it to everyone now. A vote is only
-  shown as cast where something can answer for it; otherwise the arrow says you are not
-  logged in.
-- **Fixed:** changing pages emptied the screen until the next one arrived — five seconds of
-  nothing on a live click, with the browser too busy to draw a replacement. The page you
-  were reading stays up until the new one is ready.
-- **Fixed:** an image on a comments page drew at full height and pushed the whole comment
-  tree below the fold. Capped against the window now.
-- **Fixed:** `share` was a link to the post's own page, so on a comments page it went where
-  you already were. It opens a box with the link in it, as old reddit did.
-- **Fixed:** a profile Reddit hides said "has nothing on this tab", which reads as Sheddit
-  failing rather than as Reddit's answer.
-- **Fixed:** posts keeping their picture URL in a responsive image set lost their
-  thumbnails, leaving gaps down a listing.
-- **Known:** `load more` can stick on some listings. See the [changelog](CHANGELOG.md).
-
-**0.46.0 — comment voting works**
-- **Fixed:** voting on a comment. 0.45.0 said this could not be done from here; that was
-  wrong. Reddit builds a comment's vote buttons only when the comment has a position on
-  screen, and the stylesheet that hides Reddit's own copy of the page — kept in the
-  document because votes and replies go to Reddit's own controls — was also flattening it
-  to a single pixel. One rule, two effects, and only the hiding was wanted. The copy is
-  hidden the same four ways and keeps its dimensions now, and clicking a comment arrow
-  brings the row it needs into view first. Screen readers still get one copy of the page,
-  not two, and your place in a thread does not move when you vote.
-- **Fixed:** replying to a comment no longer takes you to Reddit's own page to finish.
-  `Reply` sits in the same part of Reddit's page and was missing for the same reason; it is
-  resolved in place now, so an ordinary reply is posted from Sheddit's box. Carrying your
-  draft into Reddit's composer is still the fallback if something else goes wrong.
-
-**0.45.0 — the reply box takes typing, and a dead arrow admits it**
-- **Fixed:** you could not type into Sheddit's reply box, and the keystrokes went to
-  Reddit as keyboard shortcuts instead — `h` hid the post you were replying to, and one
-  key navigated away and took the draft with it. Reddit's shortcut handler did not
-  recognise our box as somewhere text goes, so it treated every key as a command and
-  cancelled the typing. Keys inside Sheddit's own boxes no longer reach it.
-- **Fixed:** voting on a *comment* was a silent no-op — the arrow did not light, the score
-  did not move, and nothing said why. It still does not work, and it cannot be made to
-  from here: Reddit builds a comment's vote buttons only once the comment is on screen in
-  its own layout, and Sheddit's layout is what you are looking at instead. So the arrow
-  now says so rather than pretending. Voting on *posts* is unaffected and works.
-
-**0.44.0 — a second adversarial read, and a security fix**
-- **Fixed:** a crafted `old.reddit.com` link could run script on your Reddit session. The
-  login wall's `dest` was checked for the right host but not the right *scheme*, so a
-  `javascript:` destination passed and was handed to the browser to follow. Present in
-  every build since 0.33.0. If you install from a store your copy updates itself.
-- **Fixed:** a live post whose own title discusses removals — "This post was removed by
-  Reddit, anyone know why?" — was drawn as a removed post, stamp and all.
-- **Fixed:** leaving an empty listing painted "there doesn't seem to be anything here" over
-  the page you were arriving at, and disarmed the failsafe that catches a feed we cannot
-  read.
-- **Fixed:** changing any setting from Sheddit's header broke the next sort click on a
-  thread, leaving it with no submission row and no sort strip.
-- **Fixed:** a comment you posted could be reported as sent when what actually arrived was
-  somebody else's, discarding your draft while Reddit still held the unposted text.
-- **Fixed:** with thumbnails off, an adult picture on a comments page could never be
-  revealed — the button to reveal it was clipped out of existence.
-- **Fixed:** on the night and carbon themes, two buttons drew white text on a light fill at
-  2.4:1 and 2.8:1. They take the page's own background now.
-- ...and a dozen more, including the tab bar naming `/r/all` twice and the front page not
-  at all. Full detail in the [changelog](CHANGELOG.md).
-
-**0.43.0 — a full read of the code, and what it turned up**
-- **Changed:** Sheddit only runs on the Reddit it actually rebuilds. It was loading on
-  every `reddit.com` subdomain, including `business.`, `ads.`, `mod.` and `chat.` — real
-  applications with their own layouts, which it briefly blanked and then left alone.
-- **Fixed:** the startup version check could repeat without limit if your network blocks
-  GitHub. Only a *successful* check reset the clock, so a blocked one never did.
-- **Fixed:** a reply that Sheddit could not confirm had posted was offered for posting a
-  second time, which could double-post a slow reply. It now says it may already have gone
-  through and leaves your text where it is.
-- **Fixed:** an `old.reddit.com` link to a page Sheddit does not draw — your preferences,
-  your inbox, a wiki page, a moderation queue — was being sent to `www.reddit.com`, where
-  those pages differ or do not exist. Those links stay on old.reddit now.
-- **Documented:** on a subreddit marked adult, Sheddit clicks Reddit's own *over 18*
-  button for you. It has done that since 0.3.0 and the privacy policy did not say so; it
-  does now, including what it means if you are signed in. The same release made it much
-  harder to fire on anything that is not the age gate — an "Open in app" prompt offering
-  *Yes* / *Not now* previously matched.
+**0.60.0 — the previous thread stays in the past**
+- **Fixed:** slow navigation cannot promote the outgoing thread into the active page
+  under a new URL. Recovery checks source ownership, and thread rendering checks post IDs.
+- **Fixed:** sorting, focused comment links and context changes keep their own comment
+  trees, while same-post URL rewrites and cached back/forward navigation still work.
 
 ---
 
@@ -356,7 +191,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.53.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.60.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

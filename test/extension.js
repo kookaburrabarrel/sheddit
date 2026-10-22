@@ -44,23 +44,26 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
 }
 
 (async () => {
-  const server = await serveFixtures();
+  const server = await serveFixtures({ secure: true });
   // The port must stay in the URL: MAP with an explicit port is refused
   // (ERR_BLOCKED_BY_CLIENT), while MAP to a bare host and an explicit port works.
-  const origin = `http://www.reddit.com:${server.port}`;
+  const origin = `https://www.reddit.com:${server.port}`;
 
   const browser = await puppeteer.launch({
     executablePath: EXE,
+    pipe: true,
+    enableExtensions: true,
     args: [
+      // Reddit is HSTS-preloaded; trust only the ephemeral local fixture's key.
+      `--ignore-certificate-errors-spki-list=${server.spki}`,
       ...LAUNCH_ARGS,
       // old.reddit.com joins www on the same fixture server; the Host header is what
       // tells them apart there, and this is the only way to put a REAL cross-host
       // navigation under test.
-      '--host-resolver-rules=MAP www.reddit.com 127.0.0.1,MAP old.reddit.com 127.0.0.1',
-      `--disable-extensions-except=${ROOT}`,
-      `--load-extension=${ROOT}`
+      '--host-resolver-rules=MAP www.reddit.com 127.0.0.1,MAP old.reddit.com 127.0.0.1'
     ]
   });
+  const extensionId = await browser.installExtension(ROOT);
 
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 900 });
@@ -1085,6 +1088,49 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     await pageS.close();
   }
 
+  console.log('\n\x1b[1mPACKED EXTENSION — SLOW THREAD NAVIGATION AND CACHED HISTORY\x1b[0m');
+  {
+    const thread = await browser.newPage();
+    await thread.goto(origin + PATHS.threadSpa, { waitUntil: 'domcontentloaded' });
+    await until(thread, () => !!document.querySelector('#shd-root .thing.link'));
+    const expectedPaths = [
+      '/r/threadspa/comments/nextthread/next/',
+      '/r/threadspa/comments/thirdthread/next/',
+      '/r/threadspa/comments/nextthread/next/'
+    ];
+    for (const pathname of expectedPaths) {
+      await thread.click('#shd-root .thing.comment .usertext-body a');
+      const id = 't3_' + pathname.match(/\/comments\/([^/]+)/)[1];
+      check(`slow click renders only ${id}`, await until(thread, () => {
+        const expected = 't3_' + location.pathname.match(/\/comments\/([^/]+)/)?.[1];
+        const rows = [...document.querySelectorAll('#shd-root .thing.link')];
+        return rows.length === 1 && rows[0].dataset.fullname === expected &&
+          !document.querySelector('#shd-loading');
+      }) && new URL(thread.url()).pathname === pathname);
+    }
+    for (const [direction, expected] of [
+      ['back', 'thirdthread'], ['back', 'nextthread'],
+      ['forward', 'thirdthread'], ['forward', 'nextthread']
+    ]) {
+      if (direction === 'back') await thread.goBack();
+      else await thread.goForward();
+      check(`slow history ${direction} restores ${expected}`, await until(thread, () => {
+        const id = 't3_' + location.pathname.match(/\/comments\/([^/]+)/)?.[1];
+        return document.querySelector('#shd-root .thing.link')?.dataset.fullname === id &&
+          !document.querySelector('#shd-loading');
+      }) && new URL(thread.url()).pathname.includes(`/comments/${expected}/`));
+    }
+    const trace = await thread.evaluate(() => window.__threadSpa);
+    check('every delayed swap was tested after the recovery deadline',
+      trace.swaps === 7 && trace.snapshots.length === 7, JSON.stringify(trace));
+    check('the recovery deadline never activates the outgoing thread or reports a false failure',
+      trace.snapshots.every(s => s.active.length === 0 && s.parked && s.loading && !s.error),
+      JSON.stringify(trace.snapshots));
+    check('no wrong-thread active render occurs anywhere in the navigation sequence',
+      trace.mismatches.length === 0, JSON.stringify(trace.mismatches));
+    await thread.close();
+  }
+
   /* ================================================================== *
    * SELF-DISMISSING OVERLAYS — must not swap the layout at all
    * ================================================================== */
@@ -1593,13 +1639,13 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
       }).observe(document, { childList: true, subtree: true });
     });
 
-    const oldOrigin = `http://old.reddit.com:${server.port}`;
+    const oldOrigin = `https://old.reddit.com:${server.port}`;
     await page.goto(oldOrigin + PATHS.subreddit, { waitUntil: 'domcontentloaded' });
 
     const arrived = await until(page, () => location.hostname === 'www.reddit.com');
     check('a link to old.reddit.com ends up on www.reddit.com', arrived === true, page.url());
     check('...at the page the reader actually asked for, not at a login wall',
-      page.url() === `http://www.reddit.com:${server.port}` + PATHS.subreddit, page.url());
+      page.url() === origin + PATHS.subreddit, page.url());
 
     const rendered = await until(page, () => !!document.querySelector('#shd-root .thing.link'));
     check('...where the extension renders it, which is the whole point', rendered === true);
@@ -1617,7 +1663,7 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     check('...on the login page the 302 actually delivered',
       /\/login\//.test(card.url || '') && /dest=/.test(card.url || ''), String(card.url));
     check('...and offered the same destination as a link, for a timer that never fires',
-      card.href === `http://www.reddit.com:${server.port}` + PATHS.subreddit, card.href);
+      card.href === origin + PATHS.subreddit, card.href);
     check('...announced as a live region', card.role === 'status', String(card.role));
     check('the login wall was never visible behind it',
       card.wallDisplay === 'none', String(card.wallDisplay));
@@ -1654,6 +1700,28 @@ async function until(page, fn, { timeout = 15000, step = 100 } = {}) {
     other.nativeVisible && !other.active, JSON.stringify(other));
 
   check('no page errors across the whole run', pageErrors.length === 0, pageErrors.join(' | '));
+
+  console.log('\n\x1b[1mPACKED EXTENSION — CONCURRENT PREFERENCES\x1b[0m');
+  {
+    const options = await browser.newPage();
+    await options.goto(`chrome-extension://${extensionId}/options/options.html`);
+    await page.goto(origin + PATHS.listing, { waitUntil: 'domcontentloaded' });
+    await until(page, () => !!document.querySelector('#shd-header .shd-theme-btn'));
+    await Promise.all([
+      options.evaluate(() => document.querySelector('[data-k="inlineVideo"]').click()),
+      page.evaluate(() => document.querySelector('.shd-theme-btn[data-theme="night"]').click())
+    ]);
+    const deadline = Date.now() + 5000;
+    let settings;
+    do {
+      settings = await options.evaluate(async () => (await chrome.storage.sync.get('settings')).settings);
+      if (settings?.inlineVideo === false && settings.theme === 'night') break;
+      await settle(20);
+    } while (Date.now() < deadline);
+    check('options and content-script writes both survive through the real background writer',
+      settings?.inlineVideo === false && settings.theme === 'night', JSON.stringify(settings));
+    await options.close();
+  }
 
   await browser.close();
   await server.close();

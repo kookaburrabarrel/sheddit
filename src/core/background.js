@@ -38,6 +38,17 @@
  * protocol-literal check bridge.js already carries for the same reason.
  */
 
+if (typeof importScripts === 'function') importScripts('settings.js');
+
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (message?.type !== SHD.preferences.MESSAGE || sender.id !== chrome.runtime.id) return false;
+  SHD.preferences.write(message.key, message.value).then(
+    () => respond({ ok: true }),
+    error => respond({ ok: false, error: error.message })
+  );
+  return true;
+});
+
 /* Keep in step with src/core/update.js — asserted equal by test/run.js. */
 const LATEST_URL =
   'https://raw.githubusercontent.com/kookaburrabarrel/sheddit/main/dist/latest.json';

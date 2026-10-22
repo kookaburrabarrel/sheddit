@@ -34,6 +34,7 @@ SHD.session = (() => {
   const NEGATIVE_TTL_MS = 1000;
   let cached = null;      // { loggedIn, matched, vetoed, at }
   let identity = null;    // { name, avatar } — read once per page, on demand
+  let identityAt = 0;     // when a NAMELESS identity was read; a named one never expires
 
   /** Which clauses of a selector list match the document right now. Diagnostics-grade. */
   function matching(list) {
@@ -174,21 +175,30 @@ SHD.session = (() => {
      drawer that carries the profile link may not exist when the corner is first drawn, so
      only a COMPLETE reading is cached — the menu asks again when it opens, and picks up a
      name that arrived in between. Reported 2026-09-09: a signed-in reader saw "logged in"
-     where their name should be. */
-  function ident() {
-    if (identity && identity.name) return identity;
+     where their name should be.
+
+     "Not yet" is still held for NEGATIVE_TTL_MS, the same window loggedIn() gives a
+     negative. 0.53.0 asks for the name once per rendered comment (account.editLink), and
+     with nothing cached a page whose name cannot be read re-ran the whole header search
+     for every one of them: a 624-comment thread rendered seven times slower. A reader's
+     click asks with `fresh` instead — the account menu is built on open precisely to
+     pick up a name that arrived since, and one header search per click costs nothing. */
+  function ident(fresh = false) {
+    if (identity && (identity.name || (!fresh && Date.now() - identityAt < NEGATIVE_TTL_MS))) return identity;
     identity = readIdentity();
+    identityAt = Date.now();
     return identity;
   }
 
-  /** The reader's own name, or null when the page does not say (see C.SESSION.username). */
-  function username() { return ident().name; }
+  /** The reader's own name, or null when the page does not say (see C.SESSION.username).
+      `{ fresh: true }` re-reads a missing name now instead of trusting a recent miss. */
+  function username({ fresh = false } = {}) { return ident(fresh).name; }
 
   /** The avatar URL Reddit's own header uses, or null. */
   function avatar() { return ident().avatar; }
 
   /** Route change: re-read next time. Cheap, and a stale answer is worse than a re-query. */
-  function reset() { cached = null; identity = null; }
+  function reset() { cached = null; identity = null; identityAt = 0; }
 
   /** The last reading, with the clauses that produced it — for verify:live and bug reports. */
   function report() { return { ...(cached || signals()), ...ident() }; }

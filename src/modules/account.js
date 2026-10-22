@@ -68,12 +68,21 @@ SHD.account = (() => {
              editor reconciles its DOM against its own model a microtask or a frame after
              the write, and text that does not outlive that was never accepted (landed()).
      arriveWaitMs: how long to wait for the posted comment to appear before calling the
-             submit lost and revealing the native composer. */
+             submit lost and revealing the native composer.
+     editRefreshMs: how long after the reader leaves an edit handoff to keep copying the
+             comment's body into our row, for a save that lands after they pressed back. */
   const timings = { syncMs: 1500, settleMs: 400, composeWaitMs: 4000, pollMs: 100, arriveWaitMs: 8000,
                     drawerWaitMs: 4000, logoutWaitMs: 6000, hydrateWaitMs: 3000,
-                    reconcileMs: 120 };
+                    reconcileMs: 120, editRefreshMs: 15000 };
 
   const active = () => SHD.session.active();
+  let generation = 0;
+  const drafts = new Map();
+  const forms = new Map();
+  const draftKey = (m, kind) => JSON.stringify([
+    SHD.session.username(), kind,
+    m.id || m.source.getAttribute(kind === 'post' ? C.POST_ATTR.id : C.COMMENT_ATTR.id)
+  ]);
 
   /* ------------------------------------------------------------------ *
    * Vote
@@ -177,9 +186,9 @@ SHD.account = (() => {
    * A control that was not there when we first looked: give Reddit the one thing it is
    * waiting for, and keep looking until the deadline. Resolves to the control or null.
    */
-  function resolveLate(source, find) {
+  function resolveLate(source, find, alive) {
     nudge(source);
-    return waitFor(find, timings.hydrateWaitMs);
+    return waitFor(find, timings.hydrateWaitMs, alive);
   }
 
   const nativeButtons = (source) => ({
@@ -363,10 +372,12 @@ SHD.account = (() => {
    * Reply — drive Reddit's composer
    * ------------------------------------------------------------------ */
 
-  function waitFor(cond, ms) {
+  /** Poll `cond` until it answers, `ms` runs out, or `alive` (optional) says to give up. */
+  function waitFor(cond, ms, alive) {
     const deadline = Date.now() + ms;
     return new Promise((resolve) => {
       const tick = () => {
+        if (alive && !alive()) return resolve(null);
         let v = null;
         try { v = cond(); } catch { v = null; }
         if (v) return resolve(v);
@@ -443,42 +454,27 @@ SHD.account = (() => {
     return scan(target, 0);
   }
 
-  /**
-   * How many comments exist under the target — the measurement that says "it posted".
-   *
-   * COUNTED NARROWLY, because a wider count is not a measurement of OUR action. A reply is
-   * scoped to its own branch already; a top-level comment has no branch, so the post path
-   * counted the whole document — and on a comments page the paginator is auto-loading
-   * further batches of `shreddit-comment` on a 2s heartbeat, inside the same 8s window.
-   * Any batch landing there read as "your comment arrived", and the form closed on it,
-   * taking the reader's draft with it while Reddit still held unposted text.
-   *
-   * This is the rule log bug 70 already wrote for the `N more replies` control — "page-wide
-   * would credit the paginator's arrivals to our click" — reaching the one path that had
-   * not been narrowed. Where the session knows who the reader is, the count is theirs
-   * alone; where it does not, the old page-wide count stands rather than a guess.
-   */
+  /** Only the reader's direct replies to this target can confirm a submission. */
   function commentsUnder(target, kind) {
-    /* The reader's OWN comments, on both paths now, where the session knows who they are.
-       The comment path counted everything under the target, which let a paginator batch or
-       another reader's reply stand in for ours; the post path was already narrowed for
-       exactly that reason (log bug 70's rule) and the two had drifted. Where the name is not
-       known the wider count stands, as before, rather than a guess. */
     const me = SHD.session.username && SHD.session.username();
-    const mine = (n) => !me || (n.getAttribute(C.COMMENT_ATTR.author) || '') === me;
+    const mine = (n) => !!me &&
+      (n.getAttribute(C.COMMENT_ATTR.author) || '').toLowerCase() === me.toLowerCase();
     const pool = kind === 'comment'
       ? [...target.querySelectorAll(C.COMMENT)]
-      : [...document.querySelectorAll(C.COMMENT)];
-    return pool.filter(mine).length;
+      : [...document.querySelectorAll(`${C.COMMENT_TREE} ${C.COMMENT}`)];
+    return pool.filter(n => mine(n) && (kind === 'comment'
+      ? n.parentElement?.closest(C.COMMENT) === target
+      : !n.parentElement?.closest(C.COMMENT) &&
+        n.getAttribute(C.COMMENT_ATTR.depth) === '0' &&
+        n.getAttribute(C.COMMENT_ATTR.postId) === target.getAttribute(C.POST_ATTR.id)));
   }
 
   /**
    * Put text into Reddit's editor so that Reddit's editor knows about it. A textarea is a
    * value and an input event. A contenteditable is fed through the browser's own editing
    * command first, because that is what produces the beforeinput/input sequence a
-   * rich-text editor listens for; if the command is unavailable or the text did not land,
-   * the node's text is set directly and an input event dispatched — the honest fallback,
-   * and the one whose result is checked before anything is submitted.
+   * rich-text editor listens for. Direct DOM writes are a fallback only for plain
+   * contenteditables: Lexical's DOM is not its submission model.
    */
   /**
    * DID IT LAND, AND DID IT STAY? The second half is not pedantry.
@@ -504,7 +500,7 @@ SHD.account = (() => {
    * WHITESPACE IS NOT PART OF THE COMPARISON, and the reason is structural, not cosmetic.
    * A rich editor renders a paragraph break as a second <p>, not as a newline character —
    * so an editor holding a two-paragraph draft perfectly has a textContent with no "\n" in
-   * it at all, and a substring test against the raw draft can never match. Measured live:
+   * it at all, and a comparison against the raw draft can never match. Measured live:
    * every multi-line draft was reported as not landing, however well it had landed, which
    * sent the chain into the handoff and wrote the text a SECOND time.
    *
@@ -512,11 +508,11 @@ SHD.account = (() => {
    * two adjacent <p> nodes concatenate in textContent with NO separator between them —
    * `<p>reply.</p><p>Second</p>` reads "reply.Second" — so the draft's space at the
    * paragraph break has no counterpart on the editor's side to normalise to. What is left
-   * once whitespace is gone is the characters the reader typed, in the order they typed
-   * them, which is the only thing "the words are there" ever meant.
+   * once whitespace is gone must equal the draft, not merely contain it: changed retries
+   * previously accumulated older versions and still passed this check.
    */
   const norm = (s) => String(s || '').replace(/\s+/g, '');
-  const holds = (editor, text) => norm(editor.textContent).includes(norm(text));
+  const holds = (editor, text) => norm(editor.textContent) === norm(text);
 
   async function landed(editor, text) {
     if (!holds(editor, text)) return false;
@@ -554,8 +550,14 @@ SHD.account = (() => {
   function openComposer(host) {
     const trigger = shown(SHD.dom.deepQuery(host, C.COMPOSER.trigger));
     if (!trigger) return false;
-    try { trigger.shadowRoot?.querySelector('textarea')?.focus(); } catch { /* best effort */ }
-    try { if (typeof host.focus === 'function') host.focus(); } catch { /* best effort */ }
+    const editing = trigger.classList.contains('shd-native-editing');
+    trigger.classList.add('shd-native-editing');
+    try {
+      try { trigger.shadowRoot?.querySelector('textarea')?.focus(); } catch { /* best effort */ }
+      try { if (typeof host.focus === 'function') host.focus(); } catch { /* best effort */ }
+    } finally {
+      if (!editing) trigger.classList.remove('shd-native-editing');
+    }
     return true;
   }
 
@@ -566,9 +568,14 @@ SHD.account = (() => {
     return a;
   }
 
-  async function insertText(editor, text) {
+  async function insertText(editor, text, alive = () => true) {
+    if (!alive()) return false;
+    const activeBefore = deepActive();
+    const editing = editor.classList.contains('shd-native-editing');
+    editor.classList.add('shd-native-editing');
     try {
       if (typeof editor.focus === 'function') editor.focus();
+      if (!alive()) return false;
       const tag = editor.tagName;
       if (tag === 'TEXTAREA' || tag === 'INPUT') {
         /* No reconciliation to outlive: a form control's value is the model, so what we
@@ -596,21 +603,36 @@ SHD.account = (() => {
            piece is typed, and between pieces the editor is told a paragraph ended the way
            the keyboard would tell it. */
         try {
+          const root = editor.getRootNode();
+          const selection = typeof root.getSelection === 'function'
+            ? root.getSelection() : document.getSelection();
+          if (!selection) return false;
+          const range = document.createRange();
+          range.selectNodeContents(editor);
+          selection.removeAllRanges();
+          selection.addRange(range);
           done = true;
-          text.split(/\n\s*\n/).forEach((para, i) => {
+          const paragraphs = text.split(/\n\s*\n/);
+          for (const [i, para] of paragraphs.entries()) {
+            if (!alive() || deepActive() !== editor) { done = false; break; }
             if (i && typeof InputEvent === 'function') {
               editor.dispatchEvent(new InputEvent('beforeinput',
                 { inputType: 'insertParagraph', bubbles: true, cancelable: true }));
             }
-            if (para && document.execCommand('insertText', false, para) !== true) done = false;
-          });
+            if (!alive() || deepActive() !== editor ||
+                (para && document.execCommand('insertText', false, para) !== true)) {
+              done = false;
+              break;
+            }
+          }
         } catch { done = false; }
       }
-      /* The honest fallback, kept for a PLAIN contenteditable, where setting text is the
-         whole of what an editor is. Against a rich editor it is a no-op that looks like a
-         success for a moment — which is exactly what landed() is now there to catch, and
-         why the fallback no longer needs to know which kind it is talking to. */
+      /* Plain contenteditables accept a value by reference. Lexical must accept the
+         browser edit instead; leaving plausible DOM text behind could conceal failure. */
       if (!done || !holds(editor, text)) {
+        if (!alive()) return false;
+        // Lexical's DOM is not its model; a direct write must never authorize a submit.
+        if (editor.matches(C.COMPOSER.richEditor)) return false;
         editor.textContent = text;
         const ev = typeof InputEvent === 'function'
           ? new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text })
@@ -619,13 +641,24 @@ SHD.account = (() => {
       }
       return await landed(editor, text);
     } catch { return false; }
+    finally {
+      const restoreFocus = deepActive() === editor;
+      if (!editing) editor.classList.remove('shd-native-editing');
+      if (restoreFocus && activeBefore && activeBefore !== editor && activeBefore.isConnected) {
+        activeBefore.focus?.();
+      }
+    }
   }
 
   /**
    * The protocol. Returns { ok, step, host }: `step` names the first thing that could
    * not be found or did not happen, `host` is the composer to reveal on the way out.
    */
-  async function compose(target, text, kind) {
+  async function compose(target, text, kind, { alive = () => true, onSubmit = () => {} } = {}) {
+    const epoch = generation;
+    const live = () => epoch === generation && target.isConnected && active() && alive();
+    const cancelled = () => ({ ok: false, step: 'cancelled', host: null });
+    if (!live()) return cancelled();
     let host = findHost(target, kind);
     if (!host) {
       if (kind !== 'comment') return { ok: false, step: 'composer', host: null };
@@ -633,13 +666,16 @@ SHD.account = (() => {
          for the same reason and takes the same answer: bring the native comment into the
          suppressed tree's box and look again. This is the step that used to fail on a real
          thread and send the reader to Reddit's own page with an empty box. */
-      const btn = replyControl(target) || await resolveLate(target, () => replyControl(target));
+      const btn = replyControl(target) || await resolveLate(target, () => replyControl(target), live);
+      if (!live()) return cancelled();
       if (!btn) return { ok: false, step: 'reply-control', host: null };
       // Snapshotted after the wait, so a host that appeared during hydration is not
       // mistaken for one that was already open before we asked for anything.
       const before = hostsNow();
       btn.click();
-      host = await waitFor(() => findHost(target, kind, before) || findHost(target, kind), timings.composeWaitMs);
+      host = await waitFor(() => findHost(target, kind, before) || findHost(target, kind),
+        timings.composeWaitMs, live);
+      if (!live()) return cancelled();
       if (!host) return { ok: false, step: 'composer', host: null };
     }
     /* A COMPOSER THAT HAS NOT OPENED IS NOT A COMPOSER, and from a selector's side of the
@@ -663,18 +699,28 @@ SHD.account = (() => {
        trigger, and what opens it is focus on the textarea in the trigger's shadow root.
        So: if the trigger is the visible thing, open it; then wait for a submit control the
        reader could see, which is the one discriminator the markup has not moved under. */
+    if (!live()) return cancelled();
     openComposer(host);
     const opened = await waitFor(
-      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs);
+      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs, live);
+    if (!live()) return cancelled();
     if (!opened) return { ok: false, step: 'composer', host };
     const editor = await waitFor(
-      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.editor)), timings.composeWaitMs);
+      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.editor)), timings.composeWaitMs, live);
+    if (!live()) return cancelled();
     if (!editor) return { ok: false, step: 'editor', host };
-    if (!await insertText(editor, text)) return { ok: false, step: 'insert', host };
+    const inserted = await insertText(editor, text, live);
+    if (!live()) return cancelled();
+    if (!inserted) return { ok: false, step: 'insert', host };
     // Re-resolved rather than reusing `opened`: an editor that has just taken its first
     // text is exactly when a composer swaps a disabled button for a live one.
     const submit = SHD.dom.deepQuery(host, C.COMPOSER.submit) || opened;
-    const count = commentsUnder(target, kind);
+    const seen = new Set([...document.querySelectorAll(C.COMMENT)]
+      .map(n => n.getAttribute(C.COMMENT_ATTR.id)));
+    const sentAt = Date.now();
+    if (!live()) return cancelled();
+    onSubmit();
+    if (!live()) return cancelled();
     submit.click();
     /* ONLY A COMMENT THAT APPEARED COUNTS AS POSTED. Nothing weaker.
        This used to accept two other signals as well — the composer disappearing, or the
@@ -686,11 +732,18 @@ SHD.account = (() => {
        as arrival. The form closed on it and the draft went with it — the one failure this
        file promises never to produce, reached by way of the check meant to prevent it.
        An editor that was never filled is indistinguishable from one Reddit cleared after
-       a successful post, so neither can carry the arrival signal. The count of the
-       reader's own comments under the target can, and a slow post that misses this window
-       goes the safe way: `arrival`, reveal-only, draft kept, and a sentence saying to check
+       a successful post, so neither can carry the arrival signal. A new, recent comment
+       by this reader under the right parent with matching text can. Ambiguous arrivals
+       go the safe way: `arrival`, reveal-only, draft kept, and a sentence saying to check
        the thread before sending it again. */
-    const arrived = await waitFor(() => commentsUnder(target, kind) > count, timings.arriveWaitMs);
+    const arrived = await waitFor(() => commentsUnder(target, kind).find(n => {
+      const id = n.getAttribute(C.COMMENT_ATTR.id);
+      const body = [...n.querySelectorAll(C.COMMENT_BODY)].find(b => b.closest(C.COMMENT) === n);
+      return id && !seen.has(id) &&
+        Date.parse(n.getAttribute(C.COMMENT_ATTR.created)) >= sentAt - 2000 &&
+        body && norm(body.textContent) === norm(text);
+    }), timings.arriveWaitMs, live);
+    if (!live()) return cancelled();
     return arrived ? { ok: true, step: 'done', host } : { ok: false, step: 'arrival', host };
   }
 
@@ -718,9 +771,13 @@ SHD.account = (() => {
    * Never the submit: this hands the reader Reddit's box with their words in it and stops.
    * Posting stays a deliberate press of Reddit's own button.
    */
-  async function handoff(target, kind, text, r) {
+  async function handoff(target, kind, text, r, alive = () => true) {
+    if (!alive()) return false;
     const reveal = r.host || (kind === 'comment' ? target : document.querySelector(C.MAIN));
-    if (!reveal || !SHD.dom.passthrough(reveal)) return false;
+    const bar = reveal && SHD.dom.passthrough(reveal);
+    if (!bar) return false;
+    const callerAlive = alive;
+    alive = () => callerAlive() && bar.isConnected;
     reveal.scrollIntoView?.({ block: 'center' });
     /* A null `text` means REVEAL ONLY: show the reader Reddit's own page and open
        nothing. That is the `arrival` caller, where the submit has already fired and a
@@ -730,11 +787,13 @@ SHD.account = (() => {
     if (text == null) return false;
     let host = r.host;
     if (!host && kind === 'comment') {
-      const btn = await waitFor(() => replyControl(target), timings.composeWaitMs);
+      const btn = await waitFor(() => replyControl(target), timings.composeWaitMs, alive);
+      if (!alive()) return false;
       if (!btn) return false;
       btn.click();
     }
-    host = host || await waitFor(() => findHost(target, kind), timings.composeWaitMs);
+    host = host || await waitFor(() => findHost(target, kind), timings.composeWaitMs, alive);
+    if (!alive()) return false;
     if (!host) return false;
     /* The same gate compose() applies, because the same closed box reaches here: a reader
        handed an unopened composer with their draft "in" it has been handed nothing. Try to
@@ -742,15 +801,18 @@ SHD.account = (() => {
        otherwise the exit-bar sentence about clicking it once is the accurate one. */
     openComposer(host);
     const editor = await waitFor(
-      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.editor)), timings.composeWaitMs);
+      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.editor)), timings.composeWaitMs, alive);
+    if (!alive()) return false;
     if (!editor) return false;
     /* ALREADY THERE IS ALREADY CARRIED. compose() may have put the words into this very
        editor and then misjudged its own work — the multi-line case did exactly that, and
        this call wrote the draft a second time into a box that already held it, run
        together with no break between. Whatever insertText() concluded, the editor's
-       contents are the fact; if the words are in it, the handoff's job is done. */
-    if (holds(editor, text)) return true;
-    return await insertText(editor, text);
+       contents must match the entire draft and survive reconciliation before the
+       handoff's job is done. A substring could be buried inside accumulated old drafts. */
+    if (await landed(editor, text)) return alive();
+    if (!alive()) return false;
+    return await insertText(editor, text, alive);
   }
 
   const STEP_COPY = {
@@ -838,10 +900,17 @@ SHD.account = (() => {
    */
   function replyForm(m, { kind = 'comment', onClose } = {}) {
     guardOwnKeys();
+    const key = draftKey(m, kind);
+    const epoch = generation;
+    let withdrawn = false;
+    let submitted = drafts.get(key)?.submitted || false;
     const ta = h('textarea.shd-reply-text', { rows: '6', 'aria-label': kind === 'post' ? 'comment' : 'reply' });
+    ta.value = drafts.get(key)?.text || '';
     const status = h('span.shd-reply-status', { role: 'status', 'aria-live': 'polite' });
     const save = h('button.shd-reply-save', { type: 'submit', text: 'save' });
-    const cancel = h('button.shd-reply-cancel', { type: 'button', text: 'cancel', onclick: () => close() });
+    const cancel = h('button.shd-reply-cancel', {
+      type: 'button', text: 'cancel', onclick: () => { if (!cancel.disabled) close(); }
+    });
     const form = h('form.usertext.shd-reply-form', { dataset: { shdKind: kind } }, [
       h('div.usertext-edit', null, [
         ta,
@@ -851,22 +920,48 @@ SHD.account = (() => {
         ])
       ])
     ]);
-    const close = () => { form.remove(); if (onClose) onClose(); };
+    const live = () => !withdrawn && epoch === generation && form.isConnected && active();
+    const remember = () => {
+      if (ta.value) drafts.set(key, { text: ta.value, submitted });
+      else drafts.delete(key);
+    };
+    forms.set(form, remember);
+    ta.addEventListener('input', remember);
+    if (submitted) status.textContent = 'Your previous reply may already have posted; check the thread before sending it again.';
+    const close = () => {
+      withdrawn = true;
+      drafts.delete(key);
+      forms.delete(form);
+      form.remove();
+      if (onClose) onClose();
+    };
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!live() || save.disabled) return;
       const text = ta.value.trim();
       if (!text) { status.textContent = 'nothing to save'; return; }
       save.disabled = true;
+      ta.disabled = true;
       status.textContent = 'submitting…';
       form.dataset.shdState = 'submitting';
       let r;
-      try { r = await compose(m.source, text, kind); }
+      remember();
+      try { r = await compose(m.source, text, kind, {
+        alive: live,
+        onSubmit: () => { submitted = true; cancel.disabled = true; remember(); }
+      }); }
       catch (err) { r = { ok: false, step: 'insert', host: null, err }; }
-      if (!form.isConnected) return;               // a route change took the page with it
+      if (!live()) return;
       if (r.ok) { form.dataset.shdState = 'done'; close(); return; }
       save.disabled = false;
+      ta.disabled = false;
+      cancel.disabled = false;
       form.dataset.shdState = 'failed';
       form.dataset.shdStep = r.step;
+      if (r.step === 'cancelled') {
+        status.textContent = 'Reply interrupted. Your draft is still here; save again when ready.';
+        return;
+      }
       /* ARRIVAL IS THE ONE STEP ON THE FAR SIDE OF THE SUBMIT, AND IT GETS ITS OWN EXIT.
          Every other miss here happens BEFORE `submit.click()` — no request was made, so
          carrying the draft into Reddit's box and inviting a press is exactly right.
@@ -884,9 +979,9 @@ SHD.account = (() => {
         ? 'sheddit did not see your reply appear — opening Reddit\'s own page so you can check'
         : `sheddit ${STEP_COPY[r.step] || 'could not post this'} — opening Reddit's own reply box`;
       let carried = false;
-      try { carried = await handoff(m.source, kind, posted ? null : text, r); }
+      try { carried = await handoff(m.source, kind, posted ? null : text, r, live); }
       catch { carried = false; }
-      if (!form.isConnected) return;
+      if (!live()) return;
       form.dataset.shdCarried = carried ? 'yes' : 'no';
       const said = posted
         ? 'sheddit did not see your reply appear, and it may already have posted — check the thread before sending it again. Your text is still here, behind “← back to sheddit”.'
@@ -909,7 +1004,7 @@ SHD.account = (() => {
    * handoff: passthrough to Reddit's own comment. Logged in it opens our form under the
    * comment's entry, once — a second click focuses the one that is open.
    */
-  function reply(m, thing) {
+  function reply(m, thing, focus = true) {
     if (!active()) {
       if (SHD.dom.passthrough(m.source)) m.source.scrollIntoView?.({ block: 'center' });
       return;
@@ -919,7 +1014,11 @@ SHD.account = (() => {
     if (open) { open.querySelector('textarea')?.focus(); return; }
     const form = replyForm(m, { kind: 'comment' });
     entry.appendChild(form);
-    form.querySelector('textarea')?.focus();
+    if (focus) form.querySelector('textarea')?.focus();
+  }
+
+  function restoreReply(m, thing) {
+    if (active() && drafts.has(draftKey(m, 'comment'))) reply(m, thing, false);
   }
 
   function ownsComment(m) {
@@ -928,90 +1027,149 @@ SHD.account = (() => {
     return !!name && name.toLowerCase() === m.author.toLowerCase();
   }
 
+  /** The native comment behind a rendered row, found again if Reddit has replaced it. */
+  function nativeComment(m) {
+    if (m.source?.isConnected) return m.source;
+    return [...document.querySelectorAll(C.COMMENT)]
+      .find(el => el.getAttribute(C.COMMENT_ATTR.id) === m.id) || null;
+  }
+
   function editLink(m, thing) {
     if (!ownsComment(m)) return null;
-    let busy = false;
+    /* The handoff this link opened (dom.passthrough's exit bar), not a busy flag. A flag
+       stayed set until the pending waits timed out, so for 3-4 s after the reader pressed
+       back their next click on edit did nothing at all. The bar is gone the moment they
+       leave, and the attempt it belonged to stops at its next poll (editComment). */
+    let open = null;
     const link = h('a.edit', { href: '#', text: 'edit' });
     return h('li', { onclick: async (e) => {
       e.preventDefault();
-      if (busy) return;
+      if (open?.isConnected) return;
       if (!ownsComment(m)) {
         link.textContent = 'editing unavailable: not signed in as this author';
         return;
       }
-      busy = true;
+      link.textContent = 'edit';
+      const source = nativeComment(m);
+      open = SHD.dom.passthrough(source);
+      if (!open) {
+        // Nothing was handed off, so there is no exit bar to say it in: the link is all
+        // the reader can see.
+        link.textContent = 'comment not found; reload to edit';
+        return;
+      }
+      m.source = source;
+      const bar = open;
       try {
-        await editComment(m, thing);
+        await editComment(m, thing, bar);
       } catch (error) {
         console.warn('[sheddit] could not open Reddit\'s comment editor', error);
-        link.textContent = 'could not open editor; try again';
-        SHD.dom.passthroughNote('Could not open the editor. Use Reddit\'s comment menu to edit.');
-      } finally {
-        busy = false;
+        if (bar.isConnected) {
+          SHD.dom.passthroughNote('Could not open the editor. Use Reddit\'s comment menu to edit.');
+        }
       }
     } }, link);
   }
 
-  async function editComment(m, thing) {
+  /**
+   * Open Reddit's own editor on the reader's comment, inside the handoff `bar` belongs to.
+   *
+   * Every wait stops when that handoff closes. Not when the comment's path loses its
+   * passthrough classes: a later handoff to a reply nested under this comment puts them
+   * straight back, and an attempt the reader had already left then woke up and opened this
+   * comment's editor beside the reply's.
+   */
+  async function editComment(m, thing, bar) {
     const source = m.source;
-    if (!SHD.dom.passthrough(source)) throw new Error('Comment is no longer on the page');
     source.scrollIntoView?.({ block: 'center' });
     SHD.dom.passthroughNote('Opening Reddit\'s editor for your comment...');
+    refreshOnReturn(m, thing, bar);
 
-    // The body in our layout is a clone. Re-read it when the reader returns from editing.
-    const returning = new MutationObserver(() => {
-      if (source.isConnected && source.classList.contains('shd-passthrough')) return;
-      returning.disconnect();
-      const current = [...document.querySelectorAll(C.COMMENT)]
-        .find(el => el.getAttribute(C.COMMENT_ATTR.id) === m.id);
-      const body = current && SHD.model.comment(current)?.bodyNode;
-      const shown = thing.querySelector(':scope > .entry > .usertext > .usertext-body');
-      if (thing.isConnected && body && shown) {
-        shown.replaceChildren(SHD.dom.adoptBody(body));
-        m.source = current;
-        m.bodyNode = body;
-      }
-    });
-    returning.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-
-    const stillHere = () => source.isConnected && source.classList.contains('shd-passthrough');
+    const stillHere = () => bar.isConnected && source.isConnected;
     const owned = (selector) => [...source.querySelectorAll(selector)]
-      .find(el => ownerComment(el) === source);
-    const editor = () => owned(C.NATIVE.commentEditHost);
+      .filter(el => ownerComment(el) === source);
     const findMenuButton = () => {
-      const menu = owned(C.NATIVE.commentOverflow);
+      const menu = owned(C.NATIVE.commentOverflow)[0];
       return menu && SHD.dom.deepQuery(menu, C.NATIVE.commentActions);
+    };
+    /* The editor's text field, from whichever of this comment's edit hosts has one showing.
+       Every host is asked, not the first: one Reddit left behind after a cancel or a save
+       has no usable field, and taking it for THE editor skipped the menu and failed every
+       later attempt on this comment until a reload. */
+    const field = () => {
+      const hosts = owned(C.NATIVE.commentEditHost);
+      for (const host of hosts) {
+        const input = shown(SHD.dom.deepQuery(host, C.COMPOSER.editor));
+        if (input) return input;
+      }
+      // Like the reply composer, an edit host can mount with its ready slot still closed.
+      for (const host of hosts) if (shown(host)) host.focus?.();
+      return null;
     };
     const fallback = () => SHD.dom.passthroughNote(
       'Could not open the editor automatically. Use this comment\'s menu > Edit comment.');
 
-    if (!editor()) {
-      const toggle = await waitFor(findMenuButton, timings.hydrateWaitMs);
+    // An editor already open here needs no menu. Asked twice: the second look sees what the
+    // first one's focus() opened.
+    if (!field() && !field()) {
+      const toggle = await waitFor(findMenuButton, timings.hydrateWaitMs, stillHere);
       if (!stillHere()) return;
       if (!toggle) { fallback(); return; }
       if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
       const edit = await waitFor(() => {
-        const menu = owned(C.NATIVE.commentOverflow);
+        const menu = owned(C.NATIVE.commentOverflow)[0];
         const item = menu && SHD.dom.deepQuery(menu, C.NATIVE.commentEdit);
         return item && C.NATIVE.commentEditText.test(item.textContent.trim()) ? item : null;
-      }, timings.composeWaitMs);
+      }, timings.composeWaitMs, stillHere);
       if (!stillHere()) return;
       if (!edit) { fallback(); return; }
       edit.click();
     }
-    const field = await waitFor(() => {
-      if (!stillHere()) return null;
-      const host = editor();
-      if (!host) return null;
-      const input = shown(SHD.dom.deepQuery(host, C.COMPOSER.editor));
-      if (input) return input;
-      // Like the reply composer, an edit host can mount with its ready slot still closed.
-      host.focus?.();
-      return null;
-    }, timings.composeWaitMs);
+    const input = await waitFor(field, timings.composeWaitMs, stillHere);
     if (!stillHere()) return;
-    if (!field) { fallback(); return; }
+    if (!input) { fallback(); return; }
     SHD.dom.passthroughNote('Edit and save in Reddit\'s editor, then choose \u2190 back to sheddit.');
+  }
+
+  /**
+   * Our row shows a CLONE of the comment's body, so an edit made in Reddit's editor does
+   * not appear in it until it is copied again. Copy when the reader leaves the handoff —
+   * and keep copying for editRefreshMs after: Save re-renders the body when Reddit's
+   * request returns, which on a slow connection is after the reader has pressed back, and
+   * a single copy at that moment kept the old text until a reload.
+   */
+  function refreshOnReturn(m, thing, bar) {
+    const opts = { childList: true, subtree: true, characterData: true };
+    let copied = null;
+    let watched = null;
+    let stop = 0;
+    const watch = new MutationObserver(() => copy());
+    const end = () => { watch.disconnect(); clearTimeout(stop); };
+    const copy = () => {
+      if (!thing.isConnected) return end();
+      const current = nativeComment(m);
+      const body = current && SHD.model.comment(current)?.bodyNode;
+      const rendered = thing.querySelector(':scope > .entry > .usertext > .usertext-body');
+      if (!body || !rendered) return;
+      if (current !== watched) {
+        // Reddit may replace the whole comment on save; its parent sees that happen.
+        watched = current;
+        watch.observe(current, opts);
+        if (current.parentNode) watch.observe(current.parentNode, { childList: true });
+      }
+      if (body.innerHTML === copied) return;
+      copied = body.innerHTML;
+      rendered.replaceChildren(SHD.dom.adoptBody(body));
+      m.source = current;
+      m.bodyNode = body;
+    };
+    const left = new MutationObserver(() => {
+      if (bar.isConnected) return;
+      left.disconnect();
+      copy();
+      stop = setTimeout(end, timings.editRefreshMs);
+    });
+    left.observe(bar.parentNode, { childList: true });
   }
 
   /** The top-level comment box on a comments page — old reddit had one above the list. */
@@ -1087,7 +1245,7 @@ SHD.account = (() => {
    * except the last item.
    */
   function fillMenu(menu, status) {
-    const name = SHD.session.username();
+    const name = SHD.session.username({ fresh: true });
     const kids = [];
     if (name) {
       kids.push(menuLink(`/user/${name}/`, 'my profile'));
@@ -1351,8 +1509,14 @@ SHD.account = (() => {
     return corner;
   }
 
-  function reset() { missWarned = false; closeMenu(); }
+  function reset() {
+    for (const [form, remember] of forms) if (form.isConnected) remember();
+    forms.clear();
+    generation++;
+    missWarned = false;
+    closeMenu();
+  }
 
-  return { midcol, vote, reply, editLink, replyForm, commentBox, compose, submitBox, headerAccount,
+  return { midcol, vote, reply, restoreReply, editLink, replyForm, commentBox, compose, submitBox, headerAccount,
            logOut, findLogoutControl, nav, reset, timings };
 })();

@@ -1,6 +1,6 @@
 {
-  "version": "0.53.0",
-  "released": "2026-09-25",
+  "version": "0.60.0",
+  "released": "2026-10-19",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.53.0 adds an edit link to your own comments in a thread when the signed-in account layer is enabled. It opens Reddit's native editor with your existing text; save there, then choose back to sheddit to refresh the displayed comment. If the editor cannot open automatically, the handoff explains how to use Reddit's comment menu. Logged-out reading is unchanged."
+  "notes": "0.60.0 fixes a stale-thread navigation failure: slow Reddit transitions can no longer promote the previous thread into the active page under a new URL. Recovery checks source ownership and rendering checks destination post IDs. Sorts, focused comments and context changes retain distinct content identities; URL rewrites and cached back/forward navigation remain supported. Signed-in controls remain experimental: reply submission and edit opening can require the native fallback."
 }
