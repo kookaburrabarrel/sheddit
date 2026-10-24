@@ -5269,6 +5269,50 @@ async function boot(html, url, setup) {
       new Set(rows.map(r => r.dataset.fullname)).size === rows.length);
   }
 
+  console.log('\n\x1b[1mUSER FLAIR\x1b[0m');
+  {
+    // Never rendered before: the model did not read author flair at all, so every username
+    // went out bare. Markup per C.AUTHOR_FLAIR — span.author-flair > div.flair-content
+    // inside author-flair-event-handler, emoji as .flair-image.
+    const meta = (inner) => `<div slot="commentMeta"><div><a href="/user/x">x</a></div><div>` +
+      `<author-flair-event-handler>${inner}</author-flair-event-handler></div></div>`;
+    const pill = (content) => `<faceplate-tracker noun="user_flair"><span class="author-flair">` +
+      `<div class="flair-content">${content}</div></span></faceplate-tracker>`;
+    const flairs = {
+      0: meta(''),                                   // handler present, no flair set
+      1: meta(pill('  Child   flair ')),
+      2: meta(pill('<faceplate-img class="flair-image" src="https://emoji.redditmedia.com/abc/roman.png" alt=":roman:"></faceplate-img> Ancient Rome')),
+      3: meta(pill('<img class="flair-image" src="https://styles.redditmedia.com/evil.png" alt=":x:">Tracker'))
+    };
+    let html = nestedCommentsHtml([0, 1, 0, 0]);
+    html = html.replace(/(thingid="t1_c(\d+)"[\s\S]*?<details>)/g,
+      (m, head, i) => head + (flairs[i] || ''));
+    const page = commentsPage()
+      .replace(/<section>[\s\S]*?<\/section>/, '<section>' + html + '</section>')
+      .replace('<shreddit-post-flair>', '<div slot="credit-bar">' +
+        `<author-flair-event-handler>${pill('OP flair')}</author-flair-event-handler></div>` +
+        '<shreddit-post-flair><div class="flair-content">LINKFLAIR</div>');
+    const { doc } = await boot(page, 'https://www.reddit.com/r/programming/comments/link1/nasa/');
+    const row = (i) => doc.querySelector(`#shd-root .thing.comment[data-fullname="t1_c${i}"] > .entry > .tagline`);
+    await waitFor(() => row(3));
+    check('a comment without flair gets no pill — not its reply\'s',
+      row(0) && !row(0).querySelector('.flair'), row(0)?.innerHTML);
+    check('user flair renders after the author, whitespace collapsed',
+      row(1)?.querySelector('a.author + .flair')?.textContent === 'Child flair',
+      row(1)?.innerHTML);
+    const emoji = row(2)?.querySelector('.flair img.flair-emoji');
+    check('flair emoji from emoji.redditmedia.com is drawn',
+      emoji?.getAttribute('src') === 'https://emoji.redditmedia.com/abc/roman.png' &&
+      row(2).querySelector('.flair').textContent === ' Ancient Rome', row(2)?.innerHTML);
+    check('an off-allowlist flair image is not loaded; its alt text stands in',
+      !row(3)?.querySelector('.flair img') &&
+      row(3)?.querySelector('.flair')?.textContent === ':x:Tracker', row(3)?.innerHTML);
+    const postTag = doc.querySelector('#shd-root .thing.link .tagline');
+    check('the post author\'s flair renders, and link flair is not taken for it',
+      postTag?.querySelector('a.author + .flair')?.textContent === 'OP flair',
+      postTag?.innerHTML);
+  }
+
   console.log('\n\x1b[1mCOMMENT PAGINATION\x1b[0m');
   {
     // A real thread ships a slice and lazy-loads the rest. The paginator was hardcoded to

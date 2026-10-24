@@ -241,6 +241,7 @@ SHD.listing = (() => {
       h('time', { title: m.created, text: ago(m.created) }),
       ' by ',
       h('a.author', { href: `/user/${m.author}`, text: m.author }),
+      SHD.dom.flair(m.flair),
       ' to ',
       h('a.subreddit', { href: `/r/${m.subreddit}/`, text: m.subredditPrefixed || `r/${m.subreddit}` })
     ]);

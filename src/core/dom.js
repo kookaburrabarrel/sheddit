@@ -67,6 +67,18 @@ SHD.dom = (() => {
 
   function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
 
+  /**
+   * Old reddit's user-flair pill (`span.flair`), from model's `flair` parts. Returns
+   * [' ', pill] so a tagline can drop it straight in after the author, or null for none.
+   */
+  function flair(parts) {
+    if (!parts || !parts.length) return null;
+    const title = parts.map(p => p.text ?? p.alt ?? '').join('').trim();
+    return [' ', h('span.flair', { title: title || null }, parts.map(p => p.img
+      ? h('img.flair-emoji', { src: p.img, alt: p.alt, title: p.alt || null })
+      : p.text))];
+  }
+
   /* ------------------------------------------------------------------ *
    * Cloned-body repair
    * ------------------------------------------------------------------ */
@@ -310,6 +322,6 @@ SHD.dom = (() => {
   const rowSel = (id) =>
     `.thing[data-fullname="${String(id).replace(/["\\]/g, '\\$&')}"]`;
 
-  return { h, score, ago, domain, plural, inlineGifs, adoptBody, rowSel,
+  return { h, score, ago, domain, plural, flair, inlineGifs, adoptBody, rowSel,
            deepQuery, shadowRoots, passthrough, passthroughNote, passthroughClear };
 })();

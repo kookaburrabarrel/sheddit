@@ -171,6 +171,7 @@ SHD.comments = (() => {
           toggler(thing),
           ' ',
           h('a.author', { href: `/user/${m.author}`, text: m.author }),
+          SHD.dom.flair(m.flair),
           ' ',
           /* Two ways for a score to be unknowable, one label: the attribute missing
              outright, or present-but-placeholder under Reddit's hide-new-scores window

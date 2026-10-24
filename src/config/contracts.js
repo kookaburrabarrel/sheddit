@@ -503,6 +503,19 @@ SHD.C = {
     awards: 'award-count'
   },
   COMMENT_BODY: '[slot="comment"]',
+  /* User (author) flair — the pill beside a username. Reddit server-renders it in the
+     comment's `[slot="commentMeta"]` (and beside the author on a post) as
+       author-flair-event-handler > … > span.author-flair > div.flair-content
+     with emoji as `.flair-image` <img>/<faceplate-img>. The `author-flair-event-handler`
+     ancestor is what separates it from LINK flair, which uses `.flair-content` too but
+     sits inside `shreddit-post-flair`. An empty handler is ordinary (no flair set; the
+     "Top 1% Commenter" badge beside it is `community-achievements-flair`, not flair).
+     Source: shreddit's own stylesheet (`shreddit-comment .author-flair`, `.flair-image`)
+     and the extensions that read it; not yet re-measured by verify:live. */
+  AUTHOR_FLAIR: 'author-flair-event-handler .flair-content',
+  /* Flair emoji are only ever drawn from these hosts — never relax to *.redditmedia.com
+     (see THUMB_HOSTS for what `styles.` would bring in). */
+  FLAIR_EMOJI_HOSTS: /^(emoji\.redditmedia\.com|i\.redd\.it|preview\.redd\.it)$/,
   /* CANDIDATE, unverified live — deliberately NOT in COMMENT_ATTR, whose entries
      verify:live requires on EVERY comment; this one is expected on none of most threads.
      Reported 2026-08-27 (bug 89): subreddits that hide young comments' scores ship a

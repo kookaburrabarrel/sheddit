@@ -20,6 +20,22 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.62.0
+
+### Added — user flair (**never worked**)
+
+Usernames always rendered bare: the model never read Reddit's author flair, and neither
+tagline had anywhere to put it. Comments and the post now show the author's flair as old
+reddit's `span.flair` pill straight after the name, in theme colours.
+
+It is read from `author-flair-event-handler .flair-content` (`C.AUTHOR_FLAIR`), scoped to
+the comment that owns it — a comment's subtree holds its replies, so a first match could be
+a child's flair. The `author-flair-event-handler` ancestor keeps link flair, which uses
+`.flair-content` too, from being taken for the author's. Only text and flair emoji cross
+over, never Reddit's markup; emoji load from `emoji.redditmedia.com`, `i.redd.it` or
+`preview.redd.it` only, and any other image is replaced by its alt text. Not yet
+re-measured by `verify:live`; post (link) flair remains unrendered.
+
 ## 0.61.0
 
 ### Fixed — missing OP text and photos

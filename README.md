@@ -19,18 +19,18 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.61.0](https://img.shields.io/badge/version-0.61.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.62.0](https://img.shields.io/badge/version-0.62.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.61.0 — major bug-fix release
+### Beta 0.62.0 — user flair
 
-**Updating is strongly recommended.** Earlier builds could show a thread's title and
-comments while silently leaving out the OP's text or photo. **0.61.0 fixes this missing
-post content and several logout timing bugs**, while retaining the recent navigation
-and gallery fixes. If you install from source or a download zip, update your copy and
+**0.62.0 shows user flair** — the pill beside a username — on comments and on the post,
+emoji included. It also carries 0.61.0's important fix for threads that could show their
+title and comments while silently leaving out the OP's text or photo, so **updating is
+strongly recommended.** If you install from source or a download zip, update your copy and
 reload the extension.
 
 On the [Chrome Web Store](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sheddit/) — one click on either.
@@ -77,7 +77,7 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 > Your own comments have an **edit** link that opens Reddit's native editor.
 > Save there, then choose **back to sheddit** to return to the updated comment.
 >
-> **Known live limitations in 0.61.0:** automatic reply submission can fail even after
+> **Known live limitations in 0.62.0:** automatic reply submission can fail even after
 > Reddit's composer is open. The native fallback can carry your draft, but check the
 > thread for an existing reply before pressing Reddit's own **Comment** button.
 > Automatic edit opening can also miss a freshly loaded menu; use that comment's
@@ -91,6 +91,12 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail, and every earlier build, in the [changelog](CHANGELOG.md).
+
+**0.62.0 — user flair**
+
+- **New:** user flair renders beside the author on comments and posts, as old reddit's
+  grey pill, with flair emoji. Sheddit had never read it, so every username was bare.
+  Post (link) flair is still not shown.
 
 **0.61.0 — major bug-fix release: missing post content and logout**
 
@@ -203,7 +209,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.61.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.62.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

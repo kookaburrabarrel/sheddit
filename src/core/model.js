@@ -267,6 +267,7 @@ SHD.model = (() => {
       comments: num(el, A.comments) ?? 0,
       created: attr(el, A.created),
       author: attr(el, A.author) || '[deleted]',
+      flair: authorFlairOf(el, C.POST),
       subreddit: attr(el, A.subreddit) || '',
       subredditPrefixed: attr(el, A.subredditPrefixed) || '',
       index: num(el, A.index),
@@ -560,6 +561,7 @@ SHD.model = (() => {
       id,
       postId: attr(el, A.postId),
       author: attr(el, A.author) || '[deleted]',
+      flair: authorFlairOf(el, C.COMMENT),
       score: num(el, A.score),
       /* Presence-valued, like Reddit's other boolean attributes (`gif` on a player).
          A hidden score ships WITH a placeholder score="1" (bug 89), so `score` alone
@@ -577,6 +579,53 @@ SHD.model = (() => {
       bodyNode,
       source: el
     };
+  }
+
+  /**
+   * The author's user flair, as an ordered list of parts — `{ text }` or `{ img, alt }` —
+   * or null when the author has none.
+   *
+   * Scoped like the comment body: a comment's subtree holds its replies too, so the first
+   * match in document order can be a CHILD's flair. `own` is the element type that owns
+   * the flair (a comment, or a post — which must not pick up a comment's flair either).
+   * Parts rather than innerHTML: the flair is user-chosen text, and nothing of Reddit's
+   * markup is carried across — only text and allowlisted emoji images.
+   */
+  function authorFlairOf(el, own) {
+    const box = [...el.querySelectorAll(C.AUTHOR_FLAIR)]
+      .find(n => n.closest(C.COMMENT) === (own === C.COMMENT ? el : null) &&
+                 n.closest(own) === el);
+    if (!box) return null;
+    const parts = [];
+    const walk = (node) => {
+      for (const n of node.childNodes) {
+        if (n.nodeType === 3) {
+          const t = n.nodeValue.replace(/\s+/g, ' ');
+          if (t.trim() || (parts.length && t === ' ')) parts.push({ text: t });
+        } else if (n.nodeType === 1) {
+          const tag = n.tagName.toLowerCase();
+          if (tag === 'img' || tag === 'faceplate-img') {
+            const src = n.getAttribute('src') || '';
+            let host = '';
+            try { host = new URL(src, 'https://www.reddit.com').hostname; } catch { /* bad src */ }
+            if (/^https:/i.test(src) && C.FLAIR_EMOJI_HOSTS.test(host)) {
+              parts.push({ img: src, alt: n.getAttribute('alt') || '' });
+            } else if (n.getAttribute('alt')) {
+              parts.push({ text: n.getAttribute('alt') });
+            }
+          } else {
+            walk(n);
+          }
+        }
+      }
+    };
+    walk(box);
+    // Trim the ends; collapse to null if nothing visible is left.
+    while (parts.length && parts[0].text != null && !parts[0].text.trim()) parts.shift();
+    while (parts.length && parts.at(-1).text != null && !parts.at(-1).text.trim()) parts.pop();
+    if (parts.length && parts[0].text != null) parts[0].text = parts[0].text.replace(/^\s+/, '');
+    if (parts.length && parts.at(-1).text != null) parts.at(-1).text = parts.at(-1).text.replace(/\s+$/, '');
+    return parts.length ? parts : null;
   }
 
   /**

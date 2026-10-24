@@ -1,6 +1,6 @@
 {
-  "version": "0.61.0",
-  "released": "2026-10-22",
+  "version": "0.62.0",
+  "released": "2026-10-24",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.61.0 fixes missing OP text and photos when Reddit hydrates post content after Sheddit renders the submission. Text stays synchronized with its native source, and uploaded photos can render before the lightbox mounts. Logout waits for Reddit's control to hydrate, keeps an already-open loading drawer open, and requires affirmative logged-out UI before reloading. Includes the navigation and gallery fixes from 0.60.0. Signed-in controls remain experimental."
+  "notes": "0.62.0 shows user flair: the pill beside a username on comments and on the post, with flair emoji. Sheddit had never read Reddit's author flair, so every username rendered bare. Includes the post content and logout fixes from 0.61.0. Signed-in controls remain experimental."
 }

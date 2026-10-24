@@ -86,11 +86,12 @@ this file permits:
 - **The `.morelink` CTA is built, for a logged-in reader only.** `account.js` renders the
   sidebar's `Submit a new link` / `Submit a new text post` as `a.morelink` in a
   `.shd-submit` box — links onto Reddit's composer, behind the account layer's session check.
-- **Flair is still not read.** `contracts.js` names `shreddit-post-flair` only inside
-  `THUMB_EXCLUDE`, so that flair emoji are not taken for thumbnails; neither it nor
-  `model.js` carries the flair text, so the pill still needs a new contract confirmed on a
-  live machine before `listing.js` has anything to render. The spec for it above still
-  stands.
+- **User flair is read; link flair is not.** `C.AUTHOR_FLAIR` reads the author's flair
+  and both taglines render it as `span.flair` after the name. Link flair
+  (`shreddit-post-flair`) is still named only inside `THUMB_EXCLUDE`, so that flair emoji
+  are not taken for thumbnails; the `.linkflairlabel` pill still needs a contract
+  confirmed on a live machine before `listing.js` has anything to render. The spec for it
+  above still stands.
 
 **The search box is out of scope** — CONTRIBUTING.md "Scope" and ARCHITECTURE §8 keep search
 out. The reply textarea and the user bar, once ruled out with it as auth-gated, have since

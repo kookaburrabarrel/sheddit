@@ -632,6 +632,24 @@ html.shd-active #shd-loading.shd-loading-over {
 .tagline a { color: var(--shd-meta); text-decoration: none; }
 .tagline .author { color: var(--shd-accent); }
 .tagline .subreddit { color: var(--shd-accent); font-weight: bold; }
+/* User flair, old reddit's `span.flair`: a small grey pill after the author. Theme tokens
+   rather than old reddit's literal #f5f5f5/#ddd/#545454 so dark palettes keep contrast. */
+.tagline .flair {
+  display: inline-block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  padding: 0 2px;
+  border: 1px solid var(--shd-border);
+  border-radius: 2px;
+  background: var(--shd-code-bg);
+  color: var(--shd-quote-text);
+  font-size: 10px;
+  line-height: normal;
+}
+.tagline .flair .flair-emoji { height: 12px; width: auto; vertical-align: middle; }
 
 .flat-list.buttons {
   list-style: none;
