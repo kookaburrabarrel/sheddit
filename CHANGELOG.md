@@ -36,6 +36,11 @@ over, never Reddit's markup; emoji load from `emoji.redditmedia.com`, `i.redd.it
 `preview.redd.it` only, and any other image is replaced by its alt text. Not yet
 re-measured by `verify:live`; post (link) flair remains unrendered.
 
+**Visible to signed-in readers only.** Reddit no longer sends user flair to logged-out
+visitors — confirmed by hand on Chrome and Firefox, 2026-10-24: logged out, the page carries
+no flair for Sheddit to read, so usernames stay bare. That is Reddit's behaviour, not a
+regression; signed in, the pill appears.
+
 ## 0.61.0
 
 ### Fixed — missing OP text and photos

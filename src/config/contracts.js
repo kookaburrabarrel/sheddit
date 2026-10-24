@@ -511,7 +511,10 @@ SHD.C = {
      sits inside `shreddit-post-flair`. An empty handler is ordinary (no flair set; the
      "Top 1% Commenter" badge beside it is `community-achievements-flair`, not flair).
      Source: shreddit's own stylesheet (`shreddit-comment .author-flair`, `.flair-image`)
-     and the extensions that read it; not yet re-measured by verify:live. */
+     and the extensions that read it; not yet re-measured by verify:live.
+     SIGNED-IN ONLY: Reddit stopped sending user flair to logged-out visitors (checked by
+     hand on Chrome and Firefox, 2026-10-24), so logged out this finds nothing and the
+     tagline is bare by design — not a broken selector. */
   AUTHOR_FLAIR: 'author-flair-event-handler .flair-content',
   /* Flair emoji are only ever drawn from these hosts — never relax to *.redditmedia.com
      (see THUMB_HOSTS for what `styles.` would bring in). */

@@ -87,7 +87,8 @@ this file permits:
   sidebar's `Submit a new link` / `Submit a new text post` as `a.morelink` in a
   `.shd-submit` box — links onto Reddit's composer, behind the account layer's session check.
 - **User flair is read; link flair is not.** `C.AUTHOR_FLAIR` reads the author's flair
-  and both taglines render it as `span.flair` after the name. Link flair
+  and both taglines render it as `span.flair` after the name — for signed-in readers only,
+  since Reddit no longer sends user flair to logged-out visitors (checked 2026-10-24). Link flair
   (`shreddit-post-flair`) is still named only inside `THUMB_EXCLUDE`, so that flair emoji
   are not taken for thumbnails; the `.linkflairlabel` pill still needs a contract
   confirmed on a live machine before `listing.js` has anything to render. The spec for it

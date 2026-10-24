@@ -28,7 +28,8 @@ No account. No profile. No feed tuned to keep you scrolling.
 ### Beta 0.62.0 — user flair
 
 **0.62.0 shows user flair** — the pill beside a username — on comments and on the post,
-emoji included. It also carries 0.61.0's important fix for threads that could show their
+emoji included. **Signed-in readers only:** Reddit no longer sends user flair to logged-out
+visitors, so logged out there is nothing to show. It also carries 0.61.0's important fix for threads that could show their
 title and comments while silently leaving out the OP's text or photo, so **updating is
 strongly recommended.** If you install from source or a download zip, update your copy and
 reload the extension.
@@ -97,6 +98,8 @@ Full detail, and every earlier build, in the [changelog](CHANGELOG.md).
 - **New:** user flair renders beside the author on comments and posts, as old reddit's
   grey pill, with flair emoji. Sheddit had never read it, so every username was bare.
   Post (link) flair is still not shown.
+- **Signed in only:** Reddit now shows user flair to logged-in readers only, so logged
+  out, usernames stay bare. That is Reddit's page, not a Sheddit bug.
 
 **0.61.0 — major bug-fix release: missing post content and logout**
 

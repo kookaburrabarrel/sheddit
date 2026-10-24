@@ -2,5 +2,5 @@
   "version": "0.62.0",
   "released": "2026-10-24",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.62.0 shows user flair: the pill beside a username on comments and on the post, with flair emoji. Sheddit had never read Reddit's author flair, so every username rendered bare. Includes the post content and logout fixes from 0.61.0. Signed-in controls remain experimental."
+  "notes": "0.62.0 shows user flair: the pill beside a username on comments and on the post, with flair emoji. Signed-in readers only: Reddit no longer sends user flair to logged-out visitors. Sheddit had never read Reddit's author flair, so every username rendered bare. Includes the post content and logout fixes from 0.61.0. Signed-in controls remain experimental."
 }
