@@ -97,7 +97,7 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 
 Full detail, and every earlier build, in the [changelog](CHANGELOG.md).
 
-**0.63.0 — replies and comments post in one press**
+**0.63.0 · 2026-10-25 — replies and comments post in one press**
 
 - **Fixed (major):** saving a reply or comment sent you to Reddit's own, almost blank page
   with the text re-typed into its box, and you had to press post again. Four separate
@@ -106,13 +106,13 @@ Full detail, and every earlier build, in the [changelog](CHANGELOG.md).
   replies to your own comments mistook Reddit's hidden edit box for the reply box. All
   four are fixed; replies now post from Sheddit's box in about a second.
 
-**0.62.1 — long posts open in full**
+**0.62.1 · 2026-10-25 — long posts open in full**
 
 - **Fixed:** on a long text post Reddit had served collapsed (typically a revisit),
   "Read more" did nothing and the rest of the post was unreachable. Sheddit copied
   Reddit's button but not the code behind it; it now shows the whole text instead.
 
-**0.62.0 — user flair**
+**0.62.0 · 2026-10-24 — user flair**
 
 - **New:** user flair renders beside the author on comments and posts, as old reddit's
   grey pill, with flair emoji. Sheddit had never read it, so every username was bare.
@@ -120,7 +120,7 @@ Full detail, and every earlier build, in the [changelog](CHANGELOG.md).
 - **Signed in only:** Reddit now shows user flair to logged-in readers only, so logged
   out, usernames stay bare. That is Reddit's page, not a Sheddit bug.
 
-**0.61.0 — major bug-fix release: missing post content and logout**
+**0.61.0 · 2026-10-22 — major bug-fix release: missing post content and logout**
 
 This is an important reliability update, not just a cosmetic change: affected threads
 could look loaded while the post itself was missing.
