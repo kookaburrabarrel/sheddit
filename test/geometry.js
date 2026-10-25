@@ -626,20 +626,28 @@ const overlaps = (a, b) =>
       target.append(host);
       let paras = [''];
       let hasSelection = false;
+      let whole = false;
       document.addEventListener('selectionchange', () => {
-        hasSelection = editor.contains(document.getSelection()?.anchorNode) ||
-          document.getSelection()?.anchorNode === editor;
+        const sel = document.getSelection();
+        hasSelection = editor.contains(sel?.anchorNode) || sel?.anchorNode === editor;
+        whole = hasSelection && !sel.isCollapsed;
       });
+      // Lexical renders an empty paragraph with a <br>; a bare <p></p> is not a caret
+      // position Chrome will type into.
       const commit = () => queueMicrotask(() => {
-        editor.replaceChildren(...paras.map(t => Object.assign(document.createElement('p'), { textContent: t })));
+        editor.replaceChildren(...paras.map(t => {
+          const p = document.createElement('p');
+          if (t) p.textContent = t; else p.append(document.createElement('br'));
+          return p;
+        }));
       });
-      let replace = true;
       // Chrome fires no beforeinput for execCommand; Lexical reads the input, reverts the
-      // browser's DOM write, and renders its own model a microtask later.
+      // browser's DOM write, and renders its own model a microtask later. Typing over a
+      // selection of everything replaces what was there.
       editor.addEventListener('input', (e) => {
         editor.replaceChildren();
         if (hasSelection && e.inputType === 'insertText') {
-          if (replace) { paras = ['']; replace = false; }
+          if (whole) { paras = ['']; whole = false; }
           paras[paras.length - 1] += e.data;
         }
         commit();
@@ -650,9 +658,10 @@ const overlaps = (a, b) =>
         if (hasSelection) paras.push('');
         commit();
       });
-      editor.addEventListener('focus', () => { replace = true; });
       const sent = [];
-      submit.addEventListener('click', (e) => { e.preventDefault(); sent.push(paras.join('\n')); });
+      // Reddit empties its editor once a post is accepted; the second save below types
+      // into that emptied editor, the shape a reader's next reply meets.
+      submit.addEventListener('click', (e) => { e.preventDefault(); sent.push(paras.join('\n')); paras = ['']; commit(); });
       Object.assign(SHD.account.timings, { pollMs: 10, arriveWaitMs: 30 });
       const single = await SHD.account.compose(target, 'A single line.', 'comment');
       const multi = await SHD.account.compose(target, 'First.\n\nSecond.', 'comment');

@@ -31,6 +31,24 @@ so Sheddit typed before the editor was ready and then read it as empty, called t
 failed, and fell back to the handoff — by which point the text had landed. Insertion now
 yields for both before judging the result.
 
+Three more misses on the same path, found signed in on a live thread:
+
+- **The top-level box never opened.** Reddit wraps it in a loader that keeps a
+  placeholder trigger which is never shown, and Sheddit stopped at that one. It now opens
+  the box through the visible trigger, by focusing the composer host that owns it, which
+  is what the live box responds to.
+- **Reddit ignored the submit.** A click on Reddit's Comment button posts nothing while
+  its composer is `visibility: hidden` under suppression. The composer is now made visible,
+  though still transparent and unclickable to the reader, from opening until the comment
+  arrives.
+- **Replies to your own comments missed the reply box.** Each of your own comments
+  carries Reddit's hidden *edit* composer, and that was taken for the reply box, so Reply
+  was never clicked. Edit composers are now excluded.
+
+Measured after the fixes: top-level comments, replies to your own comments and replies to
+other people all post from Sheddit's box in about a second. Reddit can still refuse a
+post sent seconds after the last one, and that still hands off with the draft kept.
+
 ---
 
 ## 0.62.0

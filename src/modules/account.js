@@ -402,7 +402,13 @@ SHD.account = (() => {
        goes (security review, 2026-09-05). */
     const scope = kind === 'comment' ? target : (document.querySelector(C.MAIN) || document);
     const all = [...scope.querySelectorAll(C.COMPOSER.host)];
-    const mine = all.filter(el => !except.has(el) && (kind === 'comment'
+    /* Reddit keeps a hidden EDIT composer inside each of the reader's own comments (and a
+       loader around it). It is not a reply box; taking it as one skipped the Reply click
+       and waited on a box that never opens — measured live, every reply to one's own
+       comment ended at `composer`. */
+    const edit = C.NATIVE.commentEditHost;
+    const mine = all.filter(el => !except.has(el) &&
+      !el.closest(edit) && !el.querySelector(edit) && (kind === 'comment'
       ? el.closest(C.COMMENT) === target
       : !el.closest(C.COMMENT)));
     return mine[0] || null;
@@ -546,19 +552,42 @@ SHD.account = (() => {
    * focus() of its own. Both are tried; neither is trusted, which is why the caller then
    * WAITS for a visible submit control rather than assuming. A composer that is already
    * open has no visible trigger and this is a no-op.
+   *
+   * THE FIRST TRIGGER IS NOT THE ONE ON SCREEN. findHost() can return the outer
+   * shreddit-async-loader, whose light DOM keeps a placeholder trigger that is never
+   * slotted — so the first match has no box, and this used to stop there without trying
+   * anything (measured live, signed in, 2026-10-25: every top-level save reported
+   * `composer`). The visible trigger is taken instead, and the composer host that owns it
+   * is focused as well as the one we were handed: focusing comment-composer-host is what
+   * opened the live box; focusing the loader does nothing.
    */
   function openComposer(host) {
-    const trigger = shown(SHD.dom.deepQuery(host, C.COMPOSER.trigger));
+    const trigger = deepAll(host, C.COMPOSER.trigger).find(shown);
     if (!trigger) return false;
+    const owner = trigger.parentElement?.closest(C.COMPOSER.host);
     const editing = trigger.classList.contains('shd-native-editing');
     trigger.classList.add('shd-native-editing');
     try {
       try { trigger.shadowRoot?.querySelector('textarea')?.focus(); } catch { /* best effort */ }
-      try { if (typeof host.focus === 'function') host.focus(); } catch { /* best effort */ }
+      for (const el of new Set([owner, host])) {
+        try { if (typeof el?.focus === 'function') el.focus(); } catch { /* best effort */ }
+      }
     } finally {
       if (!editing) trigger.classList.remove('shd-native-editing');
     }
     return true;
+  }
+
+  /** Every match under `root`, through open shadow roots, in document order. */
+  function deepAll(root, selector) {
+    const out = [];
+    const walk = (r) => {
+      out.push(...r.querySelectorAll(selector));
+      if (r.shadowRoot) walk(r.shadowRoot);
+      for (const el of r.querySelectorAll('*')) if (el.shadowRoot) walk(el.shadowRoot);
+    };
+    if (root && typeof root.querySelectorAll === 'function') walk(root);
+    return out;
   }
 
   /** The focused element THROUGH shadow roots — activeElement stops at each host. */
@@ -710,52 +739,64 @@ SHD.account = (() => {
        trigger, and what opens it is focus on the textarea in the trigger's shadow root.
        So: if the trigger is the visible thing, open it; then wait for a submit control the
        reader could see, which is the one discriminator the markup has not moved under. */
-    if (!live()) return cancelled();
-    openComposer(host);
-    const opened = await waitFor(
-      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs, live);
-    if (!live()) return cancelled();
-    if (!opened) return { ok: false, step: 'composer', host };
-    const editor = await waitFor(
-      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.editor)), timings.composeWaitMs, live);
-    if (!live()) return cancelled();
-    if (!editor) return { ok: false, step: 'editor', host };
-    const inserted = await insertText(editor, text, live);
-    if (!live()) return cancelled();
-    if (!inserted) return { ok: false, step: 'insert', host };
-    // Re-resolved rather than reusing `opened`: an editor that has just taken its first
-    // text is exactly when a composer swaps a disabled button for a live one.
-    const submit = SHD.dom.deepQuery(host, C.COMPOSER.submit) || opened;
-    const seen = new Set([...document.querySelectorAll(C.COMMENT)]
-      .map(n => n.getAttribute(C.COMMENT_ATTR.id)));
-    const sentAt = Date.now();
-    if (!live()) return cancelled();
-    onSubmit();
-    if (!live()) return cancelled();
-    submit.click();
-    /* ONLY A COMMENT THAT APPEARED COUNTS AS POSTED. Nothing weaker.
-       This used to accept two other signals as well — the composer disappearing, or the
-       editor reading empty — on the reasoning that both are what Reddit does once a post
-       succeeds. They are. They are also exactly what an editor looks like when the insert
-       never took: measured live, a single-line draft passed landed(), submit was pressed
-       on an editor Reddit had no model for, Reddit posted nothing, and the editor then
-       read empty BECAUSE nothing had ever been accepted into it. That emptiness was taken
-       as arrival. The form closed on it and the draft went with it — the one failure this
-       file promises never to produce, reached by way of the check meant to prevent it.
-       An editor that was never filled is indistinguishable from one Reddit cleared after
-       a successful post, so neither can carry the arrival signal. A new, recent comment
-       by this reader under the right parent with matching text can. Ambiguous arrivals
-       go the safe way: `arrival`, reveal-only, draft kept, and a sentence saying to check
-       the thread before sending it again. */
-    const arrived = await waitFor(() => commentsUnder(target, kind).find(n => {
-      const id = n.getAttribute(C.COMMENT_ATTR.id);
-      const body = [...n.querySelectorAll(C.COMMENT_BODY)].find(b => b.closest(C.COMMENT) === n);
-      return id && !seen.has(id) &&
-        Date.parse(n.getAttribute(C.COMMENT_ATTR.created)) >= sentAt - 2000 &&
-        body && norm(body.textContent) === norm(text);
-    }), timings.arriveWaitMs, live);
-    if (!live()) return cancelled();
-    return arrived ? { ok: true, step: 'done', host } : { ok: false, step: 'arrival', host };
+    /* A HIDDEN COMPOSER DOES NOT SUBMIT. Measured live, signed in, 2026-10-25: the same
+       script click on Reddit's Comment button posts when the composer is visible and does
+       nothing at all — no request — under suppression's `visibility: hidden`, even seconds
+       after the text landed. Visible is enough: still opacity 0 and pointer-events none
+       from the suppressed body child, so the reader sees nothing and stays on our layout.
+       Held from opening through arrival, since Reddit's submit finishes asynchronously. */
+    const unhidden = !host.classList.contains('shd-native-editing');
+    host.classList.add('shd-native-editing');
+    try {
+      if (!live()) return cancelled();
+      openComposer(host);
+      const opened = await waitFor(
+        () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs, live);
+      if (!live()) return cancelled();
+      if (!opened) return { ok: false, step: 'composer', host };
+      const editor = await waitFor(
+        () => shown(SHD.dom.deepQuery(host, C.COMPOSER.editor)), timings.composeWaitMs, live);
+      if (!live()) return cancelled();
+      if (!editor) return { ok: false, step: 'editor', host };
+      const inserted = await insertText(editor, text, live);
+      if (!live()) return cancelled();
+      if (!inserted) return { ok: false, step: 'insert', host };
+      // Re-resolved rather than reusing `opened`: an editor that has just taken its first
+      // text is exactly when a composer swaps a disabled button for a live one.
+      const submit = SHD.dom.deepQuery(host, C.COMPOSER.submit) || opened;
+      const seen = new Set([...document.querySelectorAll(C.COMMENT)]
+        .map(n => n.getAttribute(C.COMMENT_ATTR.id)));
+      const sentAt = Date.now();
+      if (!live()) return cancelled();
+      onSubmit();
+      if (!live()) return cancelled();
+      submit.click();
+      /* ONLY A COMMENT THAT APPEARED COUNTS AS POSTED. Nothing weaker.
+         This used to accept two other signals as well — the composer disappearing, or the
+         editor reading empty — on the reasoning that both are what Reddit does once a post
+         succeeds. They are. They are also exactly what an editor looks like when the insert
+         never took: measured live, a single-line draft passed landed(), submit was pressed
+         on an editor Reddit had no model for, Reddit posted nothing, and the editor then
+         read empty BECAUSE nothing had ever been accepted into it. That emptiness was taken
+         as arrival. The form closed on it and the draft went with it — the one failure this
+         file promises never to produce, reached by way of the check meant to prevent it.
+         An editor that was never filled is indistinguishable from one Reddit cleared after
+         a successful post, so neither can carry the arrival signal. A new, recent comment
+         by this reader under the right parent with matching text can. Ambiguous arrivals
+         go the safe way: `arrival`, reveal-only, draft kept, and a sentence saying to check
+         the thread before sending it again. */
+      const arrived = await waitFor(() => commentsUnder(target, kind).find(n => {
+        const id = n.getAttribute(C.COMMENT_ATTR.id);
+        const body = [...n.querySelectorAll(C.COMMENT_BODY)].find(b => b.closest(C.COMMENT) === n);
+        return id && !seen.has(id) &&
+          Date.parse(n.getAttribute(C.COMMENT_ATTR.created)) >= sentAt - 2000 &&
+          body && norm(body.textContent) === norm(text);
+      }), timings.arriveWaitMs, live);
+      if (!live()) return cancelled();
+      return arrived ? { ok: true, step: 'done', host } : { ok: false, step: 'arrival', host };
+    } finally {
+      if (unhidden) host.classList.remove('shd-native-editing');
+    }
   }
 
   /**

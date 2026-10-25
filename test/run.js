@@ -6820,6 +6820,13 @@ async function boot(html, url, setup) {
     submit.textContent = 'Comment';
     submit.addEventListener('click', (e) => {
       e.preventDefault();
+      /* `hiddenSubmit` is the live submit that does nothing while the composer is
+         visibility:hidden under suppression — only `.shd-native-editing` makes it visible
+         (measured 2026-10-25: no request at all, seconds after the text landed). */
+      if (opts.hiddenSubmit && !composer.closest('.shd-native-editing')) {
+        state.refused = (state.refused || 0) + 1;
+        return;
+      }
       state.clicks.submit++;
       const text = editor.tagName === 'TEXTAREA' ? editor.value : editor.textContent;
       state.received.push(text);
@@ -6875,18 +6882,33 @@ async function boot(html, url, setup) {
       const form = doc.createElement('faceplate-form');
       form.setAttribute('hidden', '');
       form.append(editor, submit);
-      if (opts.opens) {
-        ta.addEventListener('focus', () => setTimeout(() => {
-          form.removeAttribute('hidden');
-          trigger.setAttribute('hidden', '');
-          state.expanded = (state.expanded || 0) + 1;
-        }, 30));
-      }
+      const open = () => setTimeout(() => {
+        form.removeAttribute('hidden');
+        trigger.setAttribute('hidden', '');
+        state.expanded = (state.expanded || 0) + 1;
+      }, 30);
+      /* `opens: 'host'` is the live box of 2026-10-25: focusing the trigger's textarea does
+         nothing; focusing comment-composer-host is what expands it. */
+      if (opts.opens === 'host') composer.focus = open;
+      else if (opts.opens) ta.addEventListener('focus', open);
       composer.append(trigger, form);
     } else {
       composer.append(editor, submit);
     }
-    (isComment ? source : doc.querySelector('#main-content')).appendChild(composer);
+    let mountAt = composer;
+    /* `loader` is the async loader live Reddit wraps the box in: its light DOM keeps a
+       placeholder trigger that is never slotted (no box), ahead of the real one. */
+    if (opts.loader) {
+      mountAt = doc.createElement('shreddit-async-loader');
+      mountAt.setAttribute('bundlename', 'comment_composer');
+      const placeholder = doc.createElement('faceplate-textarea-input');
+      placeholder.setAttribute('data-testid', 'trigger-button');
+      placeholder.setAttribute('hidden', '');
+      placeholder.attachShadow({ mode: 'open' }).appendChild(doc.createElement('textarea'));
+      composer.setAttribute('slot', 'ready');
+      mountAt.append(placeholder, composer);
+    }
+    (isComment ? source : doc.querySelector('#main-content')).appendChild(mountAt);
     state.composer = composer;
     state.editor = editor;
     return composer;
@@ -8716,6 +8738,56 @@ async function boot(html, url, setup) {
     const posted = doc.querySelector('#shd-root .thing[data-fullname="t1_new_top"]');
     check('...and the new comment renders at the top level',
       rendered && posted.dataset.depth === '0' && posted.parentElement.classList.contains('nestedlisting'));
+  }
+  {
+    /* THE LIVE TOP-LEVEL BOX, 2026-10-25, signed in: every save ended on Reddit's own page
+       with the draft re-typed into its box. Three things in a row, each modelled here:
+       the loader's never-slotted placeholder trigger came first and stopped the open; only
+       focus on comment-composer-host expands the box; and a submit under suppression's
+       visibility:hidden posts nothing. */
+    const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const box = doc.querySelector('#shd-root .shd-commentarea-head .shd-commentbox .shd-reply-form');
+    const state = { clicks: { submit: 0 }, received: [] };
+    mountComposer(doc, doc.querySelector('shreddit-post'),
+      { composer: 'collapsed', opens: 'host', loader: true, hiddenSubmit: true, newId: 't1_new_loader' }, state);
+    box.querySelector('textarea').value = 'Through the loader.';
+    box.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('a hidden placeholder trigger in the loader is passed over and the composer host is focused open',
+      await waitFor(() => state.expanded === 1, { timeout: 2000 }), `expanded=${state.expanded}`);
+    check('...the submit is pressed while the composer is visible, so Reddit takes it',
+      await waitFor(() => state.clicks.submit === 1, { timeout: 2000 }) && !state.refused &&
+      state.received[0] === 'Through the loader.', `refused=${state.refused} submits=${state.clicks.submit}`);
+    check('...and the comment posts from Sheddit\'s box, never the passthrough page',
+      await waitFor(() => !doc.querySelector('.shd-commentbox .shd-reply-form'), { timeout: 2000 }) &&
+      !doc.documentElement.classList.contains('shd-passthrough-active'));
+    check('...and the composer is hidden again afterwards',
+      !doc.querySelector('comment-composer-host.shd-native-editing'));
+  }
+  {
+    /* THE READER'S OWN COMMENT carries a hidden EDIT composer (inside a loader). It is not
+       a reply box: taken for one, the Reply click was skipped and every reply to one's own
+       comment ended at `composer`, on Reddit's page (measured live, 2026-10-25). */
+    const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const own = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const loader = doc.createElement('shreddit-async-loader');
+    loader.setAttribute('bundlename', 'comment_composer');
+    loader.setAttribute('slot', 'comment-t1_c0-edit');
+    loader.innerHTML = '<comment-composer-host edit-mode><textarea hidden></textarea></comment-composer-host>';
+    own.appendChild(loader);
+    const state = installNativeAccount(window, doc, own, { reply: true, composer: 'textarea' });
+    click(window, doc.querySelector('#shd-root .thing[data-fullname="t1_c0"] a.reply'));
+    const form = doc.querySelector('#shd-root .thing[data-fullname="t1_c0"] > .entry > .shd-reply-form');
+    form.querySelector('textarea').value = 'Replying to myself.';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    check('an own comment\'s hidden edit composer is not taken for the reply box — Reply is clicked',
+      await waitFor(() => state.clicks.reply === 1, { timeout: 1500 }), `reply clicks=${state.clicks.reply}`);
+    check('...and the reply posts with no handoff',
+      await waitFor(() => state.clicks.submit === 1, { timeout: 1500 }) &&
+      state.received[0] === 'Replying to myself.' &&
+      !doc.documentElement.classList.contains('shd-passthrough-active'),
+      JSON.stringify(state.received));
   }
 
   console.log('\n\x1b[1mPOSTING — THE SIDEBAR\'S DOORS TO REDDIT\'S COMPOSER\x1b[0m');
