@@ -339,6 +339,19 @@ SHD.C = {
    */
   POST_BODY: 'div[slot="text-body"]',
 
+  /* Reddit's "Read more" truncation of a long POST_BODY — presentation state, not content.
+     Measured live 2026-10-25 (r/bald q0577m, served collapsed on a revisit): the host
+     `shreddit-post-text-body` lists the clamp classes in `text-body-height-class`, the same
+     tokens sit on the body's `.md`, and an `#<id>-overflow-cover` gradient plus an
+     `#<id>-read-more-button` follow it. The full text is already in the DOM. The button's
+     click listener is bound to the native element itself (CDP getEventListeners) and fires
+     `read-more-click` on the host, which strips the classes from the NATIVE `.md` only — so
+     a cloned button is dead. The clone is pre-expanded instead; see watchPostBody(). */
+  POST_BODY_CLAMP: {
+    classAttr: 'text-body-height-class',
+    chrome: '[id$="-overflow-cover"], [id$="-read-more-button"]'
+  },
+
   /* A post Reddit has taken down, which we rendered as an ordinary one.
    *
    * Reported from live use: a deleted thread came out with a `[deleted]` author and a

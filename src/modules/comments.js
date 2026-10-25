@@ -48,6 +48,25 @@ SHD.comments = (() => {
   }
   SHD.gate.onStop(stopPostBodyWatch);
 
+  /**
+   * Show a cloned post body in full. Reddit collapses a long selftext behind "Read more",
+   * whose listener lives on the native button and never comes with a clone (C.POST_BODY_CLAMP).
+   * The text is all there, only clipped, so the clamp classes the host names come off and
+   * the cover and button go. Without the host's list nothing is touched: removing the
+   * button while the clip stays would leave the rest of the post unreachable.
+   */
+  function unclamp(copy, source) {
+    const K = C.POST_BODY_CLAMP;
+    const tokens = (source.closest(`[${K.classAttr}]`)?.getAttribute(K.classAttr) || '')
+      .split(/\s+/).filter(Boolean);
+    if (!copy || !tokens.length) return copy;
+    for (const el of [copy, ...copy.querySelectorAll('[class]')]) {
+      if (tokens.every(t => el.classList.contains(t))) el.classList.remove(...tokens);
+    }
+    copy.querySelectorAll(K.chrome).forEach(n => n.remove());
+    return copy;
+  }
+
   function watchPostBody(row, source) {
     stopPostBodyWatch();
     let previous = null;
@@ -63,7 +82,7 @@ SHD.comments = (() => {
         const notice = row.querySelector('.shd-removed-notice');
         if (notice) notice.before(box); else row.querySelector('.entry').appendChild(box);
       }
-      box.replaceChildren(SHD.dom.adoptBody(body));
+      box.replaceChildren(unclamp(SHD.dom.adoptBody(body), body));
     };
     sync();
     // A post can be consumed before its slotted body, or before the body finishes streaming.
