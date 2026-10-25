@@ -20,7 +20,7 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
-## Unreleased
+## 0.63.0
 
 ### Fixed — a reply posts from Sheddit's own save button, first time (**never worked**)
 
@@ -50,6 +50,18 @@ other people all post from Sheddit's box in about a second. Reddit can still ref
 post sent seconds after the last one, and that still hands off with the draft kept.
 
 ---
+
+## 0.62.1
+
+### Fixed — "Read more" on a long post did nothing
+
+When Reddit serves a long selftext collapsed (seen on a revisit), the post's text is all
+in the page but clipped, with a fade and a "Read more" button. Sheddit clones that body
+into the comments page, and a clone does not carry event listeners — Reddit binds the
+button's handler to its own element, which unclips only its own copy. So the cloned
+button was dead and the rest of the post unreachable. The clone is now expanded up front:
+the clip classes the host lists in `text-body-height-class` come off, and the cover and
+button are dropped. Measured live on r/bald `q0577m`.
 
 ## 0.62.0
 

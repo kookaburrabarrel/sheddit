@@ -2493,6 +2493,16 @@ the way a question got settled is usually more useful than the answer.
     and a strip built on guessed selectors is how pages get eaten. Needs one capture:
     the collapsed selftext's subtree skeleton (tags + classes, no text), from a thread
     Reddit happens to serve collapsed. Until then, recorded rather than guessed at.
+    **Captured and settled 2026-10-25** (r/bald q0577m, collapsed on a revisit): the cloned
+    "Read more" no longer worked at all. Reddit binds the listener to the native button
+    itself (CDP `getEventListeners`: `click` on the button, `read-more-click` on the
+    `shreddit-post-text-body` host). The host then strips the clamp classes from the NATIVE
+    `.md`, so a clone's button is dead, and the body watcher ignores class changes, so the
+    native expansion never reached the clone. The full text is in the DOM either way. The
+    host names its clamp tokens in `text-body-height-class`, so `unclamp()` in comments.js
+    removes exactly those from the clone and drops the `#…-overflow-cover` and
+    `#…-read-more-button` (`C.POST_BODY_CLAMP`). It touches nothing when that attribute is
+    absent.
 
 11. **Everything the account layer stands on (0.34.0).** Five contracts, all candidates,
     none measured against a signed-in reddit.com: `C.SESSION.loggedIn` (which of the

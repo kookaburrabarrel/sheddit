@@ -785,6 +785,40 @@ async function boot(html, url, setup) {
     }
   }
 
+  console.log('\n\x1b[1mCOMMENTS PAGE — A LONG POST REDDIT SERVED COLLAPSED\x1b[0m');
+  {
+    // The collapsed shape, measured live 2026-10-25 (r/bald q0577m on a revisit).
+    const CLAMP = 'max-h-[253px] overflow-hidden s:max-h-[318px] xl:max-h-[452px]';
+    const { doc } = await boot(commentsPage({ selfPost: true }),
+      'https://www.reddit.com' + SELF_POST.permalink, win => {
+        const d = win.document;
+        const body = d.querySelector('shreddit-post [slot="text-body"]');
+        const host = d.createElement('shreddit-post-text-body');
+        host.setAttribute('slot', 'text-body');
+        host.setAttribute('text-body-height-class', CLAMP);
+        body.replaceWith(host);
+        host.appendChild(body);
+        const md = body.querySelector('.md');
+        md.id = 't3_x-post-rtjson-content';
+        md.className = `md ${CLAMP} text-14-scalable`;
+        md.insertAdjacentHTML('afterend',
+          '<div id="t3_x-overflow-cover" class="h-[66px] mt-[-66px] bg-gradient-to-t"></div>' +
+          '<button id="t3_x-read-more-button" type="button"><span>Read more</span></button>');
+      });
+    const box = doc.querySelector('.shd-selfpost .shd-selftext');
+    const md = box?.querySelector('.md');
+    check('a collapsed post body is cloned expanded — no clamp classes',
+      !!md && !CLAMP.split(' ').some(t => md.classList.contains(t)), md?.className);
+    check('...its own classes survive the unclamp',
+      !!md?.classList.contains('text-14-scalable'));
+    check('...no dead "Read more" button or fade cover in the clone',
+      !box.querySelector('[id$="-read-more-button"], [id$="-overflow-cover"]'));
+    check('...the whole text is there', /Tell us below/.test(box?.textContent || ''));
+    check('...Reddit\'s own collapsed body is left alone',
+      !!doc.querySelector('shreddit-post [id$="-read-more-button"]') &&
+      doc.querySelector('shreddit-post .md').classList.contains('max-h-[253px]'));
+  }
+
   /* Reported: a deleted thread rendered as an ordinary post — a `[deleted]` author, a body,
      and nothing saying it was gone, while Reddit's own page says so plainly. Removal is not
      an attribute (the one idea's third consequence, after selftext and images), so the
