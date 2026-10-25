@@ -1,6 +1,6 @@
 {
-  "version": "0.62.1",
+  "version": "0.63.0",
   "released": "2026-10-25",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.62.1 fixes a long post's \"Read more\" doing nothing on the comments page: when Reddit serves the post text collapsed, Sheddit now shows it in full. Includes user flair from 0.62.0 and the post content and logout fixes from 0.61.0. Signed-in controls remain experimental."
+  "notes": "0.63.0 is a major fix for signed-in replies and comments: Sheddit's save button now posts them in one press, instead of opening Reddit's own page with the text re-typed into its box and asking you to post again. Includes the long-post Read more fix from 0.62.1, user flair from 0.62.0 and the post content and logout fixes from 0.61.0. Signed-in controls remain experimental."
 }

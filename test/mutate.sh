@@ -170,6 +170,28 @@ mutate "a temporary missing header is called logout success" run \
                          "      const gone = await waitFor(() => { SHD.session.reset(); return !SHD.session.loggedIn(); },"
 # --- end 0.61 ---
 
+# --- 0.63: replies post from Sheddit's box, not a second press on Reddit's page ---
+mutate "insertion judges Lexical before selectionchange lands" geometry \
+  src/modules/account.js "             the edit — measured against real Lexical in Chromium: execCommand returned
+             true and nothing was ever inserted. One macrotask lets the event through. */
+          await new Promise(r => setTimeout(r, 0));" \
+                         "             the edit — measured against real Lexical in Chromium: execCommand returned
+             true and nothing was ever inserted. One macrotask lets the event through. */"
+
+mutate "the loader's hidden placeholder trigger stops the open" run \
+  src/modules/account.js "    const trigger = deepAll(host, C.COMPOSER.trigger).find(shown);" \
+                         "    const trigger = shown(SHD.dom.deepQuery(host, C.COMPOSER.trigger));"
+
+mutate "Reddit's submit is pressed while its composer is hidden" run \
+  src/modules/account.js "    const unhidden = !host.classList.contains('shd-native-editing');
+    host.classList.add('shd-native-editing');" \
+                         "    const unhidden = false;"
+
+mutate "an own comment's edit composer is taken for the reply box" run \
+  src/modules/account.js "      !el.closest(edit) && !el.querySelector(edit) && (kind === 'comment'" \
+                         "      (kind === 'comment'"
+# --- end 0.63 ---
+
 mutate "sidebar padding+border escape the reserved gutter" geometry \
   src/styles/old-reddit.css '  box-sizing: border-box;          /* keeps the margin box exactly --shd-gutter */
 ' ''
