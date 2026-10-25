@@ -1,6 +1,6 @@
 {
-  "version": "0.62.0",
-  "released": "2026-10-24",
+  "version": "0.62.1",
+  "released": "2026-10-25",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.62.0 shows user flair: the pill beside a username on comments and on the post, with flair emoji. Signed-in readers only: Reddit no longer sends user flair to logged-out visitors. Sheddit had never read Reddit's author flair, so every username rendered bare. Includes the post content and logout fixes from 0.61.0. Signed-in controls remain experimental."
+  "notes": "0.62.1 fixes a long post's \"Read more\" doing nothing on the comments page: when Reddit serves the post text collapsed, Sheddit now shows it in full. Includes user flair from 0.62.0 and the post content and logout fixes from 0.61.0. Signed-in controls remain experimental."
 }
