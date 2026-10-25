@@ -605,6 +605,66 @@ const overlaps = (a, b) =>
     await page.close();
   }
   {
+    /* Lexical's two asynchronies, which the editor above does not have: it learns the
+       selection from `selectionchange` (an edit before that is dropped), and it cancels
+       the browser's write and renders its own DOM in a microtask (so it reads empty right
+       after execCommand). Checking synchronously sent every live reply to the handoff. */
+    const { page, pageErrors } = await open(browser, origin, PATHS.comments, '#shd-root .thing.comment');
+    const result = await page.evaluate(async () => {
+      const target = document.querySelector('shreddit-comment');
+      const app = target.closest('shreddit-app');
+      app.setAttribute('user-logged-in', 'true');
+      document.querySelectorAll(SHD.C.SESSION.loggedOut).forEach(n => n.remove());
+      SHD.session.reset();
+      const host = document.createElement('comment-composer-host');
+      const editor = document.createElement('div');
+      editor.contentEditable = 'true';
+      editor.setAttribute('data-lexical-editor', 'true');
+      const submit = document.createElement('button');
+      submit.type = 'submit';
+      host.append(editor, submit);
+      target.append(host);
+      let paras = [''];
+      let hasSelection = false;
+      document.addEventListener('selectionchange', () => {
+        hasSelection = editor.contains(document.getSelection()?.anchorNode) ||
+          document.getSelection()?.anchorNode === editor;
+      });
+      const commit = () => queueMicrotask(() => {
+        editor.replaceChildren(...paras.map(t => Object.assign(document.createElement('p'), { textContent: t })));
+      });
+      let replace = true;
+      // Chrome fires no beforeinput for execCommand; Lexical reads the input, reverts the
+      // browser's DOM write, and renders its own model a microtask later.
+      editor.addEventListener('input', (e) => {
+        editor.replaceChildren();
+        if (hasSelection && e.inputType === 'insertText') {
+          if (replace) { paras = ['']; replace = false; }
+          paras[paras.length - 1] += e.data;
+        }
+        commit();
+      });
+      editor.addEventListener('beforeinput', (e) => {
+        if (e.inputType !== 'insertParagraph') return;
+        e.preventDefault();
+        if (hasSelection) paras.push('');
+        commit();
+      });
+      editor.addEventListener('focus', () => { replace = true; });
+      const sent = [];
+      submit.addEventListener('click', (e) => { e.preventDefault(); sent.push(paras.join('\n')); });
+      Object.assign(SHD.account.timings, { pollMs: 10, arriveWaitMs: 30 });
+      const single = await SHD.account.compose(target, 'A single line.', 'comment');
+      const multi = await SHD.account.compose(target, 'First.\n\nSecond.', 'comment');
+      return { single: single.step, multi: multi.step, sent };
+    });
+    check('an editor that commits asynchronously is submitted from Sheddit\'s save, not handed off',
+      result.single === 'arrival' && result.multi === 'arrival' &&
+      result.sent[0] === 'A single line.' && result.sent[1] === 'First.\nSecond.', JSON.stringify(result));
+    check('no page errors during asynchronous native insertion', pageErrors.length === 0, pageErrors.join(' | '));
+    await page.close();
+  }
+  {
     const { page, pageErrors } = await open(browser, origin, PATHS.comments, '#shd-root .thing.comment');
     await page.setViewport({ width: 1280, height: 900 });
 

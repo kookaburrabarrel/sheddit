@@ -20,6 +20,19 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased
+
+### Fixed — a reply posts from Sheddit's own save button, first time (**never worked**)
+
+Saving a reply or comment opened Reddit's own page with the text already in its box, and
+the reader had to press post a second time. Reddit's Lexical editor learns the selection
+from the asynchronous `selectionchange` event and renders typed text a microtask later,
+so Sheddit typed before the editor was ready and then read it as empty, called the insert
+failed, and fell back to the handoff — by which point the text had landed. Insertion now
+yields for both before judging the result.
+
+---
+
 ## 0.62.0
 
 ### Added — user flair (**never worked**)

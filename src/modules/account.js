@@ -611,6 +611,11 @@ SHD.account = (() => {
           range.selectNodeContents(editor);
           selection.removeAllRanges();
           selection.addRange(range);
+          /* LEXICAL READS THE SELECTION FROM `selectionchange`, WHICH IS ASYNC. Typed
+             before that event lands, a fresh editor has no selection of its own and drops
+             the edit — measured against real Lexical in Chromium: execCommand returned
+             true and nothing was ever inserted. One macrotask lets the event through. */
+          await new Promise(r => setTimeout(r, 0));
           done = true;
           const paragraphs = text.split(/\n\s*\n/);
           for (const [i, para] of paragraphs.entries()) {
@@ -626,6 +631,12 @@ SHD.account = (() => {
             }
           }
         } catch { done = false; }
+        /* AND IT WRITES ITS DOM LATER. Lexical takes the edit from the input event, reverts
+           the browser's write, and renders its own model in a microtask — so straight after
+           execCommand the editor reads EMPTY even though the edit was accepted. Checked synchronously, every
+           Lexical insert looked failed, took the refusal below, and sent a reply whose
+           text was already in Reddit's box into the handoff: the "press post twice" bug. */
+        if (done) await new Promise(r => setTimeout(r, 0));
       }
       /* Plain contenteditables accept a value by reference. Lexical must accept the
          browser edit instead; leaving plausible DOM text behind could conceal failure. */
