@@ -1433,9 +1433,19 @@ SHD.account = (() => {
     return li;
   }
 
+  /** Drop buttons that can no longer do anything on a deleted row. Only this row's own
+   *  button list: a comment's replies keep theirs. */
+  function dropDeadButtons(thing, sel) {
+    for (const ul of thing.querySelectorAll('ul.flat-list.buttons')) {
+      if (ul.closest('.thing') !== thing) continue;
+      for (const a of ul.querySelectorAll(sel)) a.closest('li')?.remove();
+    }
+  }
+
   /** Our row for a comment the reader just deleted, drawn the way old reddit drew one. */
   function markCommentDeleted(thing) {
     thing.classList.add('deleted');
+    dropDeadButtons(thing, 'a.edit, a.reply');
     const author = thing.querySelector(':scope > .entry > .tagline > .author');
     author?.replaceWith(h('em.author', { text: '[deleted]' }));
     thing.querySelector(':scope > .entry > .usertext > .usertext-body')
@@ -1492,6 +1502,7 @@ SHD.account = (() => {
       }
       for (const r of document.querySelectorAll(`#shd-root ${SHD.dom.rowSel(m.id)}`)) {
         r.classList.add('shd-deleted');
+        dropDeadButtons(r, 'a.edit');
         r.querySelector('.tagline .author')?.replaceWith(h('em.author', { text: '[deleted]' }));
       }
       return true;

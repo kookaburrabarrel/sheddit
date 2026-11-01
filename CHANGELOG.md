@@ -20,6 +20,14 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.64.1
+
+### Fixed — a deleted row kept links that did nothing
+
+After you deleted a comment or post, its row still offered **edit**, and a deleted comment
+still offered **reply**. Both are now dropped from that row only; the replies under a
+deleted comment keep their own links.
+
 ## 0.64.0
 
 ### New — delete your own comments and posts

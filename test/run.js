@@ -7202,6 +7202,8 @@ async function boot(html, url, setup) {
       !!row.querySelector('li.shd-delete a.delete') && st.opens === 0 && st.deletes === 0);
 
     click(window, row.querySelector('a.delete'));
+    // A reply under the deleted comment must keep its own buttons.
+    row.querySelector(':scope > .child').prepend(doc.querySelector('#shd-root .thing[data-fullname="t1_c1"]'));
     click(window, row.querySelector('li.shd-delete a.yes'));
     check('"yes" opens the owned menu, clicks the inner item, and confirms Reddit\'s dialog',
       await waitFor(() => st.deletes === 1) && st.opens === 1 && st.divClicks === 1,
@@ -7211,6 +7213,15 @@ async function boot(html, url, setup) {
         row.querySelector(':scope > .entry > .usertext .usertext-body').textContent === '[deleted]' &&
         row.querySelector(':scope > .entry > .tagline > .author').textContent === '[deleted]'));
     check('...and the dialog is gone', !doc.querySelector('#comment-deletion-dialog'));
+    const ownButtons = () => [...row.querySelectorAll(':scope > .entry ul.flat-list.buttons > li')]
+      .map(li => li.textContent.trim());
+    check('a deleted comment drops reply and edit, keeping permalink',
+      !ownButtons().some(t => t === 'reply' || t === 'edit') && ownButtons().includes('permalink'),
+      JSON.stringify(ownButtons()));
+    const childReplies = row.querySelectorAll(':scope > .child .thing a.reply').length;
+    check('...and its replies keep their own reply links',
+      childReplies > 0 && childReplies === row.querySelectorAll(':scope > .child .thing').length,
+      String(childReplies));
 
     // No menu reachable: say so, change nothing.
     const { doc: d2, window: w2 } = await boot(page(), COMMENTS_URL, loggedInSettings());
@@ -7295,6 +7306,7 @@ async function boot(html, url, setup) {
     check('"yes" clicks Reddit\'s delete and its confirm, and marks the row',
       await waitFor(() => st.deletes === 1 && prow().classList.contains('shd-deleted') &&
         /deleted/.test(prow().querySelector('li.shd-delete').textContent)));
+    check('a deleted post drops its edit link', !prow().querySelector('ul.buttons a.edit'));
 
     // Logged out, hide stays the local row hide it always was.
     const { doc: od, window: ow } = await boot(commentsPage({ selfPost: true }), SELF_URL);

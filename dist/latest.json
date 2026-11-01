@@ -1,6 +1,6 @@
 {
-  "version": "0.64.0",
+  "version": "0.64.1",
   "released": "2026-11-01",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.64.0 is a signed-in update. New: delete for your own comments and posts (with an are-you-sure), edit for your own text posts, hide that uses Reddit's own hide with an undo, an unread-notifications envelope in the header, your saved/upvoted/downvoted/hidden profile tabs, and comments you already voted on come up lit. Fixed: a comment's vote could land on one of its replies, markdown in replies arrived as literal characters, and a reply Reddit refused was reported as possibly posted. Signed-in controls remain experimental."
+  "notes": "0.64.1: a deleted comment or post no longer shows edit or reply links. 0.64.0 is a signed-in update. New: delete for your own comments and posts (with an are-you-sure), edit for your own text posts, hide that uses Reddit's own hide with an undo, an unread-notifications envelope in the header, your saved/upvoted/downvoted/hidden profile tabs, and comments you already voted on come up lit. Fixed: a comment's vote could land on one of its replies, markdown in replies arrived as literal characters, and a reply Reddit refused was reported as possibly posted. Signed-in controls remain experimental."
 }
