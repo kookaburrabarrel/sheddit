@@ -6869,6 +6869,18 @@ async function boot(html, url, setup) {
          editor still full — which is what a slow post and a failed post look like alike.
          compose() waits arriveWaitMs and reports step 'arrival'. */
       if (opts.silentSubmit) return;
+      /* `rejectWith` is Reddit refusing the submit (measured 2026-11-01, rate limit): no
+         comment, just an error alert in the light DOM under the comment tree. */
+      if (opts.rejectWith) {
+        setTimeout(() => {
+          const alert = doc.createElement('faceplate-alert');
+          alert.setAttribute('level', 'error');
+          alert.setAttribute('message', opts.rejectWith);
+          alert.className = 'hidden';
+          doc.querySelector('shreddit-comment-tree section').appendChild(alert);
+        }, 30);
+        return;
+      }
       setTimeout(() => {
         const parentDepth = isComment ? Number(source.getAttribute('depth')) : -1;
         const id = opts.newId || `t1_new_${isComment ? source.getAttribute('thingid') : 'top'}`;
@@ -6889,7 +6901,10 @@ async function boot(html, url, setup) {
         for (const [k, v] of Object.entries(attrs)) c.setAttribute(k, v);
         const body = doc.createElement('div');
         body.setAttribute('slot', 'comment');
-        body.textContent = text;
+        // Reddit renders markdown it was sent as markdown; the raw characters do not survive.
+        body.textContent = state.mode === 'markdown'
+          ? text.replace(/\*\*/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+          : text;
         c.appendChild(body);
         (isComment ? source : doc.querySelector('shreddit-comment-tree section')).appendChild(c);
         if (editor.tagName === 'TEXTAREA') editor.value = ''; else editor.textContent = '';
@@ -6928,6 +6943,23 @@ async function boot(html, url, setup) {
       composer.append(trigger, form);
     } else {
       composer.append(editor, submit);
+    }
+    /* `markdown` is the live toolbar's "Switch to Markdown" (2026-11-01): the rich editor
+       is hidden and a plain textarea in shreddit-markdown-composer's shadow root takes its
+       place, and the submit then sends that textarea's raw text. */
+    if (opts.markdown) {
+      const toggle = doc.createElement('button');
+      toggle.setAttribute('aria-label', 'Switch to Markdown');
+      toggle.addEventListener('click', () => {
+        if (state.mode === 'markdown') return;
+        editor.setAttribute('hidden', '');
+        const md = doc.createElement('shreddit-markdown-composer');
+        editor = md.attachShadow({ mode: 'open' }).appendChild(doc.createElement('textarea'));
+        submit.before(md);
+        state.editor = editor;
+        state.mode = 'markdown';
+      });
+      submit.before(toggle);
     }
     let mountAt = composer;
     /* `loader` is the async loader live Reddit wraps the box in: its light DOM keeps a
@@ -8560,6 +8592,31 @@ async function boot(html, url, setup) {
       doc.querySelector('shreddit-comment[thingid="t1_stranger"]')?.remove();
     }
 
+    /* --- A COMMENT VOTE NEVER LANDS ON ONE OF ITS REPLIES ---
+       Measured live 2026-11-01: a <shreddit-comment> CONTAINS its replies, and a
+       descendant search for "the upvote button" found a hydrated reply's button while the
+       parent's own action row was still unmounted. The parent's arrow sent
+       UpdateCommentVoteState for the REPLY and painted the parent as voted. The comment's
+       own control is the only one a vote may use. */
+    {
+      const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+      fastAccount(window);
+      const parent = doc.querySelector('shreddit-comment[thingid="t1_c3"]');
+      const reply = doc.querySelector('shreddit-comment[thingid="t1_c4"]');
+      parent.appendChild(reply);
+      const replyNative = installNativeAccount(window, doc, reply);
+      await hold(100);
+      const col = doc.querySelector('#shd-root .thing[data-fullname="t1_c3"]')
+        .querySelector(':scope > .midcol');
+      click(window, col.querySelector('.arrow.up'));
+      await waitFor(() => col.dataset.shdVoteMiss != null, { timeout: 1500 });
+      check('a parent comment\'s arrow never forwards to a reply\'s native vote button',
+        replyNative.clicks.up === 0, `reply clicks=${replyNative.clicks.up}`);
+      check('...and the parent is not painted as voted on the strength of it',
+        !col.classList.contains('likes') && col.dataset.shdVoteMiss != null, col.className);
+      window.close();
+    }
+
     /* --- A COMMENT VOTE WAITS FOR THE CONTROL RATHER THAN GIVING UP ON IT ---
        Reported from a signed-in session: every comment vote was a silent no-op. Arrow
        dead, score still, nothing on screen — while post votes on the same page worked
@@ -9162,6 +9219,63 @@ async function boot(html, url, setup) {
         form.querySelector('textarea').value === draft);
     }
     check(`${scenario}: repeated submit events never send a second request`, state.clicks.submit === 1);
+  }
+  /* MARKDOWN IN, MARKDOWN OUT. Measured live 2026-11-01: our old-reddit box fed Reddit's
+     rich editor, which posted `mode=richText`, so `**bold**` arrived as literal asterisks.
+     The save must switch Reddit's composer to markdown first, type into that, and still
+     recognise the comment once Reddit has rendered the formatting away. */
+  {
+    const { window, doc } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const source = doc.querySelector('shreddit-post');
+    const state = { clicks: { submit: 0 }, received: [] };
+    mountComposer(doc, source, { composer: 'lexical', markdown: true }, state);
+    const form = doc.querySelector('.shd-commentbox .shd-reply-form');
+    const draft = 'Some **bold** and [a link](https://example.com).';
+    form.querySelector('textarea').value = draft;
+    sendForm(window, form);
+    check('a save switches Reddit\'s composer to markdown before typing',
+      await waitFor(() => state.clicks.submit === 1) && state.mode === 'markdown', state.mode);
+    check('...and Reddit receives the reader\'s markdown verbatim', state.received[0] === draft,
+      JSON.stringify(state.received));
+    check('...and the rendered comment still confirms the post',
+      await waitFor(() => !form.isConnected) && form.dataset.shdState === 'done',
+      `${form.dataset.shdState}/${form.dataset.shdStep}`);
+    window.close();
+  }
+  /* A REJECTED SUBMIT SAYS WHAT REDDIT SAID. Measured live 2026-11-01: Reddit answered a
+     reply with "Rate limit exceeded. Please wait 8 minutes and try again", and Sheddit
+     waited out the arrival deadline and told the reader it "may already have posted".
+     An error alert that was already on the page must not be mistaken for the answer. */
+  for (const rejected of [true, false]) {
+    const { window, doc } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);
+    fastAccount(window);
+    const source = doc.querySelector('shreddit-post');
+    const old = doc.createElement('faceplate-alert');
+    old.setAttribute('level', 'error');
+    old.setAttribute('message', 'An older failure');
+    doc.querySelector('shreddit-comment-tree section').appendChild(old);
+    const state = { clicks: { submit: 0 }, received: [] };
+    const message = 'Rate limit exceeded. Please wait 8 minutes and try again';
+    mountComposer(doc, source, rejected ? { rejectWith: message } : { silentSubmit: true }, state);
+    const form = doc.querySelector('.shd-commentbox .shd-reply-form');
+    const draft = 'Words Reddit refused.';
+    form.querySelector('textarea').value = draft;
+    sendForm(window, form);
+    await waitFor(() => form.dataset.shdStep, { timeout: 2000 });
+    const status = form.querySelector('.shd-reply-status').textContent;
+    if (rejected) {
+      check('a submit Reddit rejects reports Reddit\'s own reason',
+        form.dataset.shdStep === 'rejected' && status.includes(message), `${form.dataset.shdStep}: ${status}`);
+      check('...keeps the draft, never claims it may have posted, and hands nothing off',
+        form.querySelector('textarea').value === draft && !/may already have posted/.test(status) &&
+        !doc.documentElement.classList.contains('shd-passthrough-active') &&
+        state.clicks.submit === 1, status);
+    } else {
+      check('an error alert already on the page is not taken as the submit\'s answer',
+        form.dataset.shdStep === 'arrival', form.dataset.shdStep);
+    }
+    window.close();
   }
   {
     const { window, doc } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, noAuto);

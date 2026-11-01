@@ -8,3 +8,6 @@ dist/*
 !dist/latest.json
 test/out.*.html
 .DS_Store
+
+# Playwright MCP session output (snapshots of live, possibly signed-in pages)
+.playwright-mcp/

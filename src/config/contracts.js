@@ -937,7 +937,20 @@ SHD.C = {
        What opens it is FOCUS on the textarea inside the trigger's shadow root — clicking
        the trigger does nothing, a real pointer sequence did nothing (log 111), and a focus
        call expands it in ~300ms. The host also exposes focus() on its prototype. */
-    trigger: 'faceplate-textarea-input[data-testid="trigger-button"]'
+    trigger: 'faceplate-textarea-input[data-testid="trigger-button"]',
+    /* THE MARKDOWN EDITOR, measured live 2026-11-01, signed in. The rich editor posts
+       `mode=richText`, so `**bold**` typed into our old-reddit box arrived literally. Its
+       toolbar has a "Switch to Markdown" button that swaps in a plain <textarea> inside
+       shreddit-markdown-composer's shadow root, and the same submit then sends
+       `mode=markdown` with the raw text. Reddit remembers the choice across reloads. */
+    toMarkdown: 'button[aria-label="Switch to Markdown"]',
+    markdownHost: 'shreddit-markdown-composer',
+    /* A REJECTED SUBMIT, measured live 2026-11-01: create-comment answers 200 with a
+       partial that inserts, in the light DOM under the comment tree,
+         <faceplate-alert level="error" message="Rate limit exceeded. Please wait 9 minutes
+           and try again" data-action-info-error-codes='["RATE_LIMITED"]'>
+       and Reddit shows the message as a toast. No comment is created. */
+    error: 'faceplate-alert[level="error"][message]'
   },
 
   /**

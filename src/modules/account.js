@@ -191,10 +191,32 @@ SHD.account = (() => {
     return waitFor(find, timings.hydrateWaitMs, alive);
   }
 
-  const nativeButtons = (source) => ({
-    up: SHD.dom.deepQuery(source, C.NATIVE.upvote),
-    down: SHD.dom.deepQuery(source, C.NATIVE.downvote)
-  });
+  /**
+   * Reddit's vote buttons for THIS row. A post's are on its own shadow root. A comment's
+   * are on its action row — and a <shreddit-comment> CONTAINS its replies, so a plain
+   * deep search answers with the first hydrated row anywhere in the subtree. Measured
+   * live, signed in, 2026-11-01: with the comment's own row not yet mounted and a reply's
+   * row mounted, clicking up on the comment sent UpdateCommentVoteState for the reply, and
+   * settle() then painted the comment from the reply's state. Only a button the comment
+   * itself owns counts; none means "not hydrated yet", which resolveLate() handles.
+   */
+  function ownedButton(source, selector) {
+    const scan = (root) => {
+      for (const el of root.querySelectorAll(selector)) if (ownerComment(el) === source) return el;
+      if (root.shadowRoot) { const hit = scan(root.shadowRoot); if (hit) return hit; }
+      for (const el of root.querySelectorAll('*')) {
+        if (el.shadowRoot && ownerComment(el) === source) {
+          const hit = scan(el.shadowRoot); if (hit) return hit;
+        }
+      }
+      return null;
+    };
+    return source && typeof source.querySelectorAll === 'function' ? scan(source) : null;
+  }
+
+  const nativeButtons = (source, kind = 'post') => kind === 'comment'
+    ? { up: ownedButton(source, C.NATIVE.upvote), down: ownedButton(source, C.NATIVE.downvote) }
+    : { up: SHD.dom.deepQuery(source, C.NATIVE.upvote), down: SHD.dom.deepQuery(source, C.NATIVE.downvote) };
 
   /**
    * What Reddit's buttons say the reader's vote is: 1, -1, 0 — or null when neither
@@ -294,7 +316,7 @@ SHD.account = (() => {
   const votable = (btns) => nativeState(btns) !== null || active();
 
   function vote(col, m, kind, dir) {
-    const btns = nativeButtons(m.source);
+    const btns = nativeButtons(m.source, kind);
     if (dir === 1 ? btns.up : btns.down) {
       if (votable(btns)) return cast(col, m, kind, dir, btns);
       /* Reddit's button is right there and pressing it achieves nothing: logged out it
@@ -314,7 +336,7 @@ SHD.account = (() => {
     if (col.dataset.shdVoteWait) return;
     col.dataset.shdVoteWait = '1';
     resolveLate(m.source, () => {
-      const late = nativeButtons(m.source);
+      const late = nativeButtons(m.source, kind);
       return (dir === 1 ? late.up : late.down) ? late : null;
     }).then((late) => {
       delete col.dataset.shdVoteWait;
@@ -362,7 +384,7 @@ SHD.account = (() => {
     ]);
     if (active()) {
       setTimeout(() => {
-        if (col.isConnected) learnInitial(col, m, kind, nativeButtons(m.source));
+        if (col.isConnected) learnInitial(col, m, kind, nativeButtons(m.source, kind));
       }, timings.syncMs);
     }
     return col;
@@ -590,6 +612,40 @@ SHD.account = (() => {
     return out;
   }
 
+  /** The visible markdown textarea in this composer, if Reddit has swapped it in. */
+  const markdownField = (host) => deepAll(host, C.COMPOSER.markdownHost)
+    .map(el => el.shadowRoot?.querySelector('textarea') || el.querySelector('textarea'))
+    .find(shown) || null;
+
+  /**
+   * The text field the reader would type into: the markdown textarea when it is showing,
+   * otherwise the first VISIBLE editor. Not the first match — in markdown mode the rich
+   * editor is still in the light DOM, hidden, and matches C.COMPOSER.editor first.
+   */
+  const editorOf = (host) => markdownField(host) || deepAll(host, C.COMPOSER.editor).find(shown) || null;
+
+  /**
+   * Our box is old reddit's, so its text is markdown. Reddit's rich editor would post it
+   * as literal characters (`mode=richText`), so ask for its markdown editor first. A miss
+   * leaves the rich editor in place, which is the old behaviour rather than a failure.
+   */
+  async function useMarkdown(host, alive) {
+    if (markdownField(host)) return true;
+    const toggle = deepAll(host, C.COMPOSER.toMarkdown)[0];
+    if (!toggle) return false;
+    toggle.click();
+    return !!await waitFor(() => markdownField(host), timings.composeWaitMs, alive);
+  }
+
+  /**
+   * Text as it reads once Reddit has rendered it, near enough to recognise a draft:
+   * whitespace gone (see norm()), a link's destination gone, and the markdown punctuation
+   * that renders as formatting rather than characters gone. Applied to both sides.
+   */
+  const plain = (s) => norm(String(s || '')
+    .replace(/\]\([^)]*\)/g, ']')
+    .replace(/[*_~`>#[\]\\^|]/g, ''));
+
   /** The focused element THROUGH shadow roots — activeElement stops at each host. */
   function deepActive() {
     let a = document.activeElement;
@@ -754,8 +810,9 @@ SHD.account = (() => {
         () => shown(SHD.dom.deepQuery(host, C.COMPOSER.submit)), timings.composeWaitMs, live);
       if (!live()) return cancelled();
       if (!opened) return { ok: false, step: 'composer', host };
-      const editor = await waitFor(
-        () => shown(SHD.dom.deepQuery(host, C.COMPOSER.editor)), timings.composeWaitMs, live);
+      await useMarkdown(host, live);
+      if (!live()) return cancelled();
+      const editor = await waitFor(() => editorOf(host), timings.composeWaitMs, live);
       if (!live()) return cancelled();
       if (!editor) return { ok: false, step: 'editor', host };
       const inserted = await insertText(editor, text, live);
@@ -766,6 +823,7 @@ SHD.account = (() => {
       const submit = SHD.dom.deepQuery(host, C.COMPOSER.submit) || opened;
       const seen = new Set([...document.querySelectorAll(C.COMMENT)]
         .map(n => n.getAttribute(C.COMMENT_ATTR.id)));
+      const alerts = new Set(document.querySelectorAll(C.COMPOSER.error));
       const sentAt = Date.now();
       if (!live()) return cancelled();
       onSubmit();
@@ -785,15 +843,27 @@ SHD.account = (() => {
          by this reader under the right parent with matching text can. Ambiguous arrivals
          go the safe way: `arrival`, reveal-only, draft kept, and a sentence saying to check
          the thread before sending it again. */
-      const arrived = await waitFor(() => commentsUnder(target, kind).find(n => {
-        const id = n.getAttribute(C.COMMENT_ATTR.id);
-        const body = [...n.querySelectorAll(C.COMMENT_BODY)].find(b => b.closest(C.COMMENT) === n);
-        return id && !seen.has(id) &&
-          Date.parse(n.getAttribute(C.COMMENT_ATTR.created)) >= sentAt - 2000 &&
-          body && norm(body.textContent) === norm(text);
-      }), timings.arriveWaitMs, live);
+      /* A REJECTION IS AN ANSWER TOO. Reddit refuses a submit (rate limit, locked thread)
+         with an error alert instead of a comment; waiting the arrival deadline out on that
+         told the reader their reply "may already have posted" when Reddit had said plainly
+         that it had not. A new alert ends the wait with Reddit's own words. */
+      const outcome = await waitFor(() => {
+        const rejected = [...document.querySelectorAll(C.COMPOSER.error)].find(a => !alerts.has(a));
+        if (rejected) return { rejected };
+        const comment = commentsUnder(target, kind).find(n => {
+          const id = n.getAttribute(C.COMMENT_ATTR.id);
+          const body = [...n.querySelectorAll(C.COMMENT_BODY)].find(b => b.closest(C.COMMENT) === n);
+          return id && !seen.has(id) &&
+            Date.parse(n.getAttribute(C.COMMENT_ATTR.created)) >= sentAt - 2000 &&
+            body && plain(body.textContent) === plain(text);
+        });
+        return comment ? { comment } : null;
+      }, timings.arriveWaitMs, live);
       if (!live()) return cancelled();
-      return arrived ? { ok: true, step: 'done', host } : { ok: false, step: 'arrival', host };
+      if (outcome?.rejected) {
+        return { ok: false, step: 'rejected', host, message: outcome.rejected.getAttribute('message') };
+      }
+      return outcome ? { ok: true, step: 'done', host } : { ok: false, step: 'arrival', host };
     } finally {
       if (unhidden) host.classList.remove('shd-native-editing');
     }
@@ -852,8 +922,9 @@ SHD.account = (() => {
        open it the one way that works, and carry the text only into an editor they can see —
        otherwise the exit-bar sentence about clicking it once is the accurate one. */
     openComposer(host);
-    const editor = await waitFor(
-      () => shown(SHD.dom.deepQuery(host, C.COMPOSER.editor)), timings.composeWaitMs, alive);
+    await useMarkdown(host, alive);
+    if (!alive()) return false;
+    const editor = await waitFor(() => editorOf(host), timings.composeWaitMs, alive);
     if (!alive()) return false;
     if (!editor) return false;
     /* ALREADY THERE IS ALREADY CARRIED. compose() may have put the words into this very
@@ -1012,6 +1083,15 @@ SHD.account = (() => {
       form.dataset.shdStep = r.step;
       if (r.step === 'cancelled') {
         status.textContent = 'Reply interrupted. Your draft is still here; save again when ready.';
+        return;
+      }
+      /* Reddit said no, in words: nothing posted, so there is nothing to check and nothing
+         to hand off. Say what Reddit said and keep the draft for a deliberate retry. */
+      if (r.step === 'rejected') {
+        submitted = false;
+        remember();
+        status.textContent = `Reddit did not post this: ${r.message || 'it returned an error'}. ` +
+          'Your draft is still here.';
         return;
       }
       /* ARRIVAL IS THE ONE STEP ON THE FAR SIDE OF THE SUBMIT, AND IT GETS ITS OWN EXIT.
