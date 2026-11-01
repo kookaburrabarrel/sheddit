@@ -75,8 +75,17 @@ SHD.route = (() => {
   const PROFILE_TABS = [
     { id: 'overview', path: '', label: 'overview' },
     { id: 'comments', path: 'comments/', label: 'comments' },
-    { id: 'submitted', path: 'submitted/', label: 'submitted' }
+    { id: 'submitted', path: 'submitted/', label: 'submitted' },
+    /* The reader's OWN lists. Reddit serves these only to the account they belong to
+       (measured signed in, 2026-11-01: the same shreddit-feed of shreddit-post rows as the
+       overview, view-context=ProfileFeed2), so chrome.js shows them only on your own
+       profile. Old reddit put them in the same tab strip. */
+    { id: 'saved', path: 'saved/', label: 'saved', own: true },
+    { id: 'upvoted', path: 'upvoted/', label: 'upvoted', own: true },
+    { id: 'downvoted', path: 'downvoted/', label: 'downvoted', own: true },
+    { id: 'hidden', path: 'hidden/', label: 'hidden', own: true }
   ];
+  const PROFILE_TAB_RE = 'overview|comments|submitted|saved|upvoted|downvoted|hidden';
 
   /**
    * The hosts this extension actually rebuilds.
@@ -113,7 +122,7 @@ SHD.route = (() => {
        anchors below are what keep it OTHER (untouched) rather than half-claimed. In scope
        by project decision 2026-08-21; see C.PROFILE_COMMENT for what remains unverified. */
     if (/^\/user\/[^/]+\/?$/.test(path)) return PROFILE;
-    if (/^\/user\/[^/]+\/(overview|comments|submitted)\/?$/.test(path)) return PROFILE;
+    if (new RegExp(`^/user/[^/]+/(${PROFILE_TAB_RE})/?$`).test(path)) return PROFILE;
     return OTHER;                       // search, chat, modmail, profile threads → hands off
   }
 
@@ -123,7 +132,7 @@ SHD.route = (() => {
   }
 
   function profileTabOf(path = emitPath()) {
-    const m = path.match(/^\/user\/[^/]+\/(comments|submitted)\/?$/);
+    const m = path.match(new RegExp(`^/user/[^/]+/(${PROFILE_TAB_RE})/?$`));
     return m ? m[1] : 'overview';
   }
 

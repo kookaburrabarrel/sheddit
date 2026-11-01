@@ -226,7 +226,8 @@ SHD.comments = (() => {
                save drives Reddit's composer and falls back to that same handoff. */
             SHD.account.reply(m, thing);
           }}, h('a.reply', { href: '#', text: 'reply' })),
-          SHD.account.editLink(m, thing)
+          SHD.account.editLink(m, thing),
+          SHD.account.deleteLink(m, thing)
         ])
       ]),
       h('div.child', null, childListing)

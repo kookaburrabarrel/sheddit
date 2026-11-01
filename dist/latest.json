@@ -1,6 +1,6 @@
 {
-  "version": "0.63.0",
-  "released": "2026-10-25",
+  "version": "0.64.0",
+  "released": "2026-11-01",
   "url": "https://github.com/kookaburrabarrel/sheddit#install",
-  "notes": "0.63.0 is a major fix for signed-in replies and comments: Sheddit's save button now posts them in one press, instead of opening Reddit's own page with the text re-typed into its box and asking you to post again. Includes the long-post Read more fix from 0.62.1, user flair from 0.62.0 and the post content and logout fixes from 0.61.0. Signed-in controls remain experimental."
+  "notes": "0.64.0 is a signed-in update. New: delete for your own comments and posts (with an are-you-sure), edit for your own text posts, hide that uses Reddit's own hide with an undo, an unread-notifications envelope in the header, your saved/upvoted/downvoted/hidden profile tabs, and comments you already voted on come up lit. Fixed: a comment's vote could land on one of its replies, markdown in replies arrived as literal characters, and a reply Reddit refused was reported as possibly posted. Signed-in controls remain experimental."
 }

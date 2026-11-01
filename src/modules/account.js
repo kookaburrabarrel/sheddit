@@ -70,10 +70,11 @@ SHD.account = (() => {
      arriveWaitMs: how long to wait for the posted comment to appear before calling the
              submit lost and revealing the native composer.
      editRefreshMs: how long after the reader leaves an edit handoff to keep copying the
-             comment's body into our row, for a save that lands after they pressed back. */
+             comment's body into our row, for a save that lands after they pressed back.
+     unreadPollMs: how often the header envelope re-reads Reddit's unread badge. */
   const timings = { syncMs: 1500, settleMs: 400, composeWaitMs: 4000, pollMs: 100, arriveWaitMs: 8000,
                     drawerWaitMs: 4000, logoutWaitMs: 6000, hydrateWaitMs: 3000,
-                    reconcileMs: 120, editRefreshMs: 15000 };
+                    reconcileMs: 120, editRefreshMs: 15000, unreadPollMs: 5000 };
 
   const active = () => SHD.session.active();
   let generation = 0;
@@ -353,12 +354,13 @@ SHD.account = (() => {
    * On an active session the column also looks for the hydrated state once, after
    * render, so a post the reader already voted on comes up lit.
    *
-   * A COMMENT the reader already voted on does not, and that is deliberate rather than
-   * missed. Its state lives on the same action row the buttons do, so reading it would
-   * mean scrolling the native tree once per rendered comment — a page's worth of layout
-   * to light some arrows. The state is learned on the click instead (cast() calls
-   * learnInitial() before forwarding), which is the moment it is needed: un-voting a
-   * standing vote still moves the score the right way.
+   * A COMMENT's state lives on its action row, which Reddit mounts only once the native
+   * comment has been on screen — so it is read as our row scrolls into view rather than
+   * all at once: an IntersectionObserver queues each visible comment, and the queue brings
+   * ONE native comment into view at a time (nudge(), inside the suppressed fixed box, so
+   * the reader's page does not move) and reads its buttons when they hydrate. Reported
+   * from a signed-in session: comments the reader had already voted on came up unlit, and
+   * the earlier approach of learning the state on the click left them unlit until then.
    */
   function midcol(m, kind = 'post') {
     const arrow = (dir, label) => {
@@ -386,8 +388,63 @@ SHD.account = (() => {
       setTimeout(() => {
         if (col.isConnected) learnInitial(col, m, kind, nativeButtons(m.source, kind));
       }, timings.syncMs);
+      if (kind === 'comment') watchCommentVote(col, m);
     }
     return col;
+  }
+
+  /* The comment-vote reading queue midcol() feeds. One job at a time: each one may scroll
+     the native tree, and two at once would fight over where it is scrolled to. */
+  let voteSync = null;
+  function watchCommentVote(col, m) {
+    if (typeof IntersectionObserver !== 'function') return;
+    if (!voteSync) {
+      const jobs = new WeakMap();
+      const queue = [];
+      let busy = false;
+      const drain = async () => {
+        if (busy) return;
+        busy = true;
+        const mine = voteSync;
+        while (queue.length && voteSync === mine) {
+          const [c, cm] = queue.shift();
+          try { await readCommentVote(c, cm); } catch (err) { SHD.gate.reportError(err); }
+        }
+        busy = false;
+      };
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          io.unobserve(e.target);
+          const job = jobs.get(e.target);
+          if (job) queue.push(job);
+        }
+        drain();
+      }, { rootMargin: '200px 0px' });
+      voteSync = { io, jobs, queue };
+    }
+    voteSync.jobs.set(col, [col, m]);
+    voteSync.io.observe(col);
+  }
+
+  async function readCommentVote(col, m) {
+    if (!col.isConnected || col.dataset.shdVoteInitial != null || !m.source?.isConnected) return;
+    const read = () => {
+      const btns = nativeButtons(m.source, 'comment');
+      return nativeState(btns) === null ? null : btns;
+    };
+    let btns = read();
+    if (!btns) {
+      /* Never scroll the native tree while the reader is looking at it (a handoff): try
+         again when the row is next on screen. */
+      if (document.documentElement.classList.contains('shd-passthrough-active')) {
+        voteSync?.io.observe(col);
+        return;
+      }
+      nudge(m.source);
+      btns = await waitFor(read, timings.hydrateWaitMs, () => col.isConnected);
+    }
+    if (btns && col.isConnected) learnInitial(col, m, 'comment', btns);
   }
 
   /* ------------------------------------------------------------------ *
@@ -1305,6 +1362,227 @@ SHD.account = (() => {
   }
 
   /** The top-level comment box on a comments page — old reddit had one above the list. */
+  /* ------------------------------------------------------------------ *
+   * Delete, hide and post edit — Reddit's own menu items, clicked
+   *
+   * Nothing here makes a request. Each action finds the item Reddit's own overflow menu
+   * offers for the row (measured signed in, 2026-11-01; see C.NATIVE) and clicks it, and a
+   * delete then clicks Reddit's own confirm. A control Reddit has not rendered is a control
+   * the reader is not allowed to use, so a miss is reported, never worked around.
+   * ------------------------------------------------------------------ */
+
+  const textOf = (el) => String(el?.textContent || '').replace(/\s+/g, ' ').trim();
+
+  function ownsPost(m) {
+    if (!active()) return false;
+    const name = SHD.session.username();
+    return !!name && !!m.author && name.toLowerCase() === m.author.toLowerCase();
+  }
+
+  /** One of a post's overflow items, waiting for the post to hydrate if it has not. */
+  function postItem(m, selector, text) {
+    const find = () => {
+      const item = SHD.dom.deepQuery(m.source, selector);
+      return item && (!text || text.test(textOf(item))) ? item : null;
+    };
+    const now = find();
+    if (now) return Promise.resolve(now);
+    return resolveLate(m.source, find, () => !!m.source?.isConnected);
+  }
+
+  /** Click Reddit's confirm button, then wait for its dialog to close: that is the answer. */
+  async function confirmNative(selector) {
+    const button = await waitFor(() => document.querySelector(selector), timings.composeWaitMs);
+    if (!button) return false;
+    button.click();
+    return !!(await waitFor(() => !button.isConnected, timings.arriveWaitMs));
+  }
+
+  /**
+   * Old reddit's inline confirm: `delete` becomes `are you sure? yes / no`, and nothing
+   * happens until yes. `run` resolves true when the delete went through, or a sentence
+   * saying why it did not.
+   */
+  function confirmLink(title, run) {
+    const li = h('li.shd-delete');
+    const status = h('span.shd-delete-status', { role: 'status' });
+    const idle = () => li.replaceChildren(
+      h('a.delete', { href: '#', text: 'delete', title, onclick: ask }), status);
+    function ask(e) {
+      e.preventDefault();
+      status.textContent = '';
+      li.replaceChildren(
+        h('span.shd-delete-ask', { text: 'are you sure? ' }),
+        h('a.yes', { href: '#', text: 'yes', onclick: yes }),
+        ' / ',
+        h('a.no', { href: '#', text: 'no', onclick: (ev) => { ev.preventDefault(); idle(); } }));
+    }
+    async function yes(e) {
+      e.preventDefault();
+      li.replaceChildren(h('span.shd-delete-busy', { text: 'deleting\u2026' }));
+      let result;
+      try { result = await run(); } catch (err) {
+        console.warn('[sheddit] delete failed', err);
+        result = 'delete failed';
+      }
+      if (result === true) { li.replaceChildren(h('span.shd-delete-done', { text: 'deleted' })); return; }
+      idle();
+      status.textContent = ` ${result}`;
+    }
+    idle();
+    return li;
+  }
+
+  /** Our row for a comment the reader just deleted, drawn the way old reddit drew one. */
+  function markCommentDeleted(thing) {
+    thing.classList.add('deleted');
+    const author = thing.querySelector(':scope > .entry > .tagline > .author');
+    author?.replaceWith(h('em.author', { text: '[deleted]' }));
+    thing.querySelector(':scope > .entry > .usertext > .usertext-body')
+      ?.replaceChildren(h('p', { text: '[deleted]' }));
+  }
+
+  async function deleteComment(source) {
+    const alive = () => source.isConnected;
+    const menu = () => [...source.querySelectorAll(C.NATIVE.commentOverflow)]
+      .find(el => ownerComment(el) === source);
+    nudge(source);
+    const toggle = await waitFor(() => {
+      const mm = menu();
+      return mm && SHD.dom.deepQuery(mm, C.NATIVE.commentActions);
+    }, timings.hydrateWaitMs, alive);
+    if (!toggle) return false;
+    if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
+    // The inner element, not the menuitem: a click on the <li> itself does nothing.
+    const item = await waitFor(() => {
+      const mm = menu();
+      const it = mm && SHD.dom.deepQuery(mm, C.NATIVE.commentDelete);
+      return it && C.NATIVE.commentDeleteText.test(textOf(it)) ? it : null;
+    }, timings.composeWaitMs, alive);
+    if (!item) return false;
+    item.click();
+    return confirmNative(C.NATIVE.commentDeleteConfirm);
+  }
+
+  /** `delete` on the reader's own comment. */
+  function deleteLink(m, thing) {
+    if (!ownsComment(m)) return null;
+    return confirmLink('Delete this comment', async () => {
+      if (!ownsComment(m)) return 'not signed in as this author';
+      const source = nativeComment(m);
+      if (!source) return 'comment not found; reload to delete';
+      m.source = source;
+      if (!(await deleteComment(source))) {
+        return 'could not reach Reddit\'s delete; use the comment\'s own menu';
+      }
+      markCommentDeleted(thing);
+      return true;
+    });
+  }
+
+  /** `delete` on the reader's own post. */
+  function postDeleteLink(m) {
+    return confirmLink('Delete this post', async () => {
+      if (!ownsPost(m)) return 'not signed in as this author';
+      const item = await postItem(m, C.NATIVE.postDelete);
+      if (!item) return 'could not reach Reddit\'s delete; use the post\'s own menu';
+      item.click();
+      if (!(await confirmNative(C.NATIVE.postDeleteConfirm))) {
+        return 'Reddit did not confirm the delete';
+      }
+      for (const r of document.querySelectorAll(`#shd-root ${SHD.dom.rowSel(m.id)}`)) {
+        r.classList.add('shd-deleted');
+        r.querySelector('.tagline .author')?.replaceWith(h('em.author', { text: '[deleted]' }));
+      }
+      return true;
+    });
+  }
+
+  /**
+   * `edit` on the reader's own text post: Reddit's editor, in a handoff, the way a
+   * comment's edit works. The comments page re-copies the post body when Reddit saves it
+   * (comments.js watchPostBody), so the change shows on return.
+   */
+  function postEditLink(m) {
+    let open = null;
+    const link = h('a.edit', { href: '#', text: 'edit' });
+    return h('li', { onclick: async (e) => {
+      e.preventDefault();
+      if (open?.isConnected) return;
+      if (!ownsPost(m)) { link.textContent = 'editing unavailable: not signed in as this author'; return; }
+      link.textContent = 'edit';
+      const source = m.source;
+      open = SHD.dom.passthrough(source);
+      if (!open) { link.textContent = 'post not found; reload to edit'; return; }
+      const bar = open;
+      const alive = () => bar.isConnected && source.isConnected;
+      const host = () => SHD.dom.deepQuery(source, C.NATIVE.postEditHost);
+      const fallback = () => SHD.dom.passthroughNote(
+        'Could not open the editor automatically. Use the post\'s menu > Edit post body.');
+      SHD.dom.passthroughNote('Opening Reddit\'s editor for your post...');
+      if (!host()) {
+        const item = await waitFor(() => SHD.dom.deepQuery(source, C.NATIVE.postEdit),
+          timings.hydrateWaitMs, alive);
+        if (!alive()) return;
+        if (!item) { fallback(); return; }
+        item.click();
+      }
+      const ready = await waitFor(host, timings.composeWaitMs, alive);
+      if (!alive()) return;
+      if (!ready) { fallback(); return; }
+      SHD.dom.passthroughNote('Edit and save in Reddit\'s editor, then choose \u2190 back to sheddit.');
+    } }, link);
+  }
+
+  /** The post-row links only the author gets: edit (text posts) and delete. */
+  function postOwnerLinks(m) {
+    if (!ownsPost(m)) return [];
+    return [m.isSelf ? postEditLink(m) : null, postDeleteLink(m)].filter(Boolean);
+  }
+
+  /**
+   * Hide a post with Reddit's own hide, so it stays hidden everywhere. Returns false when
+   * there is no session to hide it for, and the caller hides the row locally instead.
+   *
+   * The row is hidden at once and an undo stub takes its place; the native click follows
+   * when the post's menu is reachable. If it never is, the stub says the hide was local.
+   */
+  function hidePost(m, rowEl) {
+    if (!active() || !m.source) return false;
+    const status = h('span.shd-hidden-status', { role: 'status' });
+    const undo = h('a.shd-unhide', { href: '#', text: 'undo' });
+    const stub = h('div.shd-hidden-stub', null, [h('span', { text: 'post hidden' }), ' \u00b7 ', undo, status]);
+    rowEl.classList.add('shd-hidden');
+    rowEl.after(stub);
+    let hidden = postItem(m, C.NATIVE.postHide, C.NATIVE.postHideText).then((item) => {
+      if (!item) {
+        status.textContent = ' (on this page only: Reddit\'s hide was not available)';
+        return false;
+      }
+      item.click();
+      return true;
+    });
+    undo.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (undo.dataset.busy) return;
+      undo.dataset.busy = '1';
+      const wasNative = await hidden;
+      if (wasNative) {
+        const item = await postItem(m, C.NATIVE.postHide, C.NATIVE.postUnhideText);
+        if (!item) {
+          delete undo.dataset.busy;
+          status.textContent = ' could not undo; use the post\'s own menu';
+          return;
+        }
+        item.click();
+      }
+      hidden = Promise.resolve(false);
+      stub.remove();
+      rowEl.classList.remove('shd-hidden');
+    });
+    return true;
+  }
+
   function commentBox(m) {
     if (!active()) return null;
     return h('div.shd-commentbox', null, replyForm(m, { kind: 'post' }));
@@ -1598,6 +1876,43 @@ SHD.account = (() => {
       }));
   }
 
+  /** Reddit's unread count, or 0 when it shows no badge (which is how it says "none"). */
+  function unreadCount() {
+    const badge = document.querySelector(C.ACCOUNT.unreadBadge);
+    const n = parseInt(badge?.getAttribute(C.ACCOUNT.unreadCountAttr) ?? '', 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  /**
+   * Old reddit's envelope: grey with nothing unread, orange with a count otherwise. The
+   * count is Reddit's own badge, re-read on a slow tick because the badge is created and
+   * removed rather than updated in place; reading an attribute costs nothing, and the tick
+   * stops once the header that owns this link has been replaced.
+   */
+  function unreadLink() {
+    const count = h('span.shd-unread-count');
+    const link = h('a.shd-inbox', { href: C.ACCOUNT.notifications }, [
+      h('span.shd-inbox-icon', { 'aria-hidden': 'true', text: '\u2709' }), count
+    ]);
+    let seen = -1;
+    const sync = () => {
+      const n = unreadCount();
+      if (n === seen) return;
+      seen = n;
+      count.textContent = n ? String(n) : '';
+      link.classList.toggle('shd-havemail', n > 0);
+      link.title = n ? `${n} unread notification${n === 1 ? '' : 's'}` : 'No unread notifications';
+    };
+    sync();
+    let idle = 0;
+    const tick = () => setTimeout(() => {
+      if (link.isConnected) { idle = 0; sync(); } else if (++idle > 3) return;
+      tick();
+    }, timings.unreadPollMs);
+    tick();
+    return link;
+  }
+
   function signedInCorner() {
     const name = SHD.session.username();
     const avatar = SHD.session.avatar();
@@ -1615,7 +1930,7 @@ SHD.account = (() => {
       h('span.shd-account-caret', { 'aria-hidden': 'true', text: '\u25be' })
     ]);
 
-    const corner = h('span.shd-account', null, [toggle, menu]);
+    const corner = h('span.shd-account', null, [unreadLink(), toggle, menu]);
 
     /* ...except while logOut() is driving Reddit's own UI: the click it makes on the avatar
        button is an outside click by every test available here, and closing on it hides the
@@ -1646,9 +1961,12 @@ SHD.account = (() => {
     forms.clear();
     generation++;
     missWarned = false;
+    voteSync?.io.disconnect();
+    voteSync = null;
     closeMenu();
   }
 
-  return { midcol, vote, reply, restoreReply, editLink, replyForm, commentBox, compose, submitBox, headerAccount,
+  return { midcol, vote, reply, restoreReply, editLink, deleteLink, postOwnerLinks, hidePost,
+           replyForm, commentBox, compose, submitBox, headerAccount,
            logOut, findLogoutControl, nav, reset, timings };
 })();

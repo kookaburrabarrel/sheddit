@@ -286,8 +286,12 @@ SHD.chrome = (() => {
   function profileTabMenu() {
     const user = SHD.route.usernameOf();
     const active = SHD.route.profileTabOf();
+    // saved/upvoted/downvoted/hidden exist only for the account they belong to.
+    const me = SHD.session?.active?.() && SHD.session.username?.();
+    const mine = !!me && !!user && me.toLowerCase() === user.toLowerCase();
+    const tabs = SHD.route.PROFILE_TABS.filter(t => !t.own || mine || t.id === active);
     return h('div.shd-tabmenu-wrap', null,
-      h('ul.tabmenu', null, SHD.route.PROFILE_TABS.map(t =>
+      h('ul.tabmenu', null, tabs.map(t =>
         h('li' + (t.id === active ? '.selected' : ''), null,
           h('a', { href: `/user/${user}/${t.path}`, text: t.label })))));
   }

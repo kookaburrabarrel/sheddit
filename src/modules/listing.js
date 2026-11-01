@@ -295,10 +295,19 @@ SHD.listing = (() => {
          did not offer them to logged-out users either — so the faithful thing and the honest
          thing agree. If they come back, they come back behind the account layer's session
          check (SHD.session.active()), as that section says. */
+      /* Hide. Signed in, it is Reddit's own hide (account.js clicks the post's overflow
+         item), so the post stays hidden across reloads and devices and an undo stub takes
+         the row's place. Otherwise it only hides the row on this page, as before. */
       h('li', null, h('a.hide', {
         href: '#', text: 'hide',
-        onclick: (e) => { e.preventDefault(); row(m.id)?.classList.add('shd-hidden'); }
-      }))
+        onclick: (e) => {
+          e.preventDefault();
+          const r = row(m.id);
+          if (r && !SHD.account.hidePost(m, r)) r.classList.add('shd-hidden');
+        }
+      })),
+      // Edit (self posts) and delete, on the reader's own posts only.
+      ...SHD.account.postOwnerLinks(m)
     ]);
   }
 

@@ -1201,7 +1201,7 @@ mutate "a single empty look claims no more pages again" run \
 # the whole feature to the pre-scope state — native Reddit with no telltale symptom.
 mutate "user profiles route to OTHER again" run \
   src/core/route.js "    if (/^\\/user\\/[^/]+\\/?$/.test(path)) return PROFILE;
-    if (/^\\/user\\/[^/]+\\/(overview|comments|submitted)\\/?$/.test(path)) return PROFILE;" \
+    if (new RegExp(\`^/user/[^/]+/(\${PROFILE_TAB_RE})/?$\`).test(path)) return PROFILE;" \
                     ""
 
 # The profile contract is unverified, so failures there must hand back quietly — an error

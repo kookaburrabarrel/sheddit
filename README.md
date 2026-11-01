@@ -19,15 +19,21 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.63.0](https://img.shields.io/badge/version-0.63.0-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.64.0](https://img.shields.io/badge/version-0.64.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.63.0 — replies post in one press
+### Beta 0.64.0 — delete, hide and your own tabs
 
-**0.63.0 is a major bug fix for signed-in readers.** Saving a reply or comment used to
+**0.64.0 fills in the signed-in basics:** delete your own comments and posts, edit your
+own text posts, hide posts with Reddit's own hide (with undo), see unread notifications in
+the header, open your saved, upvoted, downvoted and hidden tabs, and see the comments you
+already voted on lit. It also fixes three signed-in bugs: a comment's vote arrow could vote
+on one of its replies instead, markdown in a reply arrived as literal characters, and a
+reply Reddit refused was reported as possibly posted. It builds on **0.63.0, a major bug fix for
+signed-in readers.** Saving a reply or comment used to
 open Reddit's own, almost blank page with your text re-typed into its box, and you had to
 press post a second time. Replies and comments now post straight from Sheddit's box in
 about a second — top-level comments, replies to other people and replies to your own
@@ -81,10 +87,10 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 > Your own comments have an **edit** link that opens Reddit's native editor.
 > Save there, then choose **back to sheddit** to return to the updated comment.
 >
-> **Known live limitations in 0.63.0:** Reddit can refuse a reply sent seconds after the
-> previous one. Sheddit then falls back to Reddit's own composer with your draft carried
-> over; check the thread for an existing reply before pressing Reddit's own **Comment**
-> button.
+> **Known live limitations in 0.64.0:** Reddit can refuse a reply sent seconds after the
+> previous one. Sheddit then shows Reddit's own reason and keeps your draft in its box;
+> wait and save again. Posting a reply switches Reddit's own composer to its Markdown
+> editor, and Reddit remembers that choice.
 > Automatic edit opening can also miss a freshly loaded menu; use that comment's
 > native menu > **Edit comment** when the handoff instructs you to.
 >
@@ -96,6 +102,20 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail, and every earlier build, in the [changelog](CHANGELOG.md).
+
+**0.64.0 · 2026-11-01 — delete, hide, unread count and your own tabs**
+
+- **Fixed:** voting on a comment could cast the vote on one of its replies instead, while
+  showing the comment itself as voted.
+- **Fixed:** markdown in a reply (`**bold**`, links) arrived as literal characters.
+- **Fixed:** a reply Reddit refused, such as a rate limit, was reported as possibly
+  posted. Sheddit now shows Reddit's reason and keeps the draft.
+- **New:** **delete** on your own comments and posts, after an *are you sure? yes / no*,
+  and **edit** on your own text posts.
+- **New:** signed in, **hide** uses Reddit's own hide, so it sticks, with an **undo**.
+- **New:** an envelope in the header with your unread notification count.
+- **New:** your **saved**, **upvoted**, **downvoted** and **hidden** tabs on your own profile.
+- **New:** comments you had already voted on come up with their arrow lit.
 
 **0.63.0 · 2026-10-25 — replies and comments post in one press**
 
@@ -231,7 +251,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.63.0**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.64.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

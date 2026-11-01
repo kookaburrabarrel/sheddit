@@ -37,7 +37,9 @@ SHD.C = {
      has already been observed to be wrong for the case it is shown in (it claims the
      community has never had a post while describing a time-filtered range with none),
      so the copy is exactly the thing we replace. */
-  FEED_EMPTY: '[data-testid="no-content"]',
+  /* A signed-in reader's empty saved/upvoted/hidden tab (measured 2026-11-01) shows
+     `div#empty-feed-content` instead. */
+  FEED_EMPTY: '[data-testid="no-content"], #empty-feed-content',
 
   /* A profile Reddit is GATING, as opposed to one that simply has nothing on the tab.
      Reported from a live session on two accounts: Reddit serves zero post elements and
@@ -489,6 +491,34 @@ SHD.C = {
     commentEdit: '[role="menuitem"]:has([icon-name="edit"]) [tabindex="0"]',
     commentEditText: /^edit comment$/i,
     commentEditHost: 'comment-composer-host[edit-mode]',
+    /* Measured signed in, 2026-11-01. The own-comment menu (same open root as edit) has
+       `li.delete-comment-menu-button[role=menuitem]` > div[tabindex=-1] "Delete comment".
+       A click on the LI does nothing; the inner div opens Reddit's confirm, which is a
+       light-DOM `div#comment-deletion-dialog` directly under shreddit-app, with
+       `button#deleteBtn` "Delete" and `button#backBtn` "Cancel". It works with the native
+       tree suppressed, so no passthrough is needed. */
+    commentDelete: 'li.delete-comment-menu-button > [tabindex]',
+    commentDeleteText: /^delete comment$/i,
+    commentDeleteConfirm: '#comment-deletion-dialog #deleteBtn',
+    /* A post's overflow items, measured signed in 2026-11-01. They are pre-rendered in
+       shreddit-post-overflow-menu's open root (inside the post's async loader) with stable
+       ids, and a click on the item's [role=menuitem] acts WITHOUT opening the menu:
+         hide   -> graphql UpdatePostHideState {hideState: HIDDEN}; text becomes
+                   "Remove from hidden", and the same item then unhides (hideState NONE).
+         edit   -> (own self post) mounts `edit-post-form` with Reddit's composer inside
+                   shreddit-post-text-body.
+         delete -> (own post) opens `div#post-deletion-confirmation-modal` under
+                   shreddit-app; its `button#deleteBtn` "Yes, Delete" sends DeletePost. */
+    postHide: '#post-overflow-hide [role="menuitem"]',
+    postHideText: /^hide$/i,
+    postUnhideText: /^remove from hidden$/i,
+    postEdit: '#post-overflow-edit [role="menuitem"]',
+    postEditHost: 'edit-post-form',
+    postDelete: '#post-overflow-delete [role="menuitem"]',
+    postDeleteConfirm: '#post-deletion-confirmation-modal #deleteBtn',
+    /* The hydrated comment action row carries the reader's standing vote as
+       vote-state="UP|NONE|DOWN" (measured 2026-11-01). The server markup does not. */
+    commentRow: 'shreddit-comment-action-row',
     overflow: 'shreddit-post-overflow-menu',
     textBody: 'shreddit-post-text-body',
     titleLink: 'a[slot="title"]',
@@ -823,6 +853,13 @@ SHD.C = {
     inbox: '/message/inbox/',
     /* Appended to the reader's own profile: /user/<name>/saved/. Reddit's, not ours. */
     savedTab: 'saved',
+    /* Reddit's unread-notifications count, measured signed in 2026-11-01: the header's
+       bell is `a#notifications-inbox-button[href="/notifications"]`, and while anything is
+       unread it holds `dynamic-badge[initial-count="N"]`. With nothing unread there is no
+       badge at all. */
+    notifications: '/notifications',
+    unreadBadge: '#notifications-inbox-button dynamic-badge',
+    unreadCountAttr: 'initial-count',
     /* Reddit's login page, for the corner's logged-out state. A LINK, and only ever
        reached by a deliberate click on it — this is not the extension asking anyone to
        log in. See the scope note in CONTRIBUTING, which this reversed by owner decision

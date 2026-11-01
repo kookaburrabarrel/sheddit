@@ -16,7 +16,7 @@ const { listingPage, commentsPage, POSTS, SELF_POST, COMMENT_DEPTHS,
         BRANCH_PAGER_SCRIPT, BRANCH_PAGER_BRANCHES, BRANCH_PAGER_REPLIES,
         CMAF_POST, VIDEO_MPD,
         profilePage, PROFILE_COMMENT_COUNT, PROFILE_LINKED_SUB, PROFILE_LINKED_TITLE,
-        nestedCommentsHtml, LIVE_E } = require('./fixtures');
+        nestedCommentsHtml, LIVE_E, headerHtml } = require('./fixtures');
 
 const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.js'), 'utf8');
 
@@ -7153,6 +7153,238 @@ async function boot(html, url, setup) {
     click(window, doc.querySelector('#shd-passthrough-exit a'));
   }
 
+  console.log('\n\x1b[1mDELETING YOUR OWN COMMENTS\x1b[0m');
+  {
+    const page = (opts = {}) => commentsPage({ loggedIn: true, ...opts })
+      .replace('author="user0"', 'author="TeStEr"');
+    const { doc: outDoc } = await boot(page({ loggedIn: false }), COMMENTS_URL, loggedInSettings());
+    check('no delete links when logged out', !outDoc.querySelector('#shd-root a.delete'));
+
+    const { doc, window } = await boot(page(), COMMENTS_URL, loggedInSettings());
+    fastAccount(window);
+    const source = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const row = doc.querySelector('#shd-root .thing[data-fullname="t1_c0"]');
+    check('only the reader\'s own comment has delete',
+      !!row.querySelector('a.delete') && doc.querySelectorAll('#shd-root a.delete').length === 1);
+
+    // Reddit's shape (measured 2026-11-01): the LI ignores clicks; its inner div opens a
+    // light-DOM confirm under shreddit-app, whose #deleteBtn deletes and closes it.
+    const st = { opens: 0, liClicks: 0, divClicks: 0, deletes: 0 };
+    const menu = doc.createElement('shreddit-overflow-menu');
+    menu.setAttribute('comment-id', 't1_c0');
+    const shadow = menu.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<button aria-label="Open user actions" aria-expanded="false"></button>';
+    shadow.querySelector('button').onclick = () => {
+      st.opens++;
+      const li = doc.createElement('li');
+      li.className = 'delete-comment-menu-button';
+      li.setAttribute('role', 'menuitem');
+      li.innerHTML = '<div tabindex="-1"><svg icon-name="delete"></svg> Delete comment </div>';
+      li.addEventListener('click', (e) => { if (e.target === li) st.liClicks++; });
+      li.firstElementChild.onclick = () => {
+        st.divClicks++;
+        const dlg = doc.createElement('div');
+        dlg.id = 'comment-deletion-dialog';
+        dlg.innerHTML = '<button id="backBtn">Cancel</button><button id="deleteBtn">Delete</button>';
+        dlg.querySelector('#deleteBtn').onclick = () => { st.deletes++; setTimeout(() => dlg.remove(), 20); };
+        dlg.querySelector('#backBtn').onclick = () => dlg.remove();
+        doc.querySelector('shreddit-app').appendChild(dlg);
+      };
+      shadow.appendChild(li);
+    };
+    source.appendChild(menu);
+
+    click(window, row.querySelector('a.delete'));
+    check('delete asks first, and nothing is clicked yet',
+      /are you sure/.test(row.querySelector('li.shd-delete').textContent) && st.opens === 0);
+    click(window, row.querySelector('li.shd-delete a.no'));
+    check('"no" puts the link back and deletes nothing',
+      !!row.querySelector('li.shd-delete a.delete') && st.opens === 0 && st.deletes === 0);
+
+    click(window, row.querySelector('a.delete'));
+    click(window, row.querySelector('li.shd-delete a.yes'));
+    check('"yes" opens the owned menu, clicks the inner item, and confirms Reddit\'s dialog',
+      await waitFor(() => st.deletes === 1) && st.opens === 1 && st.divClicks === 1,
+      JSON.stringify(st));
+    check('the row then reads [deleted], like old reddit',
+      await waitFor(() => row.classList.contains('deleted') &&
+        row.querySelector(':scope > .entry > .usertext .usertext-body').textContent === '[deleted]' &&
+        row.querySelector(':scope > .entry > .tagline > .author').textContent === '[deleted]'));
+    check('...and the dialog is gone', !doc.querySelector('#comment-deletion-dialog'));
+
+    // No menu reachable: say so, change nothing.
+    const { doc: d2, window: w2 } = await boot(page(), COMMENTS_URL, loggedInSettings());
+    fastAccount(w2);
+    const row2 = d2.querySelector('#shd-root .thing[data-fullname="t1_c0"]');
+    click(w2, row2.querySelector('a.delete'));
+    click(w2, row2.querySelector('li.shd-delete a.yes'));
+    check('without Reddit\'s menu the delete is reported, and the row is left alone',
+      await waitFor(() => /use the comment's own menu/.test(row2.querySelector('li.shd-delete').textContent)) &&
+      !row2.classList.contains('deleted'));
+  }
+
+  console.log('\n\x1b[1mYOUR OWN POSTS: HIDE, EDIT, DELETE\x1b[0m');
+  {
+    const page = (opts = {}) => commentsPage({ loggedIn: true, selfPost: true, ...opts })
+      .replace('author="asker"', 'author="TeStEr"');
+    const SELF_URL = 'https://www.reddit.com/r/programming/comments/self1/what/';
+    /** Reddit's post overflow items: pre-rendered, ids stable, clicks act directly. */
+    function postMenu(doc, post) {
+      const st = { hide: 0, unhide: 0, deletes: 0, edits: 0 };
+      const menu = doc.createElement('shreddit-post-overflow-menu');
+      const shadow = menu.attachShadow({ mode: 'open' });
+      shadow.innerHTML =
+        '<li id="post-overflow-hide"><div role="menuitem"><span>Hide</span></div></li>' +
+        '<li id="post-overflow-edit"><div role="menuitem"><span>Edit post body</span></div></li>' +
+        '<li id="post-overflow-delete"><div role="menuitem"><span>Delete</span></div></li>';
+      const hide = shadow.querySelector('#post-overflow-hide [role="menuitem"]');
+      hide.onclick = () => {
+        const span = hide.querySelector('span');
+        if (span.textContent === 'Hide') { st.hide++; span.textContent = 'Remove from hidden'; }
+        else { st.unhide++; span.textContent = 'Hide'; }
+      };
+      shadow.querySelector('#post-overflow-edit [role="menuitem"]').onclick = () => {
+        st.edits++;
+        post.appendChild(doc.createElement('edit-post-form'));
+      };
+      shadow.querySelector('#post-overflow-delete [role="menuitem"]').onclick = () => {
+        const dlg = doc.createElement('div');
+        dlg.id = 'post-deletion-confirmation-modal';
+        dlg.innerHTML = '<button id="backBtn">Go Back</button><button id="deleteBtn">Yes, Delete</button>';
+        dlg.querySelector('#deleteBtn').onclick = () => { st.deletes++; dlg.remove(); };
+        doc.querySelector('shreddit-app').appendChild(dlg);
+      };
+      post.appendChild(menu);
+      return st;
+    }
+
+    const { doc: other } = await boot(commentsPage({ loggedIn: true, selfPost: true }), SELF_URL, loggedInSettings());
+    const otherRow = other.querySelector('#shd-root .shd-selfpost .thing');
+    check('someone else\'s post has no edit or delete',
+      !!otherRow && !otherRow.querySelector('a.edit, a.delete'));
+
+    const { doc, window } = await boot(page(), SELF_URL, loggedInSettings());
+    fastAccount(window);
+    const post = doc.querySelector('shreddit-post');
+    const st = postMenu(doc, post);
+    const prow = () => doc.querySelector('#shd-root .shd-selfpost .thing');
+    check('the reader\'s own text post has edit and delete',
+      !!prow().querySelector('ul.buttons a.edit') && !!prow().querySelector('ul.buttons a.delete'));
+
+    click(window, prow().querySelector('a.hide'));
+    check('signed-in hide uses Reddit\'s own hide, and leaves an undo stub',
+      await waitFor(() => st.hide === 1) && prow().classList.contains('shd-hidden') &&
+      !!doc.querySelector('.shd-hidden-stub a.shd-unhide'));
+    click(window, doc.querySelector('.shd-hidden-stub a.shd-unhide'));
+    check('undo un-hides with Reddit\'s "Remove from hidden" and restores the row',
+      await waitFor(() => st.unhide === 1 && !doc.querySelector('.shd-hidden-stub')) &&
+      !prow().classList.contains('shd-hidden'));
+
+    click(window, prow().querySelector('ul.buttons a.edit'));
+    check('edit hands off to Reddit\'s post editor',
+      await waitFor(() => st.edits === 1 && post.classList.contains('shd-passthrough') &&
+        /Edit and save/.test(doc.querySelector('.shd-passthrough-note')?.textContent || '')),
+      doc.querySelector('.shd-passthrough-note')?.textContent);
+    click(window, doc.querySelector('#shd-passthrough-exit a'));
+
+    click(window, prow().querySelector('a.delete'));
+    click(window, prow().querySelector('li.shd-delete a.no'));
+    check('"no" on a post delete does nothing', st.deletes === 0);
+    click(window, prow().querySelector('a.delete'));
+    click(window, prow().querySelector('li.shd-delete a.yes'));
+    check('"yes" clicks Reddit\'s delete and its confirm, and marks the row',
+      await waitFor(() => st.deletes === 1 && prow().classList.contains('shd-deleted') &&
+        /deleted/.test(prow().querySelector('li.shd-delete').textContent)));
+
+    // Logged out, hide stays the local row hide it always was.
+    const { doc: od, window: ow } = await boot(commentsPage({ selfPost: true }), SELF_URL);
+    const ost = postMenu(od, od.querySelector('shreddit-post'));
+    click(ow, od.querySelector('#shd-root .shd-selfpost .thing a.hide'));
+    await hold(50);
+    check('logged out, hide is local and clicks nothing of Reddit\'s',
+      od.querySelector('#shd-root .shd-selfpost .thing').classList.contains('shd-hidden') &&
+      ost.hide === 0 && !od.querySelector('.shd-hidden-stub'));
+  }
+
+  console.log('\n\x1b[1mTHE HEADER SHOWS UNREAD NOTIFICATIONS\x1b[0m');
+  {
+    const withBadge = (n) => commentsPage({ loggedIn: true }).replace('</reddit-header-large>',
+      '<a id="notifications-inbox-button" href="/notifications">' +
+      (n ? `<dynamic-badge initial-count="${n}"></dynamic-badge>` : '') + '</a></reddit-header-large>');
+    const { doc, window } = await boot(withBadge(3), COMMENTS_URL, loggedInSettings());
+    const env = doc.querySelector('#shd-header .shd-inbox, .shd-account a.shd-inbox');
+    check('an envelope links to notifications with Reddit\'s unread count',
+      !!env && env.getAttribute('href') === '/notifications' &&
+      env.classList.contains('shd-havemail') && env.textContent.includes('3'),
+      env?.outerHTML);
+    window.SHD.account.timings.unreadPollMs = 20;
+    doc.querySelector('#notifications-inbox-button dynamic-badge').remove();
+    check('...and goes quiet when Reddit drops the badge',
+      await waitFor(() => !env.classList.contains('shd-havemail') && !/\d/.test(env.textContent)));
+    const { doc: zero } = await boot(withBadge(0), COMMENTS_URL, loggedInSettings());
+    const z = zero.querySelector('.shd-account a.shd-inbox');
+    check('with nothing unread the envelope shows no count', !!z && !z.classList.contains('shd-havemail') &&
+      !/\d/.test(z.textContent));
+    const { doc: out } = await boot(commentsPage(), COMMENTS_URL, loggedInSettings());
+    check('logged out there is no envelope', !out.querySelector('a.shd-inbox'));
+  }
+
+  console.log('\n\x1b[1mCOMMENTS YOU ALREADY VOTED ON COME UP LIT\x1b[0m');
+  {
+    const firing = (win) => {
+      loggedInSettings()(win);
+      win.IntersectionObserver = class {
+        constructor(cb) { this.cb = cb; }
+        observe(el) {
+          if (!el.classList?.contains('midcol')) return;
+          setTimeout(() => this.cb([{ target: el, isIntersecting: true }], this), 0);
+        }
+        unobserve() {} disconnect() {}
+      };
+    };
+    const { doc, window } = await boot(commentsPage({ loggedIn: true }), COMMENTS_URL, firing);
+    const source = doc.querySelector('shreddit-comment[thingid="t1_c0"]');
+    const scrolled = [];
+    source.scrollIntoView = () => scrolled.push('c0');
+    installNativeAccount(window, doc, source, { initial: 1, voteLate: 80 });
+    const col = voteCol(doc, 't1_c0');
+    check('a comment upvoted before the page loaded lights without a click',
+      await waitFor(() => col.classList.contains('likes') &&
+        col.querySelector('.arrow.up').classList.contains('upmod'), { timeout: 1000 }),
+      col.className);
+    check('...after bringing the native comment into view so its action row mounts',
+      scrolled.length >= 1);
+    const plainCol = voteCol(doc, 't1_c1');
+    check('a comment with no standing vote stays unvoted', !plainCol.classList.contains('likes') &&
+      !plainCol.classList.contains('dislikes'));
+  }
+
+  console.log('\n\x1b[1mYOUR SAVED, UPVOTED AND HIDDEN TABS\x1b[0m');
+  {
+    const { window, doc } = await boot(
+      profilePage().replace('<reddit-header-large></reddit-header-large>', headerHtml({ loggedIn: true })),
+      'https://www.reddit.com/user/tester/saved/', loggedInSettings());
+    const R = window.SHD.route;
+    check('saved/upvoted/downvoted/hidden classify as PROFILE',
+      ['saved', 'upvoted', 'downvoted', 'hidden']
+        .every(t => R.classify(`/user/tester/${t}/`) === R.PROFILE && R.profileTabOf(`/user/tester/${t}/`) === t));
+    await waitFor(() => doc.querySelectorAll('#shd-root .thing').length >= 2);
+    const tabs = () => [...doc.querySelectorAll('.shd-tabmenu-wrap .tabmenu a')].map(a => a.textContent);
+    check('your own profile shows your private tabs too',
+      JSON.stringify(tabs()) ===
+        JSON.stringify(['overview', 'comments', 'submitted', 'saved', 'upvoted', 'downvoted', 'hidden']),
+      tabs().join(','));
+    check('...with saved selected and rendered by Sheddit',
+      doc.querySelector('.shd-tabmenu-wrap .tabmenu li.selected a')?.textContent === 'saved' &&
+      doc.querySelectorAll('#shd-root .thing.link').length >= 2);
+    const { doc: od } = await boot(profilePage().replace('<reddit-header-large></reddit-header-large>',
+      headerHtml({ loggedIn: true, username: 'someoneelse' })),
+      'https://www.reddit.com/user/tester/', loggedInSettings());
+    await waitFor(() => od.querySelectorAll('.shd-tabmenu-wrap .tabmenu a').length > 0);
+    check('someone else\'s profile shows only the public tabs',
+      od.querySelectorAll('.shd-tabmenu-wrap .tabmenu a').length === 3);
+  }
+
   console.log('\n\x1b[1mSLOW NAVIGATION MUST NOT RE-ADOPT THE PREVIOUS THREAD\x1b[0m');
   {
     const { doc, window } = await boot(commentsPage(), COMMENTS_URL, noAuto);
@@ -7690,9 +7922,10 @@ async function boot(html, url, setup) {
       href('my profile') === '/user/tester/' && href('saved') === '/user/tester/saved/' &&
       href('messages') === '/message/inbox/' && href('preferences') === '/settings/',
       [href('my profile'), href('saved'), href('messages'), href('preferences')].join(' '));
-    check('the profile is a page Sheddit renders; the rest it hands back untouched',
+    check('the profile and its saved tab are pages Sheddit renders; the rest it hands back untouched',
       window.SHD.route.classify('/user/tester/') === 'PROFILE' &&
-      ['/user/tester/saved/', '/message/inbox/', '/settings/']
+      window.SHD.route.classify('/user/tester/saved/') === 'PROFILE' &&
+      ['/message/inbox/', '/settings/']
         .every(p => window.SHD.route.classify(p) === 'OTHER'));
 
     click(window, toggle);

@@ -20,6 +20,69 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.64.0
+
+### New — delete your own comments and posts
+
+Your own comments and posts get a **delete** link. It asks *are you sure? yes / no*
+first, then clicks the delete item in Reddit's own menu and Reddit's own confirm, so
+Sheddit sends no request of its own. The row then reads `[deleted]`. If Reddit's menu
+cannot be reached, the link says so and nothing changes.
+
+### New — edit your own text posts
+
+Like a comment's edit, **edit** on your own text post opens Reddit's own editor in place.
+Save there, then choose **back to sheddit**.
+
+### New — signed-in hide is Reddit's hide
+
+Hide used to remove the row from the current page only. Signed in, it now clicks
+Reddit's own hide, so the post stays hidden on reload and on other devices, and leaves an
+**undo** line that clicks Reddit's *Remove from hidden*. Logged out it is unchanged.
+
+### New — unread notifications in the header
+
+The signed-in corner shows an envelope linking to your notifications, with Reddit's own
+unread count beside it when there is one.
+
+### New — your saved, upvoted, downvoted and hidden tabs
+
+`/user/<you>/saved/`, `upvoted/`, `downvoted/` and `hidden/` are now drawn by Sheddit, and
+the profile tab strip shows them on your own profile only. An empty tab is recognised
+by Reddit's own empty-feed panel.
+
+### Fixed — comments you had already voted on came up unvoted
+
+The standing vote on a comment is only on Reddit's action row, which Reddit builds once
+the comment has been on screen. Sheddit now reads each comment's vote as it scrolls into
+view, one at a time, and lights the arrow without moving your page.
+
+## 0.63.1 (not released separately; included in 0.64.0)
+
+### Fixed — a comment's vote could land on one of its replies
+
+A `<shreddit-comment>` contains its replies, and the lookup for its vote button searched
+every descendant. When a reply's action row had hydrated but the comment's own had not,
+the reply's button was found first: the arrow sent `UpdateCommentVoteState` for the reply
+and painted the parent as voted. Measured live on a signed-in thread. Vote buttons are
+now taken only from the comment's own action row.
+
+### Fixed — markdown in a reply arrived as literal characters (**never worked**)
+
+Sheddit's box is plain text, but it fed Reddit's rich editor, which posts
+`mode=richText`, so `**bold**` arrived with its asterisks. The save now switches Reddit's
+composer to Markdown and types into that, so Reddit receives `mode=markdown`. Reddit
+remembers the switch as the reader's own editor preference.
+
+### Fixed — a refused reply was reported as "may already have posted"
+
+Reddit answers a refused comment, such as a rate limit, with an error alert and no
+comment. Sheddit waited out its arrival deadline and then said the reply might have
+posted. A new error alert after the submit is now reported with Reddit's own message, and
+the draft stays in Sheddit's box.
+
+---
+
 ## 0.63.0
 
 ### Fixed — a reply posts from Sheddit's own save button, first time (**never worked**)

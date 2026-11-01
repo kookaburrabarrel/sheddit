@@ -409,6 +409,10 @@ html.shd-active #shd-loading.shd-loading-over {
 }
 .thing.link.compact { margin-bottom: calc(var(--shd-row-gap) - 4px); }
 .thing.link.shd-hidden { display: none; }
+/* What a signed-in hide leaves behind: one muted line with Reddit's own undo behind it. */
+.shd-hidden-stub { color: var(--shd-meta); font-size: 11px; padding: 0 0 var(--shd-row-gap) 88px; }
+.shd-delete-ask { color: #c00; }
+.thing.shd-deleted > .entry, .thing.comment.deleted > .entry { opacity: 0.6; }
 
 /* The share box: old reddit expanded one under the row rather than navigating, which is
    also the only shape that works on a comments page — there, following the permalink is
@@ -1115,6 +1119,10 @@ html.shd-active #shd-loading.shd-loading-over {
 .shd-account-toggle:hover { background: var(--shd-hover-bg); }
 .shd-account-toggle[aria-expanded="true"] { border-color: var(--shd-header-border); }
 .shd-account-caret { font-size: 9px; }
+/* Old reddit's envelope: muted with nothing unread, orange with Reddit's own count. */
+.shd-account a.shd-inbox { color: var(--shd-meta); padding: 1px 2px; }
+.shd-account a.shd-inbox.shd-havemail { color: #ff4500; font-weight: bold; }
+.shd-unread-count:not(:empty) { margin-left: 2px; }
 /* Not a name, and it must not look like one: this is what the corner says when the
    username cannot be read. */
 .shd-account-unnamed { color: var(--shd-meta); }
