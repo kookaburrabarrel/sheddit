@@ -19,16 +19,17 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.64.1](https://img.shields.io/badge/version-0.64.1-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.64.2](https://img.shields.io/badge/version-0.64.2-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.64.1 — delete, hide and your own tabs
+### Beta 0.64.2 — delete, hide and your own tabs
 
-**0.64.1 tidies a deleted row**: it drops the edit and reply links that could no longer do
-anything. **0.64.0 filled in the signed-in basics:** delete your own comments and posts, edit your
+**0.64.2 hides spoilers** until you click them, opens threads on profile posts in the old
+layout, and stops a feed that returns nothing from loading forever. **0.64.1 tidied a
+deleted row**: it dropped the edit and reply links that could no longer do anything. **0.64.0 filled in the signed-in basics:** delete your own comments and posts, edit your
 own text posts, hide posts with Reddit's own hide (with undo), see unread notifications in
 the header, open your saved, upvoted, downvoted and hidden tabs, and see the comments you
 already voted on lit. It also fixes three signed-in bugs: a comment's vote arrow could vote
@@ -88,7 +89,7 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 > Your own comments have an **edit** link that opens Reddit's native editor.
 > Save there, then choose **back to sheddit** to return to the updated comment.
 >
-> **Known live limitations in 0.64.1:** Reddit can refuse a reply sent seconds after the
+> **Known live limitations in 0.64.2:** Reddit can refuse a reply sent seconds after the
 > previous one. Sheddit then shows Reddit's own reason and keeps your draft in its box;
 > wait and save again. Posting a reply switches Reddit's own composer to its Markdown
 > editor, and Reddit remembers that choice.
@@ -103,6 +104,17 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail, and every earlier build, in the [changelog](CHANGELOG.md).
+
+**0.64.2 · 2026-11-03 — spoilers, profile threads, endless loading**
+
+- **Fixed:** spoiler posts showed their picture in full. They are now labelled **spoiler**,
+  with a placeholder in the feed and the picture hidden on the post's page until clicked.
+- **Fixed:** threads on posts made to a user's profile opened in modern Reddit. They now
+  render like any other thread.
+- **Fixed:** a feed that kept returning nothing loaded every two seconds forever. Automatic
+  loading now stops after six empty loads; **load more** still works.
+- **Hardened:** links and images only accept safe URL types, and bodies copied from
+  Reddit's page lose inline scripts, forms and styles.
 
 **0.64.1 · 2026-11-01 — deleted rows**
 
@@ -257,7 +269,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.64.1**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.64.2**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

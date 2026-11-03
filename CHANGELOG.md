@@ -20,7 +20,7 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
-## Unreleased
+## 0.64.2
 
 ### Fixed — spoilers were shown in full
 
