@@ -102,7 +102,19 @@ sync_release() {
   git tag -f Release HEAD -m "Sheddit $VERSION" >/dev/null || return 1
   git push -f --quiet origin Release || return 1
 
-  if gh release view Release >/dev/null 2>&1; then
+  # A NEW VERSION GETS A NEW RELEASE, not an edited one. The date GitHub prints on the
+  # release ("Latest · 2 days ago") is when it was PUBLISHED, and `gh release edit` can
+  # change the title, notes and assets but never that — so 0.64.2 went out under 0.64.1's
+  # date. Deleting the release (not the tag; it was just moved above) and creating it
+  # again is the only way to restamp it. A re-run at the same version keeps its date.
+  local current
+  current=$(gh release view Release --json name --jq .name 2>/dev/null || true)
+  if [ -n "$current" ] && [ "$current" != "$VERSION" ]; then
+    gh release delete Release --yes >/dev/null || return 1
+    current=""
+  fi
+
+  if [ -n "$current" ]; then
     gh release upload Release dist/sheddit.zip dist/sheddit-firefox.zip --clobber || return 1
     gh release edit Release --title "$VERSION" --notes "$notes" >/dev/null || return 1
   else
