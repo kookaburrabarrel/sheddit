@@ -1790,12 +1790,11 @@ async function boot(html, url, setup) {
       doc.querySelectorAll('#shd-root .thing.link').length === POSTS.length,
       String(doc.querySelectorAll('#shd-root .thing.link').length));
 
-    // Leaving for an unhandled route must hand the page back completely. A thread on a
-    // PROFILE POST is the canonical one now that /user/ itself is in scope: it still
-    // classifies OTHER (the page shape has never been captured) and it genuinely carries
-    // post elements.
+    // Leaving for an unhandled route must hand the page back completely. Search is the
+    // canonical one: it classifies OTHER and the listing fixture still carries post
+    // elements, so nothing but the route can be what hands it back.
     doc.querySelectorAll('[data-shd]').forEach(el => el.removeAttribute('data-shd'));
-    window.history.pushState({}, '', '/user/someone/comments/abc/xyz/');
+    window.history.pushState({}, '', '/search/');
     await waitFor(() => !doc.querySelector('#shd-root') && !doc.querySelector('#shd-header'));
     check('navigating to an unhandled route removes our whole layout',
       !doc.querySelector('#shd-root') && !doc.querySelector('#shd-header'));
@@ -2241,13 +2240,12 @@ async function boot(html, url, setup) {
   }
   {
     // An unhandled route can carry shreddit-post elements while classifying OTHER — a
-    // user profile was the original example (bug 36); a thread on a profile post is the
-    // shape that still does, now that /user/ itself is in scope. With the pipeline slow
+    // user profile was the original example (bug 36); search results are one today. With the pipeline slow
     // to boot, the deadline used to put a full-screen error on a page standDown() was
     // moments from disowning — a flash of an error screen that then removes itself,
     // which is a bug report nobody can reproduce.
     let releaseStorage;
-    const { doc } = await boot(listingPage(), 'https://www.reddit.com/user/someone/comments/abc/xyz/', (w) => {
+    const { doc } = await boot(listingPage(), 'https://www.reddit.com/search/', (w) => {
       w.chrome = {
         storage: {
           sync: { get: () => new Promise(res => { releaseStorage = () => res({}); }) },
@@ -2433,7 +2431,7 @@ async function boot(html, url, setup) {
     // untouched; deleting an element violates that as much as restyling one would.
     // docs/engineering-log.md bug 37.
     const { doc, window } = await boot(listingPage(), 'https://www.reddit.com/r/aww/');
-    window.history.pushState({}, '', '/user/someone/comments/abc/xyz/');
+    window.history.pushState({}, '', '/search/');
     await waitFor(() => !doc.querySelector('#shd-root'));
 
     // Reddit raises its login upsell on the stood-down page.
@@ -2806,7 +2804,7 @@ async function boot(html, url, setup) {
         `front=${R.classify(`/${s}/`)} sub=${R.classify(`/r/aww/${s}/`)}`);
     }
     check('unhandled routes still fall through',
-      ['/search/', '/user/x/comments/abc/xyz/', '/settings/', '/r/aww/wiki/index/']
+      ['/search/', '/settings/', '/r/aww/wiki/index/', '/message/inbox/']
         .every(p => R.classify(p) === R.OTHER));
 
     /* A sort that takes a time window but is not a tab we render is a window control on
@@ -2830,8 +2828,16 @@ async function boot(html, url, setup) {
     check('/user/x/ and its tabs classify as PROFILE',
       ['/user/tester/', '/user/tester', '/user/tester/comments/', '/user/tester/submitted/']
         .every(p => R.classify(p) === R.PROFILE));
-    check('a thread on a PROFILE POST stays OTHER — that page shape is uncaptured',
-      R.classify('/user/tester/comments/abc/xyz/') === R.OTHER);
+    /* A thread on a PROFILE POST is a THREAD: captured live 2026-11-03 with the same
+       shreddit-post + shreddit-comment contract as an /r/ one (route.js THREAD). The tab
+       it shares a prefix with must not be swallowed by it. */
+    check('a thread on a PROFILE POST classifies as COMMENTS, with its post id and focus',
+      R.classify('/user/tester/comments/abc/xyz/') === R.COMMENTS &&
+      R.postIdOf('/user/tester/comments/AbC/xyz/') === 't3_abc' &&
+      R.classify('/user/tester/comments/abc/xyz/def/') === R.COMMENTS);
+    check('...while the bare comments TAB stays PROFILE',
+      R.classify('/user/tester/comments/') === R.PROFILE &&
+      R.classify('/user/tester/comments') === R.PROFILE);
 
     await waitFor(() =>
       doc.querySelectorAll('#shd-root .thing').length >= 2 + PROFILE_COMMENT_COUNT);
@@ -4165,6 +4171,60 @@ async function boot(html, url, setup) {
       !!nsfwRow.querySelector('.nsfw-stamp'));
   }
 
+  /* SPOILERS. Reddit marks one with a bare `spoiler` attribute on shreddit-post (verified
+     live 2026-11-03, r/anime) and blurs it in its own feed — the same trap as NSFW above:
+     lifting the thumbnail URL walked straight past the blur and the reader got the ending
+     of the film in a 70px tile, with nothing in the row saying it was a spoiler. */
+  console.log('\n\x1b[1mSPOILERS ARE NOT RENDERED AS A PICTURE\x1b[0m');
+  {
+    const html = listingPage().replace('id="t3_link1"', 'id="t3_link1" spoiler=""');
+    const { doc } = await boot(html, 'https://www.reddit.com/');
+    const row = doc.querySelector('#shd-root .thing.link[data-fullname="t3_link1"]');
+    check('a spoiler post\'s thumbnail is a placeholder, not the image',
+      !!row?.querySelector('a.thumbnail.spoiler') && !row.querySelector('.thumbnail img'),
+      row?.querySelector('.thumbnail')?.outerHTML);
+    check('...and the row is stamped spoiler',
+      row?.querySelector('.spoiler-stamp')?.textContent === 'spoiler');
+    check('exactly one row is treated as a spoiler',
+      doc.querySelectorAll('#shd-root .spoiler-stamp').length === 1);
+  }
+  {
+    const html = commentsPage({ imagePost: true }).replace('id="t3_image1"', 'id="t3_image1" spoiler=""');
+    const { doc } = await boot(html, 'https://www.reddit.com/r/pics/comments/image1/x/');
+    check('a spoiler post\'s picture is gated on its thread, like adult content',
+      !!doc.querySelector('.shd-selfpost .shd-image.shd-image-gated') &&
+      !doc.querySelector('.shd-selfpost .shd-image-el'));
+    check('...and the reveal says why',
+      /^spoiler/.test(doc.querySelector('.shd-selfpost button.shd-image-reveal')?.textContent || ''),
+      doc.querySelector('.shd-selfpost button.shd-image-reveal')?.textContent);
+  }
+
+  /* A HREF IS NOT A SINK THAT CARES WHERE ITS STRING CAME FROM. content-href went
+     straight into the title and thumbnail links, so a post carrying a javascript: URL
+     became a script one click away in our layout. dom.h() now refuses any URL attribute
+     that is not relative, http(s) or mailto. */
+  console.log('\n\x1b[1mONLY SAFE URL SCHEMES REACH A LINK\x1b[0m');
+  {
+    const html = listingPage().replace(/(id="t3_link1"[\s\S]*?content-href=")[^"]*/,
+      '$1javascript:alert(document.domain)');
+    const { window, doc } = await boot(html, 'https://www.reddit.com/');
+    const row = doc.querySelector('#shd-root .thing.link[data-fullname="t3_link1"]');
+    check('setup: the row still renders', !!row);
+    check('no element in our layout carries a javascript: URL',
+      ![...doc.querySelectorAll('#shd-root [href], #shd-root [src]')]
+        .some(el => /^\s*javascript:/i.test(el.getAttribute('href') || el.getAttribute('src'))));
+    const { h, safeUrl } = window.SHD.dom;
+    check('safeUrl allows relative, protocol-relative, http(s) and mailto',
+      ['/r/x/', '//i.redd.it/a.jpg', 'https://x.y/', 'http://x.y/', 'mailto:a@b.c', '#top', '?q=1']
+        .every(safeUrl));
+    check('...and refuses javascript, data, vbscript and blob, however spelt',
+      ['javascript:x', ' JavaScript:x', 'java\tscript:x', 'data:text/html,x', 'vbscript:x',
+       'blob:https://x/1'].every(u => !safeUrl(u)));
+    check('h() drops an unsafe href rather than writing it',
+      !h('a', { href: 'javascript:x' }).hasAttribute('href') &&
+      h('a', { href: '/ok/' }).getAttribute('href') === '/ok/');
+  }
+
   console.log('\n\x1b[1mTHE HEADER\'S NSFW TOGGLE\x1b[0m');
   {
     /**
@@ -4866,6 +4926,60 @@ async function boot(html, url, setup) {
     check('control: the partial really was driven, and really added nothing',
       window.__barren === 2 && rows() === before, `${window.__barren} loads, rows ${before}->${rows()}`);
     window.SHD.paginator.reset();
+  }
+
+  /* ...AND SOFT HAS A FLOOR. A feed whose every load hands back a FRESH continuation and no
+     posts never depletes the pool, so `exhausted` never arrives, and once the reader has
+     interacted nothing else bounds the heartbeat: an adversarial review measured 16 loads
+     in 30s with 0 rows, for as long as the tab stayed open. Past UNPRODUCTIVE_HARD the
+     automatic path stops; a click still loads, and late content re-opens it. */
+  console.log('\n\x1b[1mAN ENDLESS RUN OF BARREN LOADS STOPS THE AUTOMATIC PATH\x1b[0m');
+  {
+    const barren = (win) => {
+      win.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
+      win.chrome = { storage: {
+        sync: { get: async () => ({ settings: { autoPaginate: false } }) },
+        onChanged: { addListener() {} }
+      } };
+      win.eval(`
+        window.__barren = 0;
+        class ShdBarren extends HTMLElement {
+          loadContent() {
+            window.__barren++;
+            const feed = document.querySelector('shreddit-feed');
+            this.remove();
+            const next = document.createElement('faceplate-partial');
+            next.setAttribute('loading', 'programmatic');
+            next.setAttribute('src', '/next');
+            feed.appendChild(next);
+          }
+        }
+        if (!customElements.get('faceplate-partial')) customElements.define('faceplate-partial', ShdBarren);
+      `);
+    };
+    const { window, doc } = await boot(listingPage(), 'https://www.reddit.com/', barren);
+    const P = window.SHD.paginator;
+    const refusal = () => doc.querySelector('.shd-sentinel')?.dataset.shdRefusal;
+    for (let i = 0; i < 8; i++) await P.loadNext('manual');
+    const driven = window.__barren;
+    check('setup: every manual load was driven, and each one was barren',
+      driven === 8 && P.pages === 0, `${driven} loads, pages=${P.pages}`);
+    const auto = await P.loadNext('auto');
+    check('past the hard streak, an automatic load is refused without driving anything',
+      auto === false && refusal() === 'unproductive-stop' && window.__barren === driven,
+      `returned ${auto}, refusal ${refusal()}, loads ${window.__barren}`);
+    await P.loadNext('manual');
+    check('...but a click on "load more" still loads', window.__barren === driven + 1,
+      `${window.__barren} loads`);
+    // Content landing late is what the arrears credit pays for; the stop must not outlive it.
+    const late = doc.querySelector('shreddit-post').cloneNode(true);
+    late.id = 't3_late1';
+    doc.querySelector('shreddit-feed').appendChild(late);
+    await hold(30);
+    await P.loadNext('auto');
+    check('...and late content re-opens the automatic path',
+      refusal() !== 'unproductive-stop', refusal());
+    P.reset();
   }
 
   /* Two independent reports of one thing: opening a comments page locked the tab for 30+
@@ -5996,7 +6110,7 @@ async function boot(html, url, setup) {
        one of them back untouched — so rewriting them broke old.reddit for the readers
        who can still use all of it, logged-in moderators, and did it by default. */
     for (const p of ['/prefs/', '/message/inbox/', '/r/x/about/modqueue', '/r/x/wiki/index',
-                     '/search/?q=cats', '/user/someone/comments/abc/title/']) {
+                     '/search/?q=cats', '/r/x/submit/']) {
       check(`a path Sheddit does not render is left on old.reddit: ${p}`,
         targetFor(`https://old.reddit.com${p}`) === null,
         String(targetFor(`https://old.reddit.com${p}`)));
@@ -9254,6 +9368,34 @@ async function boot(html, url, setup) {
     doc.body.appendChild(copy);
     await hold(30);
     check('...so inserting it runs nothing', window.__shdPwned === undefined);
+  }
+
+  {
+    /* Elements were half of it. An inline handler, a javascript: href or a <form> survives
+       the clone with every attribute intact, and our layout is where a reader clicks it. */
+    const { window, doc } = await boot(listingPage(), 'https://www.reddit.com/');
+    const body = doc.createElement('div');
+    body.setAttribute('onmouseover', 'window.__shdPwned = 1');
+    body.innerHTML = '<a href="javascript:window.__shdPwned=1">x</a>' +
+                     '<a href=" java\tscript:alert(1)">y</a>' +
+                     '<img src="data:image/svg+xml,<svg/>" onerror="window.__shdPwned=1">' +
+                     '<form action="https://evil.example/"><input name="p"></form>' +
+                     '<style>body{display:none}</style><base href="https://evil.example/">' +
+                     '<a href="https://www.reddit.com/r/x/" title="t">good</a><a href="/r/y/">rel</a>' +
+                     '<a href="mailto:a@b.c">mail</a>';
+    const copy = window.SHD.dom.adoptBody(body);
+    const all = [copy, ...copy.querySelectorAll('*')];
+    check('adoptBody strips every inline event handler, root included',
+      all.every(el => ![...el.attributes].some(a => /^on/i.test(a.name))), copy.outerHTML.slice(0, 200));
+    check('...every javascript: and data: URL, however it is spelt',
+      all.every(el => !/^\s*(java|data)/i.test((el.getAttribute('href') || el.getAttribute('src') || '')
+        .replace(/[\u0000-\u0020]/g, ''))), copy.innerHTML.slice(0, 200));
+    check('...and forms, styles and <base>',
+      copy.querySelectorAll('form, style, base').length === 0);
+    check('...while https, relative and mailto links keep their hrefs and other attributes',
+      [...copy.querySelectorAll('a[href]')].map(a => a.getAttribute('href')).join(' ') ===
+        'https://www.reddit.com/r/x/ /r/y/ mailto:a@b.c' && !!copy.querySelector('a[title="t"]'),
+      [...copy.querySelectorAll('a')].map(a => a.getAttribute('href')).join(' '));
   }
 
   {

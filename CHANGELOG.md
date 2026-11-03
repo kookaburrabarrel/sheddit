@@ -20,6 +20,38 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## Unreleased
+
+### Fixed — spoilers were shown in full
+
+A post marked as a spoiler showed its thumbnail unblurred in the feed and its picture in
+full on its own page, with nothing in the row saying it was a spoiler. Reddit blurs these
+itself; Sheddit read the image URL and drew it, walking past that blur — the same way
+adult thumbnails once leaked. Spoiler rows are now stamped **spoiler** with a placeholder
+tile, and the picture on the post's page sits behind a "spoiler — click to view" reveal.
+Opening the expando is still a deliberate reveal.
+
+### Fixed — threads on profile posts opened in modern Reddit
+
+A thread on a post made to a user's profile (`/user/<name>/comments/<id>/…`) was left to
+modern Reddit as an unknown page shape. It has the same markup as a subreddit thread and is
+now drawn like one.
+
+### Fixed — a feed that never ends never stopped loading
+
+A feed whose every load handed back another "load more" and no posts kept fetching every
+two seconds for as long as the tab stayed open, once you had scrolled. After six empty
+loads in a row the automatic loading now stops; clicking **load more** still loads, and
+any late-arriving posts start it again.
+
+### Hardening
+
+- Links and images Sheddit draws accept only relative, `http(s)` and `mailto` URLs, so a
+  `javascript:` link URL on a post can no longer become a clickable script.
+- Post and comment bodies copied from Reddit's page lose inline event handlers, unsafe
+  URLs, forms, styles and `<base>`/`<meta>`/`<link>` elements as well as scripts and
+  frames.
+
 ## 0.64.1
 
 ### Fixed — a deleted row kept links that did nothing

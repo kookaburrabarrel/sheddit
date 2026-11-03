@@ -2228,6 +2228,34 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      twice was not established — Reddit 403s the test container — and pictureKey is the
      guess at that half (a second <img> per frame carrying a resize of the same file).
 
+121. **A logged-out adversarial review, 2026-11-03: spoilers, an endless loader, profile
+     threads, and two unchecked sinks.** Five findings, each reproduced in jsdom before it
+     was fixed and the first and fourth confirmed live.
+     (a) *Spoilers drew in full.* shreddit-post carries a bare `spoiler` attribute (live,
+     r/anime, value `""`) and Reddit blurs such posts itself; we lifted the thumbnail URL
+     past that blur exactly as NSFW once did. C.SPOILER_ATTRS feeds `post.spoiler` through
+     the same `flagOf()` the NSFW flag now uses; the row gets a placeholder tile and a
+     stamp, and the comments page gates the picture under comments.js `gateReason()`.
+     (b) *An endless barren run never stopped.* The unproductive limit is SOFT on purpose
+     (its loads are the ones credited in arrears), and `exhausted` never arrives when each
+     load hands back a fresh continuation — so once the reader had interacted, nothing
+     bounded the heartbeat: 16 loads in 30s, 0 rows, indefinitely. UNPRODUCTIVE_HARD (6)
+     refuses AUTOMATIC loads as `unproductive-stop`; a manual click still loads, and late
+     sources re-open the gate so the arrears credit is never stranded.
+     (c) *Profile-post threads were OTHER* because the page shape had never been captured.
+     Captured live (/user/spez/comments/1u7hraf/…): one shreddit-post and its
+     shreddit-comment tree, the /r/ contract. route.js THREAD covers both prefixes and
+     `postIdOf`/`contentKey` read from it; the id segment is required so the comments TAB
+     stays PROFILE.
+     (d) *href/src took any scheme.* content-href went straight into the title and
+     thumbnail links, so a `javascript:` value was one click from running. `dom.h()` now
+     drops any href/src/poster/action that is not relative, http(s) or mailto (`safeUrl`,
+     which strips control characters first so `java\tscript:` is caught), and the three
+     direct property writes use the same check.
+     (e) *adoptBody stripped four tag names.* Inline handlers, javascript:/data: URLs,
+     forms, styles and base/meta/link survived the clone. All are now removed, root
+     included. Defence in depth, as before: Reddit sanitises what it renders.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

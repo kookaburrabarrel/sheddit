@@ -272,6 +272,7 @@ SHD.model = (() => {
       subredditPrefixed: attr(el, A.subredditPrefixed) || '',
       index: num(el, A.index),
       nsfw: nsfwOf(el),
+      spoiler: flagOf(el, C.SPOILER_ATTRS),
       thumbnail: thumbnailFor(el, type),
       bodyNode,
       removedNotice,
@@ -295,7 +296,12 @@ SHD.model = (() => {
    * confirms it.
    */
   function nsfwOf(el) {
-    return C.NSFW_ATTRS.some(name => {
+    return flagOf(el, C.NSFW_ATTRS);
+  }
+
+  /** A boolean custom-element attribute, read the way nsfwOf() documents. */
+  function flagOf(el, names) {
+    return names.some(name => {
       const v = el.getAttribute(name);
       if (v === null) return false;
       const s = v.trim().toLowerCase();

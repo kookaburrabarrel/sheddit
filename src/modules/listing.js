@@ -164,6 +164,11 @@ SHD.listing = (() => {
     if (m.nsfw && !SHD.settings.showNsfwThumbnails) {
       return h('a.thumbnail.nsfw', { href: m.href, rel: 'noopener', 'aria-label': 'adult content' });
     }
+    /* A spoiler's picture is the spoiler. Reddit blurs it, and drawing our own <img> walks
+       past that the same way — so old reddit's placeholder, with no opt-in to undo it. */
+    if (m.spoiler) {
+      return h('a.thumbnail.spoiler', { href: m.href, rel: 'noopener', 'aria-label': 'spoiler' });
+    }
     if (m.thumbnail) {
       return h('a.thumbnail', { href: m.href, rel: 'noopener' },
         h('img', { src: m.thumbnail, alt: '', loading: 'lazy' }));
@@ -272,7 +277,7 @@ SHD.listing = (() => {
             href: m.mp4 || m.permalink, rel: 'noopener', text: 'watch',
             onclick: function () {
               const late = SHD.model.mp4Of(m.source);
-              if (late) this.href = late;
+              if (late && SHD.dom.safeUrl(late)) this.href = late;
             }
           }))
         : null,
@@ -381,6 +386,7 @@ SHD.listing = (() => {
              has no image. Shown regardless of the thumbnail setting, because it labels
              the post rather than standing in for the picture. */
           m.nsfw ? h('span.nsfw-stamp', { text: 'nsfw' }) : null,
+          m.spoiler ? h('span.spoiler-stamp', { text: 'spoiler' }) : null,
           /* Old reddit's own convention for a post that is no longer there, and the same
              reasoning as the nsfw stamp beside it: a one-word label on the title is what
              tells a reader the row is a dead end before they spend a click on it. The

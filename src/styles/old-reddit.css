@@ -535,7 +535,8 @@ html.shd-active #shd-loading.shd-loading-over {
    old.reddit measurement would have it, is wrong here. */
 .thumbnail.self,
 .thumbnail.default,
-.thumbnail.nsfw {
+.thumbnail.nsfw,
+.thumbnail.spoiler {
   background: var(--shd-thumb-bg);
   border: 1px solid var(--shd-thumb-border);
 }
@@ -566,6 +567,17 @@ html.shd-active #shd-loading.shd-loading-over {
   font-weight: bold;
   color: var(--shd-nsfw);
   content: 'nsfw';
+}
+
+/* A spoiler: the same tile, muted rather than red — it warns about a plot, not content. */
+.thumbnail.spoiler::after {
+  display: block;
+  text-align: center;
+  line-height: 68px;   /* 70px box less its 1px border, top and bottom */
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--shd-meta);
+  content: 'spoiler';
 }
 
 /* A post Reddit has taken down.
@@ -605,6 +617,7 @@ html.shd-active #shd-loading.shd-loading-over {
 }
 
 /* The stamp beside the title. Old reddit put it right after the link. */
+.spoiler-stamp,
 .nsfw-stamp {
   color: var(--shd-nsfw);
   font-size: 10px;
@@ -616,6 +629,7 @@ html.shd-active #shd-loading.shd-loading-over {
   margin-left: 5px;
   white-space: nowrap;
 }
+.spoiler-stamp { color: var(--shd-meta); border-color: var(--shd-border); }
 
 .entry { overflow: hidden; }
 .entry p { margin: 0 0 1px 0; }

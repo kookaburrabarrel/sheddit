@@ -8,6 +8,19 @@ SHD.dom = (() => {
    * h('a.title', {href, target}, 'text' | node | [..])
    * Tag string supports .class and #id shorthand.
    */
+  /* Attributes that navigate or fetch. Every one h() writes is scheme-checked, because the
+     values are Reddit's (content-href, permalinks, image URLs) and an attribute is not a
+     sink that cares where its string came from. */
+  const URL_ATTRS = new Set(['href', 'src', 'poster', 'action', 'formaction']);
+
+  /** Relative, http(s) or mailto — nothing that runs or embeds. Control characters and
+   *  whitespace are dropped first, as the URL parser does, so `java\tscript:` is caught. */
+  function safeUrl(v) {
+    const s = String(v).replace(/[\u0000-\u0020\u007F]+/g, '');
+    const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(s);
+    return !scheme || /^(?:https?|mailto)$/i.test(scheme[1]);
+  }
+
   function h(tag, attrs, children) {
     const [name, ...rest] = tag.split(/(?=[.#])/);
     const el = document.createElement(name || 'div');
@@ -24,6 +37,7 @@ SHD.dom = (() => {
         else if (k === 'text') { el.textContent = v; }
         else if (k.startsWith('on') && typeof v === 'function') { el.addEventListener(k.slice(2), v); }
         else if (k === 'dataset') { Object.assign(el.dataset, v); }
+        else if (URL_ATTRS.has(k) && !safeUrl(v)) continue;
         else el.setAttribute(k, v === true ? '' : String(v));
       }
     }
@@ -168,7 +182,18 @@ SHD.dom = (() => {
     // Reddit hides the body while editing; only the adopted root must be visible.
     copy.classList?.remove('hidden');
     copy.removeAttribute?.('hidden');
-    copy.querySelectorAll?.('script, iframe, object, embed').forEach(n => n.remove());
+    copy.querySelectorAll?.('script, iframe, object, embed, frame, frameset, base, meta, link, style, form')
+      .forEach(n => n.remove());
+    /* Elements are half of it. An inline handler or a javascript: href survives the clone
+       intact, and our layout is where a reader will click it. Strip both, on the root too. */
+    for (const el of [copy, ...(copy.querySelectorAll?.('*') || [])]) {
+      for (const { name, value } of [...(el.attributes || [])]) {
+        if (/^on/i.test(name) || (URL_ATTRS.has(name.toLowerCase()) && !safeUrl(value)) ||
+            name.toLowerCase() === 'srcdoc') {
+          el.removeAttribute(name);
+        }
+      }
+    }
     return inlineGifs(copy);
   }
 
@@ -322,6 +347,6 @@ SHD.dom = (() => {
   const rowSel = (id) =>
     `.thing[data-fullname="${String(id).replace(/["\\]/g, '\\$&')}"]`;
 
-  return { h, score, ago, domain, plural, flair, inlineGifs, adoptBody, rowSel,
+  return { h, safeUrl, score, ago, domain, plural, flair, inlineGifs, adoptBody, rowSel,
            deepQuery, shadowRoots, passthrough, passthroughNote, passthroughClear };
 })();

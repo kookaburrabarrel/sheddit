@@ -397,8 +397,10 @@ SHD.comments = (() => {
     return true;
   }
 
-  /** Is this post's picture behind the adult opt-in? One question, asked in three places. */
-  const adultGate = (m) => !!m.nsfw && !SHD.settings.showNsfwThumbnails;
+  /** Is this post's picture behind a click, and why? One question, asked in four places.
+   *  Adult content waits for the opt-in; a spoiler always waits, as Reddit's blur does. */
+  const gateReason = (m) => (m.nsfw && !SHD.settings.showNsfwThumbnails) ? 'adult content'
+    : m.spoiler ? 'spoiler' : null;
 
   /* The native <img> each drawn gallery frame was read from — bug 120. A lazy frame's URL
      CHANGES when Reddit hydrates it (data-lazy-src, then the largest of a srcset), so a
@@ -533,7 +535,7 @@ SHD.comments = (() => {
     else box.classList.add('shd-image-gated-bare');
     const show = h('button.shd-image-reveal', {
       type: 'button',
-      text: 'adult content — click to view',
+      text: `${gateReason(m) || 'adult content'} — click to view`,
       onclick: () => {
         box.classList.remove('shd-image-gated');
         const frames = resolve();
@@ -563,7 +565,7 @@ SHD.comments = (() => {
       : m.type === 'gallery' ? galleryFrames(m) : [];
     if (!frames.length) return null;
     const box = h('div.shd-image');
-    if (adultGate(m)) return gateImages(box, m, () => liveFrames(m, frames));
+    if (gateReason(m)) return gateImages(box, m, () => liveFrames(m, frames));
     box.append(...imageFrames(frames));
     return syncGallery(box);
   }
@@ -618,7 +620,7 @@ SHD.comments = (() => {
        NOTHING BUT THE POSTER LOADS while it stands: `preload: none` and no source is mounted
        until the click, so a scrolled-past adult post costs one thumbnail — the same picture
        the listing row would have shown — and not a video. */
-    const gated = !!m.nsfw && !SHD.settings.showNsfwThumbnails;
+    const gated = gateReason(m);
 
     const video = h('video.shd-video-el', {
       controls: true, preload: gated ? 'none' : 'metadata', playsinline: '',
@@ -638,7 +640,7 @@ SHD.comments = (() => {
 
     const mount = (url, info) => {
       tried.push(url);
-      video.src = url;
+      if (SHD.dom.safeUrl(url)) video.src = url;
       /* Stated dimensions become an aspect ratio, so the box does not jump when metadata
          lands. Absent ones are simply not set — the element sizes itself once it loads. */
       if (info && info.width && info.height) {
@@ -858,7 +860,7 @@ SHD.comments = (() => {
     if (gated) {
       const show = h('button.shd-video-reveal', {
         type: 'button',
-        text: 'adult content — click to play',
+        text: `${gated} — click to play`,
         onclick: () => {
           box.classList.remove('shd-video-gated');
           show.remove();
@@ -915,7 +917,7 @@ SHD.comments = (() => {
         /* A gallery whose frames all arrived late, on an adult post: the box opens blurred,
            exactly as postImage would have built it had the frames been there at consume
            time. Appending the frames straight in here is the bypass the gate is for. */
-        if (adultGate(m)) { gateImages(box, m, () => liveFrames(m, [])); return; }
+        if (gateReason(m)) { gateImages(box, m, () => liveFrames(m, [])); return; }
       }
       /* Still blurred: the reader has not asked, and the reveal re-reads the frames, so
          nothing that hydrates while the blur stands is lost by waiting. */
@@ -940,7 +942,7 @@ SHD.comments = (() => {
           deck.find(f => SHD.model.pictureKey(f.getAttribute('src')) === key);
         if (!frame) { box.appendChild(imageFrame(url, img)); continue; }
         frameSource.set(frame, img);
-        if (frame.getAttribute('src') !== url) frame.setAttribute('src', url);
+        if (frame.getAttribute('src') !== url && SHD.dom.safeUrl(url)) frame.setAttribute('src', url);
       }
       /* A late frame is what turns a lone picture into a gallery — see syncGallery. */
       syncGallery(box);

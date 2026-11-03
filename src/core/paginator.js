@@ -193,6 +193,13 @@ SHD.paginator = (() => {
      is concerned, and live testing measured the cost of not noticing: 40 loads, 0 rows. */
   let unproductive = 0;
   const UNPRODUCTIVE_LIMIT = 2;      // one dud is tolerated; two in a row means done
+  /* The SOFT limit above never ends the chain — the heartbeat retries — and that is right
+     for a feed whose content lands late (credited in arrears). It is wrong for one whose
+     every load hands back a FRESH continuation and no posts: stamps never deplete that
+     pool, so the heartbeat fetched every 2s for as long as the tab stayed open (found by
+     an adversarial review, 2026-11-03: 16 loads in 30s, 0 rows). Past this streak the
+     AUTOMATIC path stops until content turns up; a click on "load more" still loads. */
+  const UNPRODUCTIVE_HARD = 6;
   /* Consecutive AUTO looks that found nothing to drive. The "no more pages" label commits
      only past this streak — see the exhausted branch in loadNext for the report. At
      the heartbeat's 2s cadence this is ~4-6s of genuinely nothing, long past any observed
@@ -332,6 +339,12 @@ SHD.paginator = (() => {
     const mine = epoch;                  // the route this load belongs to; see reset()
     if (busy) return refuse('busy');
     if (pages >= MAX_PAGES) { setStatus(`stopped after ${MAX_PAGES} pages`); return refuse('max-pages'); }
+    /* Late content re-opens the gate: it is what the arrears credit below pays for, and
+       a stop that outlived it would strand a feed that was merely slow. */
+    if (reason !== 'manual' && unproductive >= UNPRODUCTIVE_HARD &&
+        !(lastAfter !== null && document.querySelectorAll(SOURCE).length > lastAfter)) {
+      return refuse('unproductive-stop');
+    }
     // A deliberate click is not a runaway loop, and a button that silently does nothing is
     // worse than one that fetches twice. Only the automatic paths wait out the cooldown.
     if (reason !== 'manual' && Date.now() - lastAt < COOLDOWN_MS) return refuse('cooldown');
@@ -688,9 +701,10 @@ SHD.paginator = (() => {
    * the sticky streak (exhausted — before that, the successor partial can still stream in
    * late and land rows above the button, which is the trap again), or the page cap. The
    * reader's own interaction releases it too: someone who scrolled or clicked is steering,
-   * not aiming at a parked button. `unproductive` is deliberately absent — it is a SOFT
-   * limit the heartbeat retries past, and its loads are exactly the ones whose content
-   * arrives in arrears; the attempt budget bounds that run instead.
+   * not aiming at a parked button. `unproductive` below the HARD stop is deliberately
+   * absent — it is a SOFT limit the heartbeat retries past, and its loads are exactly the
+   * ones whose content arrives in arrears; the attempt budget bounds that run instead.
+   * At UNPRODUCTIVE_HARD nothing automatic will move the page, so it is a resting point.
    *
    * Not consulted with autoPaginate off: nothing unprompted will move the page, so the
    * manual button is honest from the first paint.
@@ -701,6 +715,7 @@ SHD.paginator = (() => {
       pages < MAX_PAGES &&
       exhausted < EXHAUSTED_STICKY &&
       unprompted < UNPROMPTED_MAX &&
+      unproductive < UNPRODUCTIVE_HARD &&
       !filled();
   }
 

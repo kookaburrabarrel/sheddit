@@ -110,20 +110,28 @@ SHD.route = (() => {
   const rendersHost = (host) =>
     RENDER_HOSTS.test(typeof host === 'string' ? host : location.hostname);
 
+  /* A THREAD is /r/<sub>/comments/<id>/… or /user/<name>/comments/<id>/… — the second is
+     a post made to a profile rather than a community. It used to be left OTHER as "a page
+     shape nobody has captured"; captured live 2026-11-03 (logged out, /user/<n>/comments/
+     <id>/<slug>/): one shreddit-post and its shreddit-comment tree, the same contract as
+     an /r/ thread, so the reader was dropped into modern Reddit for no reason. The id
+     segment is REQUIRED — `/user/x/comments/` alone is the profile's comments tab.
+     Groups: 1 the post id, 2 the focused comment id on a permalink, if any. */
+  const THREAD = /^\/(?:r|user)\/[^/]+\/comments\/([^/]+)(?:\/[^/]+\/([^/]+))?/;
+
   function classify(path = emitPath()) {
-    if (/^\/r\/[^/]+\/comments\//.test(path)) return COMMENTS;
+    if (THREAD.test(path)) return COMMENTS;
     if (path === '/' || path === '') return LISTING;
     if (/^\/r\/[^/]+\/?$/.test(path)) return LISTING;
     if (new RegExp(`^/r/[^/]+/(${SORT_RE})/?$`).test(path)) return LISTING;
     if (new RegExp(`^/(${SORT_RE})/?$`).test(path)) return LISTING;
-    /* User profiles: the overview and its comments/submitted tabs, and nothing deeper.
-       `/user/x/comments/` (exact) is the profile's comments TAB; `/user/x/comments/<id>/…`
-       is a thread on a PROFILE POST — a page shape nobody has captured — and the `$`
-       anchors below are what keep it OTHER (untouched) rather than half-claimed. In scope
-       by project decision 2026-08-21; see C.PROFILE_COMMENT for what remains unverified. */
+    /* User profiles: the overview and its comments/submitted tabs. `/user/x/comments/`
+       (exact) is the profile's comments TAB; `/user/x/comments/<id>/…` is a thread on a
+       PROFILE POST and was caught by THREAD above. In scope by project decision
+       2026-08-21; see C.PROFILE_COMMENT for what remains unverified. */
     if (/^\/user\/[^/]+\/?$/.test(path)) return PROFILE;
     if (new RegExp(`^/user/[^/]+/(${PROFILE_TAB_RE})/?$`).test(path)) return PROFILE;
-    return OTHER;                       // search, chat, modmail, profile threads → hands off
+    return OTHER;                       // search, chat, modmail, wiki → hands off
   }
 
   function usernameOf(path = emitPath()) {
@@ -152,13 +160,13 @@ SHD.route = (() => {
   }
 
   function postIdOf(path = emitPath()) {
-    const m = path.match(/^\/r\/[^/]+\/comments\/([^/]+)/);
+    const m = THREAD.exec(path);
     return m ? `t3_${m[1].toLowerCase()}` : null;
   }
 
   function contentKey() {
     const path = emitPath();
-    const focus = /^\/r\/[^/]+\/comments\/[^/]+\/[^/]+\/([^/]+)/.exec(path)?.[1] || '';
+    const focus = THREAD.exec(path)?.[2] || '';
     const page = classify(path) === COMMENTS ? `${postIdOf(path)}:${focus.toLowerCase()}`
       : path.toLowerCase().replace(/\/+$/, '');
     return `${classify(path)}:${page}?${emit.lastSort || ''}`;

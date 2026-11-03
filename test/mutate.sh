@@ -1165,7 +1165,7 @@ mutate "the codec tie goes back to Reddit's array order" run \
 mutate "video links stop re-resolving at click time" run \
   src/modules/listing.js "            onclick: function () {
               const late = SHD.model.mp4Of(m.source);
-              if (late) this.href = late;
+              if (late && SHD.dom.safeUrl(late)) this.href = late;
             }" "            onclick: null"
 
 # Live testing: two clicks on the more-replies control did nothing, and the label never changed
@@ -1488,8 +1488,8 @@ mutate "an image title points at the viewer-bound image URL again" run \
 # looking covered. This is bug 41's family — rendering our own <img> is what walks past the
 # blur Reddit applies for logged-out readers, and a full-size copy is that bypass enlarged.
 mutate "an adult post is enlarged on its comments page" run \
-  src/modules/comments.js "  const adultGate = (m) => !!m.nsfw && !SHD.settings.showNsfwThumbnails;" \
-                          "  const adultGate = (m) => false;"
+  src/modules/comments.js "  const gateReason = (m) => (m.nsfw && !SHD.settings.showNsfwThumbnails) ? 'adult content'" \
+                          "  const gateReason = (m) => false ? 'adult content'"
 
 mutate "an adult row gets an expando that opens the picture" run \
   src/modules/listing.js "    if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;" \
@@ -2394,7 +2394,7 @@ mutate "a hydrating gallery frame is recognised by its url again" run \
                           "        const frame = deck.find(f => f.getAttribute('src') === url) ||"
 
 mutate "a hydrated gallery frame keeps its stale lazy url" run \
-  src/modules/comments.js "        if (frame.getAttribute('src') !== url) frame.setAttribute('src', url);" "        ;"
+  src/modules/comments.js "        if (frame.getAttribute('src') !== url && SHD.dom.safeUrl(url)) frame.setAttribute('src', url);" "        ;"
 
 mutate "two urls of one picture are two gallery frames" run \
   src/core/model.js '    return `${/(^|\.)redd\.it$/.test(host) ? '"'"'redd.it'"'"' : host}/${path}`;' \
@@ -2494,7 +2494,8 @@ mutate "a row lookup interpolates an unescaped id again" run \
 
 # A cloned <script> loses its already-started flag and runs on insertion.
 mutate "a cloned body carries its scripts across" run \
-  src/core/dom.js "    copy.querySelectorAll?.('script, iframe, object, embed').forEach(n => n.remove());" "    ;"
+  src/core/dom.js "    copy.querySelectorAll?.('script, iframe, object, embed, frame, frameset, base, meta, link, style, form')" \
+                  "    copy.querySelectorAll?.('nothing')"
 
 # A malformed % in a header href throws URIError inside readIdentity(), under flush().
 mutate "a malformed username href spends an error-budget slot" run \
@@ -2910,6 +2911,31 @@ mutate "body adoption reveals deliberately hidden descendants" run \
     copy.querySelectorAll('[hidden], .hidden').forEach(n => {
       n.removeAttribute('hidden'); n.classList.remove('hidden');
     });"
+
+# ------------------------------------------------------- logged-out review, 2026-11-03 --
+# Spoilers: the thumbnail URL lifted straight past Reddit's own blur, as NSFW once did.
+mutate "review: a spoiler thumbnail is drawn as the picture" run \
+  src/core/model.js "    spoiler: flagOf(el, C.SPOILER_ATTRS)," "    spoiler: false,"
+
+# The post-page half: the picture box is only gated for adult content again.
+mutate "review: a spoiler picture is not gated on its thread" run \
+  src/modules/comments.js "    : m.spoiler ? 'spoiler' : null;" "    : null;"
+
+# content-href went straight into an href, so javascript: was one click away.
+mutate "review: h() writes any URL scheme into href/src" run \
+  src/core/dom.js "        else if (URL_ATTRS.has(k) && !safeUrl(v)) continue;" ""
+
+# Without the hard floor, a feed of fresh-but-barren continuations loads forever.
+mutate "review: endless barren loads keep the heartbeat fetching" run \
+  src/core/paginator.js "      return refuse('unproductive-stop');" "      void 0;"
+
+# A thread on a profile post was handed to modern Reddit for no reason.
+mutate "review: profile-post threads are left unrendered" run \
+  src/core/route.js "  const THREAD = /^\/(?:r|user)\/" "  const THREAD = /^\/(?:r)\/"
+
+# A cloned body kept its inline handlers and javascript: hrefs.
+mutate "review: adopted bodies keep inline handlers and unsafe URLs" run \
+  src/core/dom.js "          el.removeAttribute(name);" ""
 
 # The accounting. DECLARED is read from this file itself rather than maintained by hand —
 # a count that has to be kept in step with the rows is the same trap as the hand-maintained

@@ -330,6 +330,17 @@ SHD.C = {
   NSFW_ATTRS: ['nsfw'],
 
   /**
+   * How a post says it is a spoiler. Same boolean shape as NSFW_ATTRS, read by the same
+   * flagOf() in model.js.
+   *
+   * VERIFIED LIVE 2026-11-03 on /r/anime/, logged out: one post of 26 carried a `spoiler`
+   * attribute. Reddit blurs a spoiler's thumbnail and media; drawing our
+   * own <img> walks past that blur exactly as it did for adult posts (bug 41), so a
+   * spoiler gets the same placeholder tile, stamp and click-to-reveal.
+   */
+  SPOILER_ATTRS: ['spoiler'],
+
+  /**
    * The post's own rendered text, for the comments page.
    *
    * Post content is NOT an attribute — confirmed live 2026-08-20 (Superstonk report, and
