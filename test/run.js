@@ -6472,7 +6472,10 @@ async function boot(html, url, setup) {
             onInstalled: { addListener: (fn) => registered.push(['onInstalled', fn]) }
           },
           storage: {
-            sync: { get: async () => (opts.syncThrows ? Promise.reject(new Error('no')) : { ...sync }) },
+            sync: {
+              get: async () => (opts.syncThrows ? Promise.reject(new Error('no')) : { ...sync }),
+              set: async (o) => Object.assign(sync, o)
+            },
             local: {
               get: async () => ({ ...local }),
               set: async (o) => Object.assign(local, o)
@@ -6485,6 +6488,7 @@ async function boot(html, url, setup) {
       vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src/core/settings.js'), 'utf8'), ctx);
       vm.runInContext(BG_SRC, ctx, { filename: 'background.js' });
       ctx.__local = local;
+      ctx.__sync = sync;
       return ctx;
     };
 
@@ -6507,6 +6511,44 @@ async function boot(html, url, setup) {
        reader is entitled to refuse is to not send it. */
     check('storage that refuses to answer is treated as off, not as on',
       await mkCtx({ syncThrows: true }).SHD_BG.enabled() === false);
+
+    /* The one-time reset. A copy toggled off before the default was on carries an explicit
+       false that no default can reach; the update that ships this flips it back ONCE, and
+       the marker in local storage is what keeps a later "no" from being overruled. */
+    {
+      const migrated = mkCtx({ sync: { settings: { autoUpdateCheck: false, theme: 'night' } } });
+      check('the reset turns a stored false back on',
+        await migrated.SHD_BG.resetAutoUpdateOnce() === true &&
+        migrated.__sync.settings.autoUpdateCheck === true);
+      check('...and leaves every other stored preference alone',
+        migrated.__sync.settings.theme === 'night');
+      check('...and leaves a marker so it never runs twice',
+        migrated.__local[migrated.SHD_BG.MIGRATIONS_KEY]?.autoUpdateCheckOn === true);
+      migrated.__sync.settings.autoUpdateCheck = false;
+      check('a reader who turns it off AFTER the reset stays off',
+        await migrated.SHD_BG.resetAutoUpdateOnce() === false &&
+        migrated.__sync.settings.autoUpdateCheck === false);
+
+      const untouched = mkCtx({ sync: { settings: { autoUpdateCheck: true } } });
+      await untouched.SHD_BG.resetAutoUpdateOnce();
+      check('a copy already on is marked done without a sync write',
+        untouched.__sync.settings.autoUpdateCheck === true &&
+        untouched.__local[untouched.SHD_BG.MIGRATIONS_KEY]?.autoUpdateCheckOn === true);
+
+      const empty = mkCtx();
+      await empty.SHD_BG.resetAutoUpdateOnce();
+      check('a fresh install with no settings is marked done and writes none',
+        empty.__sync.settings === undefined &&
+        empty.__local[empty.SHD_BG.MIGRATIONS_KEY]?.autoUpdateCheckOn === true);
+
+      const broken = mkCtx({ syncThrows: true });
+      check('storage that refuses to answer leaves the migration pending, not done',
+        await broken.SHD_BG.resetAutoUpdateOnce() === false &&
+        broken.__local[broken.SHD_BG.MIGRATIONS_KEY] === undefined);
+
+      check('onInstalled runs the reset before the check',
+        /onInstalled\.addListener\(\(\) => \{ resetAutoUpdateOnce\(\)\.then\(maybeCheck\)/.test(BG_SRC));
+    }
 
     /* The rate limit, which is the whole difference between "at browser start" and a rate.
        A machine restarted six times in an afternoon must send one request, not six. */

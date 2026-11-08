@@ -218,12 +218,44 @@ function maybeCheck() {
   return inflight;
 }
 
+/**
+ * A one-time reset of the switch to its shipped default.
+ *
+ * The default has been on since 0.37.0, but a copy that was toggled off at any point since
+ * carries an explicit `false` in sync storage, and a default cannot reach a key that is
+ * already written. This runs once per profile — the marker lives in `chrome.storage.local`
+ * under MIGRATIONS_KEY, so it fires on the update that ships it and never again. A reader
+ * who turns the check back off after that is turning off a setting that stays off; the
+ * marker is what makes this a migration and not a policy.
+ *
+ * The write goes through SHD.preferences.write so it is the same read-modify-write every
+ * other writer uses, and the marker is set only after the write succeeds: a failed write
+ * leaves the migration pending for the next onInstalled rather than silently done.
+ */
+const MIGRATIONS_KEY = 'migrations';
+const AUTO_UPDATE_RESET = 'autoUpdateCheckOn';
+async function resetAutoUpdateOnce() {
+  try {
+    const got = await chrome.storage.local.get(MIGRATIONS_KEY);
+    const done = (got && got[MIGRATIONS_KEY]) || {};
+    if (done[AUTO_UPDATE_RESET]) return false;
+    const { settings } = await chrome.storage.sync.get('settings');
+    if (settings && settings.autoUpdateCheck === false) {
+      await SHD.preferences.write('autoUpdateCheck', true);
+    }
+    await chrome.storage.local.set({ [MIGRATIONS_KEY]: { ...done, [AUTO_UPDATE_RESET]: true } });
+    return true;
+  } catch { return false; }
+}
+
 /* onStartup is the browser opening. onInstalled covers the install and the update, where
    the stored answer belongs to the copy that was just replaced — checking then is what
-   stops a fresh install claiming an update is available on its first page. */
+   stops a fresh install claiming an update is available on its first page. The migration
+   runs first so the check that follows reads the setting it just restored. */
 chrome.runtime.onStartup.addListener(() => { maybeCheck(); });
-chrome.runtime.onInstalled.addListener(() => { maybeCheck(); });
+chrome.runtime.onInstalled.addListener(() => { resetAutoUpdateOnce().then(maybeCheck); });
 
 /* Exported for the suite only; a worker has no other consumer. */
-globalThis.SHD_BG = { LATEST_URL, KEY, HOME, TIMEOUT_MS, MIN_INTERVAL_MS,
-                      RETRY_INTERVAL_MS, enabled, last, sinceLast, due, check, maybeCheck };
+globalThis.SHD_BG = { LATEST_URL, KEY, HOME, TIMEOUT_MS, MIN_INTERVAL_MS, MIGRATIONS_KEY,
+                      RETRY_INTERVAL_MS, enabled, last, sinceLast, due, check, maybeCheck,
+                      resetAutoUpdateOnce };
