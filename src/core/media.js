@@ -66,10 +66,11 @@ SHD.media = (() => {
    * is an ATTRIBUTE on `<shreddit-post>` rather than on the late-hydrating player, so it is
    * there at first paint — and it is the URL whose logged-out 302 back to the comments page
    * is the loop this extension has been working around since live testing. The redirect makes it
-   * useless as a link and perfectly good as an identifier.
+   * useless as a link and perfectly good as an identifier. A crosspost's content-href is
+   * the original post's permalink instead, so model.videoHref (read off the player) wins.
    */
   function assetBase(m) {
-    const hit = C.VIDEO_ASSET.exec((m && m.contentHref) || '');
+    const hit = C.VIDEO_ASSET.exec((m && (m.videoHref || m.contentHref)) || '');
     return hit ? `https://v.redd.it/${hit[1]}` : null;
   }
 

@@ -221,7 +221,21 @@ SHD.C = {
      `<letter>.thumbs.redditmedia.com` IS the post-thumbnail CDN and was being rejected
      along with them; added 2026-08-14 after verify:live observed it live. */
   THUMB_HOSTS: /^((preview|i|external-preview)\.redd\.it|[a-z]\.thumbs\.redditmedia\.com)$/,
-  THUMB_EXCLUDE: 'shreddit-post-flair, faceplate-hovercard, shreddit-join-button, a[href^="/user/"]',
+  /* `[slot="credit-bar"]` added 2026-11-08: a crosspost's header carries the SOURCE
+     community's icon, and that icon is served from b.thumbs.redditmedia.com — an allowed
+     host — so it won the thumbnail and every crosspost row showed a subreddit logo. */
+  THUMB_EXCLUDE: 'shreddit-post-flair, faceplate-hovercard, shreddit-join-button, a[href^="/user/"], [slot="credit-bar"]',
+
+  /* What a CROSSPOST is carrying. Captured live 2026-11-08: post-type is `crosspost`
+     whatever the original was, and there is NO nested <shreddit-post> — the original's
+     media is drawn straight into this post's media slot with the markup it would have on
+     its own page (lightbox <img>s, a <gallery-carousel>, or a <shreddit-player> whose src
+     is the v.redd.it HLS playlist or a preview.redd.it .gif). model.mediaOf reads which
+     of those is there; content-href is the ORIGINAL POST's permalink, so it identifies
+     nothing about the media. */
+  POST_MEDIA: '[slot="post-media-container"]',
+  GALLERY_CAROUSEL: 'gallery-carousel',
+  PLAYER: 'shreddit-player, shreddit-player-2',
 
   /* Where a gallery keeps the frames it has not shown yet.
    *
@@ -260,8 +274,9 @@ SHD.C = {
    * are untouched, or every 70px tile in a feed would download a full upload. */
   ORIGINAL_HOST: /^i\.redd\.it$/,
 
-  /* Observed post-type values: text, link, image, gallery, video, multi_media, crosspost
-     (crosspost added 2026-08-14 by npm run verify:live; falls through the same non-text
+  /* Observed post-type values: text, link, image, gallery, video, multi_media, crosspost, gif
+     (gif seen 2026-11-08: an i.redd.it .gif upload, rendered on the comments page like an
+     image post — see model.gifOf. crosspost added 2026-08-14 by npm run verify:live; falls through the same non-text
      path as link/image/etc. in model.js. The fallback is covered rather than accidental:
      t3_crosspost1 in test/fixtures.js carries the live shape, and run.js asserts the row
      renders with the right thumbnail host). */
@@ -282,7 +297,7 @@ SHD.C = {
     title: 'post-title',
     permalink: 'permalink',                // /r/sub/comments/id/slug/
     contentHref: 'content-href',           // outbound URL for link posts
-    type: 'post-type',                     // text | link | image | gallery | video | crosspost
+    type: 'post-type',                     // text | link | image | gallery | video | gif | crosspost
     score: 'score',
     upvoteRatio: 'upvote-ratio',
     comments: 'comment-count',

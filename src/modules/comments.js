@@ -421,7 +421,11 @@ SHD.comments = (() => {
      asks for the rest. The visible cost is a frame that arrives a moment after it is
      stepped to, which is the same trade the adult blur makes deliberately. */
   const imageFrame = (url, from) => {
-    const f = h('img.shd-image-el', { src: url, alt: '', loading: 'lazy' });
+    /* A GIF delivered as mp4 (C.GIF_MP4_SRC) cannot be an <img>; it is the silent looping
+       <video> a comment GIF gets, wearing the frame class so it is capped like a picture. */
+    const f = C.GIF_MP4_SRC.test(url) ? SHD.dom.gifVideo(url)
+      : h('img', { src: url, alt: '', loading: 'lazy' });
+    f.classList.add('shd-image-el');
     if (from) frameSource.set(f, from);
     return f;
   };
@@ -561,8 +565,8 @@ SHD.comments = (() => {
        slideshow rather than a picture. An image post is the single-picture case of the
        same box. Both fall through to null when nothing resolved, so a page whose full-size
        files live elsewhere costs the picture and never the post. */
-    const frames = m.type === 'image' && m.image ? [m.image]
-      : m.type === 'gallery' ? galleryFrames(m) : [];
+    const frames = isPicture(m) && m.image ? [m.image]
+      : m.media === 'gallery' ? galleryFrames(m) : [];
     if (!frames.length) return null;
     const box = h('div.shd-image');
     if (gateReason(m)) return gateImages(box, m, () => liveFrames(m, frames));
@@ -570,14 +574,18 @@ SHD.comments = (() => {
     return syncGallery(box);
   }
 
+  /** One picture rather than a deck: an image post, a GIF, or a crosspost of either. */
+  const isPicture = (m) => m.media === 'image' || m.media === 'gif';
+
   /** A gallery's frames with the elements they came from, so the late watcher can track them. */
   const galleryFrames = (m) => m.source ? SHD.model.framesOf(m.source) : m.images;
 
   /** The frames this post can show right now, preferring a re-read over the consume-time snapshot. */
   function liveFrames(m, fallback) {
     if (!m.source) return fallback;
-    const image = m.type === 'image' ? SHD.model.imageOf(m.source) : null;
-    const now = m.type === 'gallery' ? SHD.model.framesOf(m.source) : image ? [image] : [];
+    const image = m.media === 'image' ? SHD.model.imageOf(m.source)
+      : m.media === 'gif' ? SHD.model.gifOf(m.source) : null;
+    const now = m.media === 'gallery' ? SHD.model.framesOf(m.source) : image ? [image] : [];
     return now.length ? now : fallback;
   }
 
@@ -601,7 +609,7 @@ SHD.comments = (() => {
    * rather than from an assumption about why it failed.
    */
   function videoPlayer(m) {
-    if (m.type !== 'video' || !SHD.settings.inlineVideo) return null;
+    if (m.media !== 'video' || !SHD.settings.inlineVideo) return null;
 
     /* The post's own thumbnail: the poster while a source is in flight, and the whole frame
        once nothing will play. */
@@ -898,7 +906,7 @@ SHD.comments = (() => {
    * have the same answer however late the picture arrives.
    */
   function armLateImages(row, m) {
-    if (!['image', 'gallery'].includes(m.type) || !m.source) return;
+    if (!['image', 'gif', 'gallery'].includes(m.media) || !m.source) return;
     if (!SHD.settings.inlineImages) return;
     const previous = galleryWatches.get(row);
     if (previous) { previous.obs.disconnect(); clearTimeout(previous.stop); }
@@ -922,8 +930,8 @@ SHD.comments = (() => {
       /* Still blurred: the reader has not asked, and the reveal re-reads the frames, so
          nothing that hydrates while the blur stands is lost by waiting. */
       if (box.classList.contains('shd-image-gated')) return;
-      if (m.type === 'image') {
-        if (box.querySelector('img')?.getAttribute('src') !== found[0]) {
+      if (isPicture(m)) {
+        if (box.querySelector('.shd-image-el')?.getAttribute('src') !== found[0]) {
           box.replaceChildren(...imageFrames(found));
         }
         return;

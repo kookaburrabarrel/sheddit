@@ -20,6 +20,24 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.64.3
+
+### Fixed — GIF posts and crossposts showed only a thumbnail on their own page
+
+Opening a GIF post, or any crosspost, gave the title and the 70px thumbnail and nothing
+else. Only image, gallery and video posts were ever given a picture box. A GIF post now
+plays its GIF (the uploaded .gif, or Reddit's silent looping video of it). A crosspost is
+labelled `crosspost` whatever it carries, so Sheddit now reads the original's media from
+the page: an image shows full size, a gallery as a slideshow, a GIF loops, and a video gets
+the player — which needed its own fix, since the video's id was being read from the link to
+the original post rather than from the video.
+
+### Fixed — every crosspost's thumbnail was the source community's icon
+
+The crosspost header carries the original community's icon, served from the same host as
+real thumbnails, and it was found first. The header is now skipped, so the row shows the
+post's own preview.
+
 ## 0.64.2
 
 ### Fixed — spoilers were shown in full

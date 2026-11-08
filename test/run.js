@@ -450,6 +450,23 @@ async function boot(html, url, setup) {
     }
 
     {
+      /* A CROSSPOSTED VIDEO. content-href is the original post's permalink, so the asset
+         id that media.js needs lives only on the player's HLS source (live 2026-11-08). */
+      const page = commentsPage({ cmafPost: true })
+        .replace('post-type="video"', 'post-type="crosspost"')
+        .replace('content-href="https://v.redd.it/nzafnbgwcxkh1"',
+          'content-href="/r/heartwarming/comments/orig5/clip/"')
+        .replace('<a slot="full-post-link"',
+          '<div slot="post-media-container"><shreddit-player src="https://v.redd.it/nzafnbgwcxkh1/HLSPlaylist.m3u8?f=sd&amp;v=1"></shreddit-player></div><a slot="full-post-link"');
+      const { doc, calls } = await bootWithFetch(page, CMAF_URL);
+      const ok = await waitFor(() => doc.querySelector('.shd-selfpost video.shd-video-el'));
+      check('a crossposted video gets a real player on its comments page', ok);
+      check('...resolved from the asset on its player, since content-href is a permalink',
+        calls.length === 1 && calls[0] === 'https://v.redd.it/nzafnbgwcxkh1/DASHPlaylist.mpd',
+        JSON.stringify(calls));
+    }
+
+    {
       /* The legacy shape still wins when it is there, and it wins for a REASON: a combined
          file keeps its audio, where everything the manifest offers is silent. */
       const { doc, calls } = await bootWithFetch(commentsPage({ videoPost: true }),
@@ -1229,6 +1246,75 @@ async function boot(html, url, setup) {
     check('a replacement source immediately refreshes the existing single-image box',
       await waitFor(() => doc.querySelector('.shd-image-el')?.getAttribute('src') ===
         'https://i.redd.it/rebound-photo.jpg') && doc.querySelectorAll('.shd-image-el').length === 1);
+  }
+  /* GIF POSTS AND CROSSPOSTS, 2026-11-08 quick review. Both rendered a title and a 70px
+     tile on their own comments page and nothing else, because only image/gallery/video
+     ever reached the inline paths. Shapes are the live captures in C.POST_MEDIA. */
+  {
+    const XPOST = 'https://www.reddit.com/r/aww/comments/image1/a_very_good_dog/';
+    const reshape = (type, href, inner) => (win) => {
+      const p = win.document.querySelector('shreddit-post');
+      p.setAttribute('post-type', type);
+      p.setAttribute('content-href', href);
+      p.querySelectorAll('img').forEach(img => img.remove());
+      p.insertAdjacentHTML('afterbegin', inner);
+    };
+    const ICON = 'https://b.thumbs.redditmedia.com/source-sub-icon.png';
+    const credit = `<div slot="credit-bar"><img src="${ICON}" alt=""></div>`;
+
+    {
+      const { doc } = await boot(commentsPage({ imagePost: true }), XPOST, reshape('gif',
+        'https://i.redd.it/anim1.gif',
+        `<div slot="post-media-container"><shreddit-player src="https://preview.redd.it/anim1.gif?width=260&format=mp4"><img slot="poster" src="https://preview.redd.it/anim1.gif?format=png8"></shreddit-player></div>`));
+      const el = doc.querySelector('#shd-root .shd-selfpost .shd-image-el');
+      check('a GIF post shows its animation on its comments page, as the uploaded .gif',
+        el?.tagName === 'IMG' && el.getAttribute('src') === 'https://i.redd.it/anim1.gif',
+        el?.outerHTML);
+      check('...and its title stays in the layout instead of bouncing to the /media viewer',
+        doc.querySelector('.shd-selfpost a.title')?.getAttribute('href') ===
+          '/r/aww/comments/image1/a_very_good_dog/',
+        doc.querySelector('.shd-selfpost a.title')?.getAttribute('href'));
+    }
+    {
+      const MP4 = 'https://preview.redd.it/anim2.gif?width=260&format=mp4';
+      const { doc } = await boot(commentsPage({ imagePost: true }), XPOST, reshape('crosspost',
+        '/r/gifs/comments/orig2/anim/',
+        `${credit}<div slot="post-media-container"><shreddit-player src="${MP4}"><source src="${MP4}"></shreddit-player></div>`));
+      const el = doc.querySelector('#shd-root .shd-selfpost .shd-image-el');
+      check('a crossposted GIF delivered as mp4 plays as a silent looping video',
+        el?.tagName === 'VIDEO' && el.getAttribute('src') === MP4 && el.muted &&
+          el.hasAttribute('loop'), el?.outerHTML);
+    }
+    {
+      const { doc } = await boot(commentsPage({ imagePost: true }), XPOST, reshape('crosspost',
+        '/r/foxes/comments/orig3/frankie/',
+        `${credit}<div slot="post-media-container"><img src="https://preview.redd.it/fox-v0-abc.jpeg?width=640" alt=""><img src="https://i.redd.it/abc.jpeg" alt=""></div>`));
+      const el = doc.querySelector('#shd-root .shd-selfpost .shd-image-el');
+      check('a crossposted image shows the original picture on its comments page',
+        el?.getAttribute('src') === 'https://i.redd.it/abc.jpeg', el?.getAttribute('src'));
+      const thumb = doc.querySelector('.shd-selfpost a.thumbnail img')?.getAttribute('src');
+      check('...and its thumbnail is the picture, not the source community\'s icon',
+        !!thumb && thumb !== ICON, thumb);
+      check('...while the title still leads to the original post',
+        doc.querySelector('.shd-selfpost a.title')?.getAttribute('href') ===
+          '/r/foxes/comments/orig3/frankie/');
+    }
+    {
+      const { doc } = await boot(commentsPage({ imagePost: true }), XPOST, reshape('crosspost',
+        '/r/space/comments/orig4/patterns/',
+        `${credit}<div slot="post-media-container"><gallery-carousel><img src="https://i.redd.it/frame1.png" alt=""><img src="https://i.redd.it/frame2.png" alt=""></gallery-carousel></div>`));
+      const frames = [...doc.querySelectorAll('#shd-root .shd-selfpost .shd-image-el')]
+        .map(f => f.getAttribute('src'));
+      check('a crossposted gallery shows every frame, and not the source community\'s icon',
+        frames.length === 2 && !frames.includes(ICON) &&
+          !!doc.querySelector('.shd-selfpost .shd-gallery'), JSON.stringify(frames));
+    }
+    {
+      const { doc } = await boot(commentsPage({ imagePost: true }), XPOST, reshape('crosspost',
+        'https://example.com/an-article', credit));
+      check('a crosspost of a link post draws no picture box at all',
+        !doc.querySelector('.shd-selfpost .shd-image') && !!doc.querySelector('.shd-selfpost'));
+    }
   }
   {
     const { doc } = await boot(commentsPage({ imagePost: true }),

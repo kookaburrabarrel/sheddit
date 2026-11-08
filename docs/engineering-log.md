@@ -2256,6 +2256,28 @@ Found by `test/geometry.js` and `test/extension.js` on their first runs:
      forms, styles and base/meta/link survived the clone. All are now removed, root
      included. Defence in depth, as before: Reddit sanitises what it renders.
 
+122. **A quick logged-out review, 2026-11-08: GIF posts and crossposts showed only their
+     tile.** Every listing, profile and thread shape rendered; two post types drew a title
+     and a 70px thumbnail on their own comments page and nothing else, because only
+     `image`, `gallery` and `video` ever reached the inline paths.
+     (a) *`gif` is a post-type* (never listed). Live: content-href is the bare
+     `i.redd.it/<id>.gif` and the post carries a <shreddit-player> whose source is a
+     260px `…gif?format=mp4`. model.gifOf takes the upload when it is there (an <img>
+     animates it) and the player's source otherwise; comments.js imageFrame draws a
+     `format=mp4` URL as the silent looping <video> comment GIFs already get (bug 93). The
+     title reroutes to the comments page like an image post's, because the .gif URL is
+     viewer-bound.
+     (b) *A crosspost says nothing about its media.* post-type is `crosspost` whatever the
+     original was, there is NO nested shreddit-post, and content-href is the original's
+     permalink. The media sits in `[slot="post-media-container"]` in the original's own
+     markup, so model.mediaOf reads it: a gallery-carousel is a gallery, a .gif player a
+     GIF, a v.redd.it player a video, an <img> an image. Consumers now ask `m.media`;
+     `m.type` stays the row's data-type. A crossposted video's asset id comes off the
+     player's HLS source (`m.videoHref`), since media.js used to read it from content-href.
+     (c) *Every crosspost's thumbnail was the source community's icon.* It sits in
+     `[slot="credit-bar"]` and is served from b.thumbs.redditmedia.com, an allowed host, so
+     it won. The slot joins C.THUMB_EXCLUDE.
+
 ## The popup policy — supersedes bugs 30, 33 and 38
 
 *Project decision, 2026-08-20.*

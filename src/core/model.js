@@ -201,7 +201,8 @@ SHD.model = (() => {
        was going to land anyway, the post's own comments page, minus the bounce; the mp4
        gets its own link on the row, where a dead rendition costs one optional click
        instead of the whole post. See open question 9. */
-    const videoUrl = type === 'video' ? mp4Of(el) : null;
+    const media = mediaOf(el, type);
+    const videoUrl = media === 'video' ? mp4Of(el) : null;
 
     /* The post's own picture, at the best resolution the page is offering.
        Reported: an image post's comments page rendered a title and a 70px thumbnail and
@@ -209,12 +210,12 @@ SHD.model = (() => {
        viewer. Two consequences of the same gap — the picture is not an attribute, so
        nothing read it. It is in the light DOM, exactly like a text post's body, and it is
        resolved the same way (bug 49). */
-    const imageUrl = type === 'image' ? imageOf(el) : null;
+    const imageUrl = media === 'image' ? imageOf(el) : media === 'gif' ? gifOf(el) : null;
     /* A gallery's frames as of CONSUME time — usually incomplete, because the carousel's
        lazy <img>s are srcless until they hydrate (bug 91). The comments page re-reads
        via model.imagesOf afterwards; this snapshot decides the href gate below and seeds
        the first render. */
-    const galleryImages = type === 'gallery' ? imagesOf(el) : [];
+    const galleryImages = media === 'gallery' ? imagesOf(el) : [];
 
     return {
       kind: 'post',
@@ -234,7 +235,7 @@ SHD.model = (() => {
          RESOLVED picture is rerouted, so an image post linking somewhere genuinely
          external (imgur, a blog) is untouched, and a miss falls back untouched. */
       href: (isSelf || type === 'video') ? permalink
-        : (type === 'image' && imageUrl && viewerBound(contentHref)) ? permalink
+        : ((type === 'image' || type === 'gif') && imageUrl && viewerBound(contentHref)) ? permalink
           /* A gallery's content-href is `reddit.com/gallery/<id>` — viewer-bound by
              definition. Live today Reddit happens to SPA-canonicalise that onto the
              comments page, so the reader stayed in the layout by Reddit's grace, not by
@@ -259,8 +260,14 @@ SHD.model = (() => {
          it is useless as a link (it 302s a logged-out reader back to the comments page).
          media.js turns it into a manifest URL; nothing else should make it an href. */
       contentHref,
+      /* The v.redd.it asset a video is played from. content-href on a video post; on a
+         crosspost content-href is the ORIGINAL's permalink, so it comes off the player. */
+      videoHref: media === 'video' ? videoHrefOf(el, contentHref) : null,
       isSelf,
       type,
+      /* What the post SHOWS, which is `type` except on a crosspost, where `type` says only
+         that it is one. Every media consumer asks this; `type` stays the row's data-type. */
+      media,
       domain,
       score: num(el, A.score),
       upvoteRatio: num(el, A.upvoteRatio),
@@ -463,6 +470,54 @@ SHD.model = (() => {
       }
     }
     return best;
+  }
+
+  /** This post's own <shreddit-player>, never one belonging to a post nested inside it. */
+  const ownPlayer = (el) => [...el.querySelectorAll(C.PLAYER)].find(n => n.closest(C.POST) === el) || null;
+  const playerSrc = (p) => p ? (p.querySelector('source')?.getAttribute('src') || p.getAttribute('src') || '') : '';
+  const isGifUrl = (u) => /\.gif$/i.test(String(u || '').split(/[?#]/)[0]);
+
+  /**
+   * The animation a GIF post is carrying, or null.
+   *
+   * Captured live 2026-11-08: post-type `gif`, content-href the bare `i.redd.it/<id>.gif`,
+   * and a <shreddit-player> whose source is a low-width `…gif?width=260&format=mp4`. The
+   * upload is the better picture and an <img> animates it, so it wins whenever it is
+   * there. A crosspost of a GIF has no such href (it points at the original post), so the
+   * player's own source is what is left — and that may be an mp4 wearing a .gif name,
+   * which the renderer tells apart with C.GIF_MP4_SRC exactly as dom.inlineGifs does.
+   */
+  function gifOf(el) {
+    const href = attr(el, C.POST_ATTR.contentHref);
+    if (isOriginal(href) && isGifUrl(href)) return href;
+    const src = playerSrc(ownPlayer(el));
+    return src && C.THUMB_HOSTS.test(src.split('/')[2] || '') && src.startsWith('https://') ? src : null;
+  }
+
+  /**
+   * What a post shows: its own post-type, except on a crosspost, which says nothing about
+   * its media — read instead from what is in the media slot (C.POST_MEDIA documents the
+   * capture). A crosspost of a link or text post resolves to nothing and stays `crosspost`.
+   */
+  function mediaOf(el, type) {
+    if (type !== 'crosspost') return type;
+    const own = (sel) => [...el.querySelectorAll(sel)].some(n => n.closest(C.POST) === el);
+    if (own(C.GALLERY_CAROUSEL)) return 'gallery';
+    const player = ownPlayer(el);
+    if (player) {
+      const src = playerSrc(player);
+      if (player.hasAttribute('gif') || isGifUrl(src)) return 'gif';
+      if (C.VIDEO_ASSET.test(src) || player.hasAttribute(C.POST_VIDEO_JSON)) return 'video';
+    }
+    if (own(`${C.POST_MEDIA} img`)) return 'image';
+    return type;
+  }
+
+  /** The v.redd.it URL identifying a video's asset: content-href, else the player's source. */
+  function videoHrefOf(el, contentHref) {
+    if (C.VIDEO_ASSET.test(contentHref || '')) return contentHref;
+    const hit = C.VIDEO_ASSET.exec(playerSrc(ownPlayer(el)));
+    return hit ? `https://v.redd.it/${hit[1]}` : null;
   }
 
   /**
@@ -795,6 +850,6 @@ SHD.model = (() => {
      afterwards (bug 91) — so the consumer re-reads the source element after render,
      exactly as the watch link re-resolves the mp4 at click time. */
   return { post, postBodyOf, comment, profileComment, mp4Of, expired,
-           imageOf, imagesOf, framesOf, pictureKey,
+           imageOf, gifOf, imagesOf, framesOf, pictureKey,
            rejects, rejectSummary, clearRejects };
 })();

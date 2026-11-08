@@ -408,7 +408,8 @@ const BUNDLE = fs.readFileSync(path.join(__dirname, '..', 'dist', 'sheddit.dev.j
   console.log(`  \x1b[2mobserved image hosts: ${listing.thumbHosts.join(', ')}\x1b[0m`);
   // crosspost joined this list on 2026-08-14: verify:live observed it, and test/fixtures.js
   // now carries one, which is what "the fixtures cover" is asserting.
-  const COVERED_TYPES = ['text', 'link', 'image', 'gallery', 'video', 'multi_media', 'crosspost'];
+  // gif joined on 2026-11-08 (log 122); run.js builds its live shape onto the image fixture.
+  const COVERED_TYPES = ['text', 'link', 'image', 'gallery', 'video', 'multi_media', 'crosspost', 'gif'];
   const unlisted = listing.types.filter(t => !COVERED_TYPES.includes(t));
   check('no post-type values beyond those the fixtures cover',
     unlisted.length === 0, `new types: ${unlisted.join(', ')} — add them to test/fixtures.js`);

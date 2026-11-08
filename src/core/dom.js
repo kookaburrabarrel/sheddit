@@ -347,6 +347,6 @@ SHD.dom = (() => {
   const rowSel = (id) =>
     `.thing[data-fullname="${String(id).replace(/["\\]/g, '\\$&')}"]`;
 
-  return { h, safeUrl, score, ago, domain, plural, flair, inlineGifs, adoptBody, rowSel,
+  return { h, safeUrl, score, ago, domain, plural, flair, inlineGifs, gifVideo, adoptBody, rowSel,
            deepQuery, shadowRoots, passthrough, passthroughNote, passthroughClear };
 })();

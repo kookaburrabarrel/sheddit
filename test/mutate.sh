@@ -2937,6 +2937,24 @@ mutate "review: profile-post threads are left unrendered" run \
 mutate "review: adopted bodies keep inline handlers and unsafe URLs" run \
   src/core/dom.js "          el.removeAttribute(name);" ""
 
+# ------------------------------------------------ quick review, 2026-11-08 ------------
+# A GIF post or a crosspost drew only its tile on its own thread.
+mutate "review: a GIF post shows no animation on its thread" run \
+  src/core/model.js "    const imageUrl = media === 'image' ? imageOf(el) : media === 'gif' ? gifOf(el) : null;" \
+                    "    const imageUrl = media === 'image' ? imageOf(el) : null;"
+
+mutate "review: a crosspost's media is never inferred" run \
+  src/core/model.js "    if (type !== 'crosspost') return type;" "    return type;"
+
+mutate "review: a crossposted video looks for its asset in content-href only" run \
+  src/core/media.js "(m && (m.videoHref || m.contentHref))" "(m && m.contentHref)"
+
+mutate "review: an mp4-delivered GIF frame is drawn as an <img>" run \
+  src/modules/comments.js "    const f = C.GIF_MP4_SRC.test(url) ? SHD.dom.gifVideo(url)" "    const f = false ? SHD.dom.gifVideo(url)"
+
+mutate "review: a crosspost's thumbnail is the source community icon" run \
+  src/config/contracts.js 'a[href^="/user/"], [slot="credit-bar"]' 'a[href^="/user/"]'
+
 # The accounting. DECLARED is read from this file itself rather than maintained by hand —
 # a count that has to be kept in step with the rows is the same trap as the hand-maintained
 # token list in bug 43, and it would have been wrong the first time a row was added.

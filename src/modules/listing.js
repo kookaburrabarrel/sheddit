@@ -197,7 +197,10 @@ SHD.listing = (() => {
        properties, two rows" (log 79) — the expando for a listing row, the inline picture
        for the comments page — and contracts.js says the same thing in words. */
     if (SHD.route.current === SHD.route.COMMENTS) return null;
-    if (m.type !== 'image' || !m.image) return null;
+    /* A GIF opens the same way when its URL is a real GIF; an mp4-delivered one would
+       need a <video>, and the expando is an <img>. */
+    if (!(m.media === 'image' || m.media === 'gif') || !m.image) return null;
+    if (C.GIF_MP4_SRC.test(m.image)) return null;
     if (!SHD.settings.inlineImages) return null;
     if (m.nsfw && !SHD.settings.showNsfwThumbnails) return null;
     // The URL rides on the box rather than being closed over, so the button can stay a
@@ -272,7 +275,7 @@ SHD.listing = (() => {
          rather than a file. NOT rendered on the comments page itself, where that would be
          a link to the page you are on; giving that page a real player is open question
          9(c). */
-      m.type === 'video' && SHD.route.current !== SHD.route.COMMENTS
+      m.media === 'video' && SHD.route.current !== SHD.route.COMMENTS
         ? h('li', null, h('a.watch', {
             href: m.mp4 || m.permalink, rel: 'noopener', text: 'watch',
             onclick: function () {
