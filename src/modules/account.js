@@ -703,6 +703,12 @@ SHD.account = (() => {
     .replace(/\]\([^)]*\)/g, ']')
     .replace(/[*_~`>#[\]\\^|]/g, ''));
 
+  function matchesDraft(body, draft) {
+    const rendered = plain(body.textContent);
+    return rendered === plain(draft) || (!!body.querySelector('li') &&
+      rendered === plain(draft.replace(/^[ \t]*(?:[-+*]|\d+[.)])[ \t]+/gm, '')));
+  }
+
   /** The focused element THROUGH shadow roots — activeElement stops at each host. */
   function deepActive() {
     let a = document.activeElement;
@@ -898,7 +904,7 @@ SHD.account = (() => {
          An editor that was never filled is indistinguishable from one Reddit cleared after
          a successful post, so neither can carry the arrival signal. A new, recent comment
          by this reader under the right parent with matching text can. Ambiguous arrivals
-         go the safe way: `arrival`, reveal-only, draft kept, and a sentence saying to check
+         go the safe way: `arrival`, thread and draft kept, and a sentence saying to check
          the thread before sending it again. */
       /* A REJECTION IS AN ANSWER TOO. Reddit refuses a submit (rate limit, locked thread)
          with an error alert instead of a comment; waiting the arrival deadline out on that
@@ -912,7 +918,7 @@ SHD.account = (() => {
           const body = [...n.querySelectorAll(C.COMMENT_BODY)].find(b => b.closest(C.COMMENT) === n);
           return id && !seen.has(id) &&
             Date.parse(n.getAttribute(C.COMMENT_ATTR.created)) >= sentAt - 2000 &&
-            body && plain(body.textContent) === plain(text);
+            body && matchesDraft(body, text);
         });
         return comment ? { comment } : null;
       }, timings.arriveWaitMs, live);
@@ -958,12 +964,6 @@ SHD.account = (() => {
     const callerAlive = alive;
     alive = () => callerAlive() && bar.isConnected;
     reveal.scrollIntoView?.({ block: 'center' });
-    /* A null `text` means REVEAL ONLY: show the reader Reddit's own page and open
-       nothing. That is the `arrival` caller, where the submit has already fired and a
-       pre-filled composer would be an invitation to post the same comment a second time.
-       Returning false is accurate — nothing was carried — and the caller says so in the
-       words that case needs rather than the generic ones. */
-    if (text == null) return false;
     let host = r.host;
     if (!host && kind === 'comment') {
       const btn = await waitFor(() => replyControl(target), timings.composeWaitMs, alive);
@@ -1000,8 +1000,7 @@ SHD.account = (() => {
     composer: 'could not get Reddit to open its reply box',
     editor: 'could not find the text field in Reddit\'s reply box',
     insert: 'could not put the text into Reddit\'s reply box',
-    submit: 'could not find Reddit\'s submit button',
-    arrival: 'no reply appeared — it may still be posting'
+    submit: 'could not find Reddit\'s submit button'
   };
 
   /**
@@ -1075,8 +1074,8 @@ SHD.account = (() => {
    * the native element the reply belongs to (the hidden <shreddit-comment>, or the post
    * for a top-level comment). On save the text goes through compose(); on success the
    * form goes away and the pipeline renders the comment Reddit inserted, nested where
-   * Reddit put it. On any miss the form STAYS, draft intact, the status says which step
-   * failed, and Reddit's own composer is revealed in place so the reader can finish there.
+   * Reddit put it. On a miss the form stays, draft intact. Only failures before submit
+   * reveal Reddit's composer so the reader can finish there.
    */
   function replyForm(m, { kind = 'comment', onClose } = {}) {
     guardOwnKeys();
@@ -1087,7 +1086,7 @@ SHD.account = (() => {
     const ta = h('textarea.shd-reply-text', { rows: '6', 'aria-label': kind === 'post' ? 'comment' : 'reply' });
     ta.value = drafts.get(key)?.text || '';
     const status = h('span.shd-reply-status', { role: 'status', 'aria-live': 'polite' });
-    const save = h('button.shd-reply-save', { type: 'submit', text: 'save' });
+    const save = h('button.shd-reply-save', { type: 'submit', text: submitted ? 'retry anyway' : 'save' });
     const cancel = h('button.shd-reply-cancel', {
       type: 'button', text: 'cancel', onclick: () => { if (!cancel.disabled) close(); }
     });
@@ -1146,35 +1145,27 @@ SHD.account = (() => {
          to hand off. Say what Reddit said and keep the draft for a deliberate retry. */
       if (r.step === 'rejected') {
         submitted = false;
+        save.textContent = 'save';
         remember();
         status.textContent = `Reddit did not post this: ${r.message || 'it returned an error'}. ` +
           'Your draft is still here.';
         return;
       }
-      /* ARRIVAL IS THE ONE STEP ON THE FAR SIDE OF THE SUBMIT, AND IT GETS ITS OWN EXIT.
-         Every other miss here happens BEFORE `submit.click()` — no request was made, so
-         carrying the draft into Reddit's box and inviting a press is exactly right.
-         `arrival` means the button WAS pressed and the reply did not show up inside
-         arriveWaitMs, which is as consistent with a slow post as with a failed one. Doing
-         the ordinary handoff there pre-fills Reddit's composer with the same text and
-         tells the reader to press reply — so a comment that posted slowly gets posted
-         twice, by our own instruction.
-
-         So: reveal Reddit's own page, because checking the thread is the next thing the
-         reader needs to do, and carry NOTHING into it. The draft stays in our form, where
-         re-sending it is a deliberate act rather than the path of least resistance. */
-      const posted = r.step === 'arrival';
-      status.textContent = posted
-        ? 'sheddit did not see your reply appear — opening Reddit\'s own page so you can check'
-        : `sheddit ${STEP_COPY[r.step] || 'could not post this'} — opening Reddit's own reply box`;
+      // The submit fired. Keep the thread visible so the reader can check for the comment
+      // instead of revealing a native composer that Reddit may already have closed.
+      if (r.step === 'arrival') {
+        form.dataset.shdCarried = 'no';
+        save.textContent = 'retry anyway';
+        status.textContent = 'Your comment may already have posted. Check this thread before retrying. Your draft is still here.';
+        return;
+      }
+      status.textContent = `sheddit ${STEP_COPY[r.step] || 'could not post this'} — opening Reddit's own reply box`;
       let carried = false;
-      try { carried = await handoff(m.source, kind, posted ? null : text, r, live); }
+      try { carried = await handoff(m.source, kind, text, r, live); }
       catch { carried = false; }
       if (!live()) return;
       form.dataset.shdCarried = carried ? 'yes' : 'no';
-      const said = posted
-        ? 'sheddit did not see your reply appear, and it may already have posted — check the thread before sending it again. Your text is still here, behind “← back to sheddit”.'
-        : carried
+      const said = carried
           ? `sheddit ${STEP_COPY[r.step] || 'could not post this'} — your text is in Reddit's reply box; press its own reply button to post it`
           : `sheddit ${STEP_COPY[r.step] || 'could not post this'} — ${
               HANDOFF_COPY[r.step] || 'your text is still here, behind “← back to sheddit”'}`;
@@ -1253,11 +1244,26 @@ SHD.account = (() => {
         await editComment(m, thing, bar);
       } catch (error) {
         console.warn('[sheddit] could not open Reddit\'s comment editor', error);
-        if (bar.isConnected) {
-          SHD.dom.passthroughNote('Could not open the editor. Use Reddit\'s comment menu to edit.');
-        }
+        if (bar.isConnected) commentEditFallback(source, bar);
       }
     } }, link);
+  }
+
+  function commentEditFallback(source, bar) {
+    SHD.dom.passthroughNote('Could not open the editor automatically.');
+    const thread = source.closest(C.MAIN);
+    if (!thread) return;
+    bar.appendChild(h('a.shd-native-thread', {
+      href: '#', text: 'open full Reddit thread',
+      onclick: (e) => {
+        e.preventDefault();
+        if (!bar.isConnected || !thread.isConnected) return;
+        if (SHD.dom.passthrough(thread)) {
+          SHD.dom.passthroughNote('Use Reddit’s comment menu to edit.');
+          source.scrollIntoView?.({ block: 'center' });
+        }
+      }
+    }));
   }
 
   /**
@@ -1285,22 +1291,23 @@ SHD.account = (() => {
        Every host is asked, not the first: one Reddit left behind after a cancel or a save
        has no usable field, and taking it for THE editor skipped the menu and failed every
        later attempt on this comment until a reload. */
-    const field = () => {
+    const field = (open = false) => {
       const hosts = owned(C.NATIVE.commentEditHost);
       for (const host of hosts) {
-        const input = shown(SHD.dom.deepQuery(host, C.COMPOSER.editor));
-        if (input) return input;
+        const input = SHD.dom.deepQuery(host, C.COMPOSER.editor);
+        if (shown(input)) return input;
       }
-      // Like the reply composer, an edit host can mount with its ready slot still closed.
-      for (const host of hosts) if (shown(host)) host.focus?.();
+      if (open) {
+        // Reddit's ready slot is not projected until focus, so the closed host has no box.
+        for (const host of hosts) {
+          if (SHD.dom.deepQuery(host, C.COMPOSER.editor)) host.focus?.();
+        }
+      }
       return null;
     };
-    const fallback = () => SHD.dom.passthroughNote(
-      'Could not open the editor automatically. Use this comment\'s menu > Edit comment.');
+    const fallback = () => commentEditFallback(source, bar);
 
-    // An editor already open here needs no menu. Asked twice: the second look sees what the
-    // first one's focus() opened.
-    if (!field() && !field()) {
+    if (!field()) {
       const toggle = await waitFor(findMenuButton, timings.hydrateWaitMs, stillHere);
       if (!stillHere()) return;
       if (!toggle) { fallback(); return; }
@@ -1314,7 +1321,7 @@ SHD.account = (() => {
       if (!edit) { fallback(); return; }
       edit.click();
     }
-    const input = await waitFor(field, timings.composeWaitMs, stillHere);
+    const input = await waitFor(() => field(true), timings.composeWaitMs, stillHere);
     if (!stillHere()) return;
     if (!input) { fallback(); return; }
     SHD.dom.passthroughNote('Edit and save in Reddit\'s editor, then choose \u2190 back to sheddit.');
@@ -1594,6 +1601,29 @@ SHD.account = (() => {
     return true;
   }
 
+  function unhideLink(m, onUnhidden) {
+    const status = h('span.shd-hidden-status', { role: 'status' });
+    const link = h('a.unhide', { href: '#', text: 'unhide', onclick: async (e) => {
+      e.preventDefault();
+      if (link.dataset.busy || !active()) return;
+      link.dataset.busy = '1';
+      status.textContent = ' unhiding…';
+      const alive = () => link.isConnected && m.source?.isConnected && active();
+      const item = await postItem(m, C.NATIVE.postHide, C.NATIVE.postUnhideText);
+      if (item && alive()) {
+        item.click();
+        const unhidden = await waitFor(() => {
+          const current = SHD.dom.deepQuery(m.source, C.NATIVE.postHide);
+          return current && C.NATIVE.postHideText.test(textOf(current));
+        }, timings.arriveWaitMs, alive);
+        if (unhidden && alive()) { onUnhidden(); return; }
+      }
+      if (link.isConnected) status.textContent = ' could not confirm unhide; check Reddit’s post menu';
+      delete link.dataset.busy;
+    } });
+    return h('li', null, [link, status]);
+  }
+
   function commentBox(m) {
     if (!active()) return null;
     return h('div.shd-commentbox', null, replyForm(m, { kind: 'post' }));
@@ -1671,6 +1701,10 @@ SHD.account = (() => {
     if (name) {
       kids.push(menuLink(`/user/${name}/`, 'my profile'));
       kids.push(menuLink(`/user/${name}/${C.ACCOUNT.savedTab}/`, 'saved'));
+    } else {
+      kids.push(item(h('span.shd-account-status', {
+        text: 'Sheddit couldn’t read your username. Profile, saved, edit, and delete are unavailable here.'
+      })));
     }
     kids.push(menuLink(C.ACCOUNT.inbox, 'messages'));
     kids.push(menuLink(C.ACCOUNT.settings, 'preferences'));
@@ -1977,7 +2011,7 @@ SHD.account = (() => {
     closeMenu();
   }
 
-  return { midcol, vote, reply, restoreReply, editLink, deleteLink, postOwnerLinks, hidePost,
+  return { midcol, vote, reply, restoreReply, editLink, deleteLink, ownsPost, postOwnerLinks, hidePost, unhideLink,
            replyForm, commentBox, compose, submitBox, headerAccount,
            logOut, findLogoutControl, nav, reset, timings };
 })();

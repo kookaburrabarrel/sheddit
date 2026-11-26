@@ -20,6 +20,19 @@ marked **never worked**, because "fixed" would imply it once did.
 
 ---
 
+## 0.65.0
+
+- **Comments stay on the thread after submitting.** Sheddit recognizes your username
+  from Reddit's Communities navigation when its usual marker is missing and can confirm
+  comments containing Markdown lists. If it can't confirm a submission, it keeps your
+  draft and warns that retrying could post it twice.
+- **Comment editing opens Reddit's collapsed editor.** If the editor doesn't open,
+  choose **open full Reddit thread** to reach it manually.
+- **Your Hidden tab now offers Unhide.** A post stays in the list until Reddit confirms
+  the change.
+- The account menu explains when a missing username makes controls unavailable. Your
+  own post listings show Reddit's removal reason when Reddit provides it.
+
 ## 0.64.3
 
 ### Fixed — GIF posts and crossposts showed only a thumbnail on their own page

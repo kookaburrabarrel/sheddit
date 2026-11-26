@@ -256,6 +256,9 @@ SHD.listing = (() => {
   }
 
   function buttons(m) {
+    const R = SHD.route;
+    const hiddenTab = R.current === R.PROFILE && R.profileTabOf() === 'hidden' &&
+      SHD.session.active() && SHD.session.username()?.toLowerCase() === R.usernameOf()?.toLowerCase();
     return h('ul.flat-list.buttons', null, [
       h('li.first', null, h('a.comments', {
         href: m.permalink,
@@ -306,7 +309,12 @@ SHD.listing = (() => {
       /* Hide. Signed in, it is Reddit's own hide (account.js clicks the post's overflow
          item), so the post stays hidden across reloads and devices and an undo stub takes
          the row's place. Otherwise it only hides the row on this page, as before. */
-      h('li', null, h('a.hide', {
+      hiddenTab ? SHD.account.unhideLink(m, () => {
+        const thing = row(m.id);
+        const box = thing?.parentElement;
+        thing?.remove();
+        if (box && !box.querySelector('.thing')) renderEmpty();
+      }) : h('li', null, h('a.hide', {
         href: '#', text: 'hide',
         onclick: (e) => {
           e.preventDefault();
@@ -399,6 +407,9 @@ SHD.listing = (() => {
           m.domain ? h('span.domain', null, ['(', h('a', { href: m.isSelf ? `/r/${m.subreddit}/` : `//${domain(m.domain)}`, text: domain(m.domain) }), ')']) : null
         ]),
         tagline(m),
+        m.removedNotice && SHD.route.current !== SHD.route.COMMENTS && SHD.account.ownsPost(m)
+          ? h('div.shd-removed-notice', { role: 'note', text: m.removedNotice })
+          : null,
         buttons(m),
         box
       ])

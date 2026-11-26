@@ -421,9 +421,14 @@ The automated suite covers structure; these need eyes:
   - [ ] a post you had voted on before comes up lit ~1.5s after render
   - [ ] a comment arrow moves the tagline's points
   - [ ] `reply` opens the box; *save* posts through Reddit's composer and the reply renders
-        nested; if it fails, the status names the step, the draft is kept, and Reddit's
-        composer is shown with the text in it
+        nested; if Sheddit cannot confirm the submission, the thread stays visible and the
+        draft is kept with a warning to check before retrying. If Sheddit cannot reach the
+        submit button, it falls back to Reddit's composer.
   - [ ] the top-level comment box posts a top-level comment
+  - [ ] edit opens the native editor for your own comment even if it starts collapsed
+        (if it cannot, **open full Reddit thread** gives access to Reddit's own controls)
+  - [ ] a hidden post appears on your Hidden tab; **unhide** removes it from the tab
+  - [ ] your removed posts show Reddit's reason inline when Reddit includes it
   - [ ] *Submit a new link* opens Reddit's composer, untouched, for the right community
   - [ ] the options checkbox off puts everything back to the logged-out behaviour
 

@@ -115,7 +115,19 @@ SHD.session = (() => {
      submitted tab, or Reddit's own `/user/me/` alias, no — the first would name the reader
      after a page rather than a person, and the last is not a name at all. */
   const PROFILE_PATH = /^\/user\/([^/?#]+)\/?$/;
+  const COMMUNITIES_PATH = /^\/user\/([\w-]+)\/communities\/?$/;
   const NOT_A_NAME = /^(me|profile)$/i;
+
+  function communitiesName(selector) {
+    for (const link of allInHeader(selector)) {
+      let url;
+      try { url = new URL(link.getAttribute('href'), location.href); }
+      catch { continue; }
+      const name = url.origin === location.origin && COMMUNITIES_PATH.exec(url.pathname)?.[1];
+      if (name && !NOT_A_NAME.test(name)) return name;
+    }
+    return null;
+  }
 
   /** Read the identity once per page: the reader's name, and the avatar Reddit drew. */
   function readIdentity() {
@@ -162,6 +174,8 @@ SHD.session = (() => {
         break;
       }
     }
+
+    if (!out.name) out.name = communitiesName(S.usernameCommunities);
 
     const img = findInHeader(S.avatar);
     const src = img && (img.getAttribute('src') || '');

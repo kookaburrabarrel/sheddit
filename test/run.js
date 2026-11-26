@@ -886,6 +886,13 @@ async function boot(html, url, setup) {
     check('a removed post in a listing carries a stamp on its title',
       !!stamp && stamp.textContent === 'removed');
     check('...with Reddit\'s sentence kept as the tooltip', stamp?.getAttribute('title') === NOTICE);
+    check('other readers see only the compact listing stamp', !feed.querySelector('.shd-removed-notice'));
+    const FILTER_NOTICE = 'Sorry, this post was removed by Reddit’s filters.';
+    const { doc: ownFeed } = await boot(
+      listingPage({ removed: FILTER_NOTICE, loggedIn: true, username: POSTS[0].author }),
+      'https://www.reddit.com/');
+    check('the author sees Reddit’s removal reason directly in the listing',
+      ownFeed.querySelector('.thing.link .shd-removed-notice')?.textContent === FILTER_NOTICE);
   }
 
   /* Reported: an image post's comments page rendered a title, a 70px thumbnail and nothing
@@ -7275,8 +7282,9 @@ async function boot(html, url, setup) {
           state.edits++;
           const editor = doc.createElement('comment-composer-host');
           editor.setAttribute('edit-mode', '');
-          editor.innerHTML = '<textarea hidden></textarea>';
-          editor.focus = () => { editor.querySelector('textarea').hidden = false; };
+          editor.hidden = true;
+          editor.innerHTML = '<textarea></textarea>';
+          editor.focus = () => { editor.hidden = false; };
           target.appendChild(editor);
         };
         shadow.appendChild(item);
@@ -7296,10 +7304,10 @@ async function boot(html, url, setup) {
       await waitFor(() => ownState?.edits === 1));
     check('does not open a nested comment\'s menu', childState.opens === 0 && childState.edits === 0);
     check('repeated clicks do not toggle the menu twice', ownState?.opens === 1);
-    check('editing opens the hidden editor and explains how to return',
+    check('editing focuses the collapsed host even though it has no visible editor yet',
       await waitFor(() => source.classList.contains('shd-passthrough') &&
         /Edit and save/.test(doc.querySelector('.shd-passthrough-note')?.textContent || '') &&
-        !source.querySelector('comment-composer-host textarea').hidden));
+        !source.querySelector('comment-composer-host').hidden));
     const model = window.SHD.model.comment(source);
     model.bodyNode.innerHTML = '<p>Edited <strong>comment</strong></p><span hidden>spoiler</span>';
     model.bodyNode.classList.add('hidden');
@@ -7351,6 +7359,11 @@ async function boot(html, url, setup) {
       await waitFor(() => /Could not open the editor automatically/.test(
         doc.querySelector('.shd-passthrough-note')?.textContent || '')));
     check('the fallback still never clicks the child menu', childState.opens === 0);
+    click(window, doc.querySelector('#shd-passthrough-exit .shd-native-thread'));
+    check('the fallback opens the whole native thread, without leaving Sheddit',
+      doc.querySelector('#main-content').classList.contains('shd-passthrough') &&
+      !source.classList.contains('shd-passthrough') &&
+      !!doc.querySelector('#shd-passthrough-exit a'));
     click(window, doc.querySelector('#shd-passthrough-exit a'));
     await hold(20);
     click(window, edit);
@@ -7482,7 +7495,7 @@ async function boot(html, url, setup) {
       .replace('author="asker"', 'author="TeStEr"');
     const SELF_URL = 'https://www.reddit.com/r/programming/comments/self1/what/';
     /** Reddit's post overflow items: pre-rendered, ids stable, clicks act directly. */
-    function postMenu(doc, post) {
+    function postMenu(doc, post, { hidden = false, change = true } = {}) {
       const st = { hide: 0, unhide: 0, deletes: 0, edits: 0 };
       const menu = doc.createElement('shreddit-post-overflow-menu');
       const shadow = menu.attachShadow({ mode: 'open' });
@@ -7491,10 +7504,11 @@ async function boot(html, url, setup) {
         '<li id="post-overflow-edit"><div role="menuitem"><span>Edit post body</span></div></li>' +
         '<li id="post-overflow-delete"><div role="menuitem"><span>Delete</span></div></li>';
       const hide = shadow.querySelector('#post-overflow-hide [role="menuitem"]');
+      if (hidden) hide.querySelector('span').textContent = 'Remove from hidden';
       hide.onclick = () => {
         const span = hide.querySelector('span');
         if (span.textContent === 'Hide') { st.hide++; span.textContent = 'Remove from hidden'; }
-        else { st.unhide++; span.textContent = 'Hide'; }
+        else { st.unhide++; if (change) span.textContent = 'Hide'; }
       };
       shadow.querySelector('#post-overflow-edit [role="menuitem"]').onclick = () => {
         st.edits++;
@@ -7558,6 +7572,27 @@ async function boot(html, url, setup) {
     check('logged out, hide is local and clicks nothing of Reddit\'s',
       od.querySelector('#shd-root .shd-selfpost .thing').classList.contains('shd-hidden') &&
       ost.hide === 0 && !od.querySelector('.shd-hidden-stub'));
+
+    const { doc: hd, window: hw } = await boot(
+      profilePage().replace('<reddit-header-large></reddit-header-large>', headerHtml({ loggedIn: true })),
+      'https://www.reddit.com/user/tester/hidden/', loggedInSettings());
+    fastAccount(hw);
+    const hiddenPosts = [...hd.querySelectorAll('shreddit-post')];
+    const confirmed = postMenu(hd, hiddenPosts[0], { hidden: true });
+    const unconfirmed = postMenu(hd, hiddenPosts[1], { hidden: true, change: false });
+    const hiddenRow = post => hd.querySelector(`#shd-root .thing[data-fullname="${post.id}"]`);
+    const first = hiddenRow(hiddenPosts[0]);
+    const second = hiddenRow(hiddenPosts[1]);
+    check('the reader’s Hidden tab offers unhide, not hide',
+      !!first?.querySelector('a.unhide') && !first.querySelector('a.hide'));
+    click(hw, first.querySelector('a.unhide'));
+    check('unhide clicks Reddit’s removal action and removes only the confirmed row',
+      await waitFor(() => !first.isConnected) && confirmed.unhide === 1 && confirmed.hide === 0 && second.isConnected);
+    click(hw, second.querySelector('a.unhide'));
+    check('a missing unhide confirmation keeps the row and reports the uncertainty',
+      await waitFor(() => /could not confirm unhide/.test(second.textContent)) &&
+      second.isConnected && unconfirmed.unhide === 1);
+    hw.close();
   }
 
   console.log('\n\x1b[1mTHE HEADER SHOWS UNREAD NOTIFICATIONS\x1b[0m');
@@ -7991,8 +8026,11 @@ async function boot(html, url, setup) {
     const decoy = doc.createElement('after-login-toast-dispatcher');
     decoy.setAttribute('username', 'stranger');
     doc.querySelector('shreddit-post').appendChild(decoy);
+    decoy.insertAdjacentHTML('afterend', '<a href="/user/stranger/communities">Communities</a>');
+    doc.querySelector('reddit-header-large').insertAdjacentHTML('afterend',
+      '<nav id="communities_section"><a href="https://example.com/user/stranger/communities">Communities</a></nav>');
     window.SHD.session.reset();
-    check('a dispatcher nested inside a post is not taken for the reader\'s name',
+    check('a post author or off-site communities link is not taken for the reader\'s name',
       window.SHD.session.username() === null, String(window.SHD.session.username()));
   }
 
@@ -8291,6 +8329,8 @@ async function boot(html, url, setup) {
     check('...and the menu drops only the two items that need a name',
       JSON.stringify(labels) === JSON.stringify(['messages', 'preferences', 'log out']),
       JSON.stringify(labels));
+    check('...and explains why identity-dependent controls are missing',
+      /couldn’t read your username/.test(corner.querySelector('.shd-account-menu').textContent));
   }
   {
     /* The name can arrive AFTER the header is drawn — Reddit's header hydrates late, and
@@ -8306,7 +8346,8 @@ async function boot(html, url, setup) {
     click(window, toggle);
     const labels = [...doc.querySelectorAll('.shd-account-menu a')].map(a => a.getAttribute('href'));
     check('a username that hydrates late is picked up when the menu opens',
-      labels.includes('/user/latecomer/') && labels.includes('/user/latecomer/saved/'),
+      labels.includes('/user/latecomer/') && labels.includes('/user/latecomer/saved/') &&
+      !/couldn’t read your username/.test(doc.querySelector('.shd-account-menu').textContent),
       JSON.stringify(labels));
   }
 
@@ -9006,13 +9047,7 @@ async function boot(html, url, setup) {
       formOf('t1_c8')?.querySelector('.shd-reply-status')?.textContent);
     window.SHD.dom.passthroughClear();
 
-    /* --- ARRIVAL IS THE ONE STEP PAST THE SUBMIT, AND IT MUST NOT INVITE A SECOND ONE ---
-       Every other miss here happens BEFORE submit.click(), so carrying the draft into
-       Reddit's box and saying "press reply" is exactly right. `arrival` means the button
-       WAS pressed and no comment showed up inside arriveWaitMs — which is as consistent
-       with a slow post as a failed one. Doing the ordinary handoff there pre-fills
-       Reddit's composer with the same text and tells the reader to press reply, so a
-       comment that posted slowly gets posted twice on our own instruction. */
+    /* A submit whose result is unknown leaves the thread visible for checking. */
     const c9 = installNativeAccount(window, doc, doc.querySelector('shreddit-comment[thingid="t1_c9"]'),
       { reply: true, composer: 'textarea', silentSubmit: true });
     click(window, row('t1_c9').querySelector('a.reply'));
@@ -9026,13 +9061,14 @@ async function boot(html, url, setup) {
       /may already have posted/.test(formOf('t1_c9').querySelector('.shd-reply-status').textContent) &&
       !/press its own reply button/.test(formOf('t1_c9').querySelector('.shd-reply-status').textContent),
       formOf('t1_c9').querySelector('.shd-reply-status').textContent);
-    check('...so nothing is carried into Reddit\'s box for a second press',
-      formOf('t1_c9').dataset.shdCarried === 'no', formOf('t1_c9').dataset.shdCarried);
+    check('...the thread stays visible and a potential duplicate is labeled as a retry',
+      !doc.documentElement.classList.contains('shd-passthrough-active') &&
+      !doc.querySelector('#shd-passthrough-exit') &&
+      formOf('t1_c9').querySelector('.shd-reply-save').textContent === 'retry anyway');
     check('...and Reddit\'s own submit was pressed exactly once',
       c9.clicks.submit === 1, String(c9.clicks.submit));
     check('...while the draft stays in our form, where re-sending is deliberate',
       formOf('t1_c9').querySelector('textarea').value === 'Might already be posted.');
-    window.SHD.dom.passthroughClear();
 
     /* THE PAGINATOR'S ARRIVALS ARE NOT THE READER'S. A top-level comment has no branch to
        count, so the post path counted the whole document — and on a comments page the
@@ -9694,16 +9730,17 @@ async function boot(html, url, setup) {
       !reviewRow(doc, 't1_c0').querySelector('.shd-reply-form'));
   }
   for (const scenario of ['same-author-other-text', 'unknown-author', 'nested-match',
-    'old-match', 'wrong-post', 'preexisting-id', 'positive-case-insensitive']) {
+    'old-match', 'wrong-post', 'preexisting-id', 'positive-case-insensitive', 'communities-and-list']) {
+    const communities = scenario === 'communities-and-list';
     const { window, doc } = await boot(commentsPage({
-      loggedIn: true, noUsername: scenario === 'unknown-author'
+      loggedIn: true, noUsername: communities || scenario === 'unknown-author', communities
     }), COMMENTS_URL, noAuto);
     fastAccount(window);
     const source = doc.querySelector('shreddit-post');
     const state = { clicks: { submit: 0 }, received: [] };
     mountComposer(doc, source, { silentSubmit: true }, state);
     const form = doc.querySelector('.shd-commentbox .shd-reply-form');
-    const draft = 'The draft whose arrival must be verified.';
+    const draft = communities ? 'A list:\n\n- First item\n- Second item' : 'The draft whose arrival must be verified.';
     form.querySelector('textarea').value = draft;
     sendForm(window, form);
     await waitFor(() => state.clicks.submit === 1);
@@ -9712,21 +9749,24 @@ async function boot(html, url, setup) {
     for (const [key, value] of Object.entries({
       thingid: scenario === 'preexisting-id' ? 't1_c0' : 't1_review_arrival',
       postid: scenario === 'wrong-post' ? 't3_other' : source.id,
-      author: scenario === 'unknown-author' ? 'someone_else' : 'TeStEr',
+      author: 'TeStEr',
       created: new Date(Date.now() - (scenario === 'old-match' ? 60000 : 0)).toISOString(),
       depth: scenario === 'nested-match' ? '1' : '0'
     })) arrival.setAttribute(key, value);
     const body = doc.createElement('div');
     body.setAttribute('slot', 'comment');
     body.textContent = scenario === 'same-author-other-text' ? 'A different comment.' : draft;
+    if (communities) body.innerHTML = '<p>A list:</p><ul><li>First item</li><li>Second item</li></ul>';
     arrival.appendChild(body);
     const mount = scenario === 'nested-match'
       ? doc.querySelector('shreddit-comment')
       : doc.querySelector('shreddit-comment-tree section');
     mount.appendChild(arrival);
-    if (scenario === 'positive-case-insensitive') {
-      check('a new matching direct comment by the reader confirms success, ignoring name casing',
-        await waitFor(() => !form.isConnected) && form.dataset.shdState === 'done');
+    if (communities || scenario === 'positive-case-insensitive') {
+      check(communities ? 'a rendered Markdown list confirms success using the username from Communities'
+        : 'a new matching direct comment by the reader confirms success, ignoring name casing',
+        await waitFor(() => !form.isConnected) && form.dataset.shdState === 'done' &&
+        !doc.querySelector('#shd-passthrough-exit'));
     } else {
       await waitFor(() => form.dataset.shdStep);
       check(`${scenario}: unrelated arrivals do not discard the draft`,

@@ -854,6 +854,9 @@ SHD.C = {
        built around. Read as an attribute value, so session.js's href parsing does not
        apply; the anchors below remain the fallback for a page without the dispatcher. */
     usernameAttr: 'shreddit-app > after-login-toast-dispatcher[username]',
+    /* Reddit's signed-in Communities navigation links to the reader's own communities.
+       Keep the selector scoped to that navigation and validate the full path in session.js. */
+    usernameCommunities: '#communities_section a[href*="/user/"]',
     username: 'reddit-header-large a[href*="/user/"], ' +
               '#expand-user-drawer-button a[href*="/user/"], ' +
               'user-drawer-app a[href*="/user/"], ' +

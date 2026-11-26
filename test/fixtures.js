@@ -467,12 +467,14 @@ function headerHtml(opts = {}) {
      <shreddit-app>, which is what makes the first one a direct child. */
   const dispatcher = opts.dispatcher
     ? `<after-login-toast-dispatcher username="${name}"></after-login-toast-dispatcher>` : '';
+  const communities = opts.communities
+    ? `<nav><div id="communities_section"><a href="/user/${name}/communities">Your communities</a></div></nav>` : '';
   return dispatcher + `<reddit-header-large>` +
     (opts.loggedIn ? `<span>` +
       (opts.noUsername ? '' : `<a href="/user/${name}/">${name}</a>`) +
       `<button id="expand-user-drawer-button" aria-label="Expand user menu"><img alt="User Avatar" src="https://styles.redditmedia.com/avatar.png"></button></span>` : '') +
     (opts.loginLink ? `<faceplate-tracker noun="login"><a href="https://www.reddit.com/login/">Log In</a></faceplate-tracker>` : '') +
-    `</reddit-header-large>`;
+    `</reddit-header-large>` + communities;
 }
 
 /** @param {{pager?: boolean, loggedIn?: boolean, loginLink?: boolean, noUsername?: boolean}} opts  pager: give faceplate-partial a working loadContent() */

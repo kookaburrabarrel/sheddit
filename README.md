@@ -19,13 +19,18 @@ No account. No profile. No feed tuned to keep you scrolling.
 [![telemetry: none](https://img.shields.io/badge/telemetry-none-success?style=flat-square)](#privacy)
 [![feed: ranked by votes](https://img.shields.io/badge/feed-ranked_by_votes-success?style=flat-square)](#why-sheddit)
 
-[![version 0.64.3](https://img.shields.io/badge/version-0.64.3-ff4500?style=flat-square)](CHANGELOG.md)
+[![version 0.65.0](https://img.shields.io/badge/version-0.65.0-ff4500?style=flat-square)](CHANGELOG.md)
 [![Manifest V3](https://img.shields.io/badge/manifest-v3-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](manifest.json)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-install-5f99cf?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/sheddit/jmphfpemcclbhpkanmlglmnggcjmpamc)
 [![Firefox Add-ons](https://img.shields.io/badge/Firefox_Add--ons-install-ff7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/sheddit/)
 [![license: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-663399?style=flat-square)](LICENSE)
 
-### Beta 0.64.3 — delete, hide and your own tabs
+### Beta 0.65.0 — better comment posting, editing and Unhide
+
+**0.65.0 keeps you on the thread after commenting.** If Sheddit can't confirm the
+comment posted, it keeps the draft and warns before you retry. It also improves
+username detection and comment editing, adds **Unhide** to your Hidden tab, and shows
+Reddit's removal reason on your own post listings when available.
 
 **0.64.3 shows GIF posts and crossposts** on their own page — the animation, picture,
 gallery or video, not just a thumbnail. **0.64.2 hides spoilers** until you click them, opens threads on profile posts in the old
@@ -90,12 +95,12 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 > Your own comments have an **edit** link that opens Reddit's native editor.
 > Save there, then choose **back to sheddit** to return to the updated comment.
 >
-> **Known live limitations in 0.64.3:** Reddit can refuse a reply sent seconds after the
+> **Known live limitations:** Reddit can refuse a reply sent seconds after the
 > previous one. Sheddit then shows Reddit's own reason and keeps your draft in its box;
 > wait and save again. Posting a reply switches Reddit's own composer to its Markdown
 > editor, and Reddit remembers that choice.
-> Automatic edit opening can also miss a freshly loaded menu; use that comment's
-> native menu > **Edit comment** when the handoff instructs you to.
+> If automatic edit opening fails, choose **open full Reddit thread** and use that
+> comment's native menu > **Edit comment**.
 >
 > **It is off with one checkbox** on the options page, and turning it off changes nothing
 > else. Logged out, none of it runs at all.
@@ -105,6 +110,11 @@ broke is the fastest way it gets fixed. [What changed](CHANGELOG.md).
 ## What's new
 
 Full detail, and every earlier build, in the [changelog](CHANGELOG.md).
+
+**0.65.0 · 2026-11-26 — Comment posting, editing and Unhide**
+
+Comment submission keeps the thread visible, the edit handoff has a manual recovery
+link, and your Hidden tab can unhide posts.
 
 **0.64.3 · 2026-11-08 — GIF posts and crossposts**
 
@@ -277,7 +287,7 @@ were left alone, one checkbox on the options page turns it off.
 
 ## Install
 
-Version **0.64.3**, beta. It works and is tested on both browsers, **but Chrome is the
+Version **0.65.0**, beta. It works and is tested on both browsers, **but Chrome is the
 primary target and the steadier of the two** — three of the test suites drive a real
 Chromium (the packed extension, layout geometry, media playback) against one for Firefox,
 and every feature lands on Chrome first. Firefox is genuinely supported and its suite

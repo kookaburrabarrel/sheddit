@@ -169,6 +169,7 @@ html.shd-passthrough-active #shd-header { display: none !important; }
   font: bold 11px var(--shd-font, Verdana, Arial, sans-serif);
 }
 #shd-passthrough-exit a { color: var(--shd-accent, #369); text-decoration: none; }
+#shd-passthrough-exit .shd-native-thread { display: block; margin-top: 3px; }
 /* The sentence about the reader's draft. It lives HERE, not in the reply form, because a
    handoff hides #shd-root and takes the form's own status line with it — see
    SHD.dom.passthroughNote(). Wraps rather than widening the bar: this is a sentence, and
